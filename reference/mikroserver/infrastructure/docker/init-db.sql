@@ -1,0 +1,2 @@
+-- MikroServer — Prisma manages the schema via migrations
+-- This file is intentionally minimal

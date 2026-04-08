@@ -1,0 +1,20 @@
+node_modules/
+.expo/
+dist/
+web-build/
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# Native build outputs
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+
+# Local env files
+.env
+.env.*
+
+# APK/AAB build artifacts (large binaries)
+artifacts/

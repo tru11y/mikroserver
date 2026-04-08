@@ -1,0 +1,466 @@
+// =============================================================================
+// MikroServer - Production Prisma Schema
+// PostgreSQL · UUID PKs · Full audit trail · No cascading deletes
+// =============================================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  // previewFeatures = ["fullTextSearchPostgres", "metrics"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  RESELLER
+  VIEWER
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+}
+
+enum PlanStatus {
+  ACTIVE
+  ARCHIVED
+  DRAFT
+}
+
+enum BandwidthUnit {
+  KBPS
+  MBPS
+  GBPS
+  UNLIMITED
+}
+
+enum TransactionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+  EXPIRED
+  CANCELLED
+}
+
+enum PaymentProvider {
+  WAVE
+  ORANGE_MONEY
+  MTN_MOMO
+  // Extensible for future providers
+}
+
+enum GenerationType {
+  AUTO
+  MANUAL
+}
+
+enum VoucherStatus {
+  GENERATED
+  DELIVERED      // Pushed to MikroTik
+  ACTIVE         // Being used by customer
+  EXPIRED
+  REVOKED
+  DELIVERY_FAILED
+}
+
+enum RouterStatus {
+  ONLINE
+  OFFLINE
+  DEGRADED
+  MAINTENANCE
+}
+
+enum SessionStatus {
+  ACTIVE
+  EXPIRED
+  TERMINATED
+  DISCONNECTED
+}
+
+enum WebhookEventStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  FAILED
+  DUPLICATE
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  EXPORT
+  PAYMENT_RECEIVED
+  VOUCHER_GENERATED
+  VOUCHER_DELIVERED
+  ROUTER_CONNECTED
+  ROUTER_DISCONNECTED
+  CONFIG_CHANGED
+  SECURITY_ALERT
+}
+
+enum QueueJobStatus {
+  WAITING
+  ACTIVE
+  COMPLETED
+  FAILED
+  DELAYED
+  PAUSED
+}
+
+// =============================================================================
+// USERS (Admin accounts)
+// =============================================================================
+
+model User {
+  id                    String     @id @default(uuid()) @db.Uuid
+  email                 String     @unique @db.VarChar(255)
+  passwordHash          String     @map("password_hash") @db.VarChar(255)
+  firstName             String     @map("first_name") @db.VarChar(100)
+  lastName              String     @map("last_name") @db.VarChar(100)
+  phone                 String?    @unique @db.VarChar(20)
+  role                  UserRole   @default(ADMIN)
+  status                UserStatus @default(PENDING_VERIFICATION)
+  emailVerifiedAt       DateTime?  @map("email_verified_at")
+  twoFactorSecret       String?    @map("two_factor_secret") @db.VarChar(255)
+  twoFactorEnabledAt    DateTime?  @map("two_factor_enabled_at")
+  lastLoginAt           DateTime?  @map("last_login_at")
+  lastLoginIp           String?    @map("last_login_ip") @db.VarChar(45)
+  failedLoginAttempts   Int        @default(0) @map("failed_login_attempts")
+  lockedUntil           DateTime?  @map("locked_until")
+  passwordChangedAt     DateTime?  @map("password_changed_at")
+  createdAt             DateTime   @default(now()) @map("created_at")
+  updatedAt             DateTime   @updatedAt @map("updated_at")
+  deletedAt             DateTime?  @map("deleted_at")
+
+  // Relations
+  refreshTokens  RefreshToken[]
+  auditLogs      AuditLog[]     @relation("UserAuditLogs")
+  auditedByLogs  AuditLog[]     @relation("AuditedByLogs")
+  vouchers       Voucher[]      @relation("UserVouchers")
+
+  @@index([email])
+  @@index([status])
+  @@index([role])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+// =============================================================================
+// REFRESH TOKENS (Rotation strategy)
+// =============================================================================
+
+model RefreshToken {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  tokenHash   String    @unique @map("token_hash") @db.VarChar(255)
+  familyId    String    @map("family_id") @db.Uuid  // For rotation chain detection
+  issuedAt    DateTime  @default(now()) @map("issued_at")
+  expiresAt   DateTime  @map("expires_at")
+  revokedAt   DateTime? @map("revoked_at")
+  replacedBy  String?   @map("replaced_by") @db.Uuid
+  userAgent   String?   @map("user_agent") @db.VarChar(500)
+  ipAddress   String?   @map("ip_address") @db.VarChar(45)
+  isRevoked   Boolean   @default(false) @map("is_revoked")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([familyId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+// =============================================================================
+// ROUTERS (MikroTik devices)
+// =============================================================================
+
+model Router {
+  id               String       @id @default(uuid()) @db.Uuid
+  name             String       @unique @db.VarChar(100)
+  description      String?      @db.VarChar(500)
+  location         String?      @db.VarChar(255)
+  wireguardIp      String       @unique @map("wireguard_ip") @db.VarChar(15)
+  apiPort          Int          @default(8728) @map("api_port")
+  apiUsername      String       @map("api_username") @db.VarChar(100)
+  apiPasswordHash  String       @map("api_password_hash") @db.VarChar(255)
+  hotspotProfile   String       @default("default") @map("hotspot_profile") @db.VarChar(100)
+  hotspotServer    String       @default("hotspot1") @map("hotspot_server") @db.VarChar(100)
+  status           RouterStatus @default(OFFLINE)
+  lastSeenAt       DateTime?    @map("last_seen_at")
+  lastHeartbeatAt  DateTime?    @map("last_heartbeat_at")
+  metadata         Json?        @default("{}")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+  deletedAt        DateTime?    @map("deleted_at")
+
+  // Relations
+  vouchers  Voucher[]
+  sessions  Session[]
+  auditLogs AuditLog[]
+
+  @@index([status])
+  @@index([wireguardIp])
+  @@index([deletedAt])
+  @@map("routers")
+}
+
+// =============================================================================
+// PLANS (WiFi packages)
+// =============================================================================
+
+model Plan {
+  id              String        @id @default(uuid()) @db.Uuid
+  name            String        @db.VarChar(100)
+  slug            String        @unique @db.VarChar(120)
+  description     String?       @db.VarChar(500)
+  durationMinutes Int           @map("duration_minutes")     // e.g. 60, 1440, 10080
+  priceXof        Int           @map("price_xof")             // Price in FCFA (XOF)
+  downloadKbps    Int?          @map("download_kbps")         // null = unlimited
+  uploadKbps      Int?          @map("upload_kbps")           // null = unlimited
+  dataLimitMb     Int?          @map("data_limit_mb")         // null = unlimited
+  userProfile     String        @default("default") @map("user_profile") @db.VarChar(100)
+  status          PlanStatus    @default(ACTIVE)
+  displayOrder    Int           @default(0) @map("display_order")
+  isPopular       Boolean       @default(false) @map("is_popular")
+  metadata        Json?         @default("{}")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  deletedAt       DateTime?     @map("deleted_at")
+
+  // Relations
+  transactions Transaction[]
+  vouchers     Voucher[]
+
+  @@index([status])
+  @@index([slug])
+  @@index([deletedAt])
+  @@map("plans")
+}
+
+// =============================================================================
+// TRANSACTIONS (Payment intents)
+// =============================================================================
+
+model Transaction {
+  id                   String            @id @default(uuid()) @db.Uuid
+  reference            String            @unique @db.VarChar(100)  // Internal reference
+  externalReference    String?           @unique @map("external_reference") @db.VarChar(255) // Wave ref
+  planId               String            @map("plan_id") @db.Uuid
+  customerPhone        String            @map("customer_phone") @db.VarChar(20)
+  customerName         String?           @map("customer_name") @db.VarChar(200)
+  amountXof            Int               @map("amount_xof")
+  status               TransactionStatus @default(PENDING)
+  provider             PaymentProvider   @default(WAVE)
+  paymentUrl           String?           @map("payment_url") @db.VarChar(1000)
+  paidAt               DateTime?         @map("paid_at")
+  failedAt             DateTime?         @map("failed_at")
+  expiresAt            DateTime          @map("expires_at")
+  failureReason        String?           @map("failure_reason") @db.VarChar(500)
+  idempotencyKey       String            @unique @map("idempotency_key") @db.VarChar(255)
+  metadata             Json?             @default("{}")
+  createdAt            DateTime          @default(now()) @map("created_at")
+  updatedAt            DateTime          @updatedAt @map("updated_at")
+
+  // Relations
+  plan          Plan           @relation(fields: [planId], references: [id])
+  voucher       Voucher?
+  webhookEvents WebhookEvent[]
+
+  @@index([status])
+  @@index([reference])
+  @@index([customerPhone])
+  @@index([externalReference])
+  @@index([createdAt])
+  @@index([provider])
+  @@map("transactions")
+}
+
+// =============================================================================
+// VOUCHERS (Hotspot credentials)
+// =============================================================================
+
+model Voucher {
+  id                String         @id @default(uuid()) @db.Uuid
+  transactionId     String?        @unique @map("transaction_id") @db.Uuid // Optional for MANUAL vouchers
+  planId            String         @map("plan_id") @db.Uuid
+  routerId          String?        @map("router_id") @db.Uuid
+  createdById       String?        @map("created_by_id") @db.Uuid          // The reseller/admin who generated it
+  generationType    GenerationType @default(AUTO) @map("generation_type")
+  code              String         @unique @db.VarChar(32)        // The hotspot username
+  passwordHash      String         @map("password_hash") @db.VarChar(255)
+  passwordPlain     String         @map("password_plain") @db.VarChar(50)  // Needed for MikroTik push
+  status            VoucherStatus  @default(GENERATED)
+  generatedAt       DateTime       @default(now()) @map("generated_at")
+  deliveredAt       DateTime?      @map("delivered_at")
+  activatedAt       DateTime?     @map("activated_at")
+  expiresAt         DateTime?     @map("expires_at")
+  revokedAt         DateTime?     @map("revoked_at")
+  deliveryAttempts  Int           @default(0) @map("delivery_attempts")
+  lastDeliveryError String?       @map("last_delivery_error") @db.VarChar(1000)
+  mikrotikComment   String?       @map("mikrotik_comment") @db.VarChar(255)
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  transaction Transaction? @relation(fields: [transactionId], references: [id])
+  plan        Plan         @relation(fields: [planId], references: [id])
+  router      Router?      @relation(fields: [routerId], references: [id])
+  createdBy   User?        @relation("UserVouchers", fields: [createdById], references: [id])
+  session     Session?
+
+  @@index([status])
+  @@index([code])
+  @@index([routerId])
+  @@index([expiresAt])
+  @@map("vouchers")
+}
+
+// =============================================================================
+// SESSIONS (Active hotspot sessions)
+// =============================================================================
+
+model Session {
+  id              String        @id @default(uuid()) @db.Uuid
+  voucherId       String        @unique @map("voucher_id") @db.Uuid
+  routerId        String        @map("router_id") @db.Uuid
+  mikrotikId      String?       @map("mikrotik_id") @db.VarChar(100)  // RouterOS session ID
+  macAddress      String?       @map("mac_address") @db.VarChar(17)
+  ipAddress       String?       @map("ip_address") @db.VarChar(45)
+  status          SessionStatus @default(ACTIVE)
+  bytesIn         BigInt        @default(0) @map("bytes_in")
+  bytesOut        BigInt        @default(0) @map("bytes_out")
+  startedAt       DateTime      @default(now()) @map("started_at")
+  lastSeenAt      DateTime?     @map("last_seen_at")
+  terminatedAt    DateTime?     @map("terminated_at")
+  terminateReason String?       @map("terminate_reason") @db.VarChar(255)
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  voucher Voucher @relation(fields: [voucherId], references: [id])
+  router  Router  @relation(fields: [routerId], references: [id])
+
+  @@index([status])
+  @@index([routerId])
+  @@index([macAddress])
+  @@index([startedAt])
+  @@map("sessions")
+}
+
+// =============================================================================
+// WEBHOOK EVENTS (Immutable log of all incoming payment webhooks)
+// =============================================================================
+
+model WebhookEvent {
+  id              String             @id @default(uuid()) @db.Uuid
+  transactionId   String?            @map("transaction_id") @db.Uuid
+  provider        PaymentProvider
+  externalEventId String?            @unique @map("external_event_id") @db.VarChar(255)
+  status          WebhookEventStatus @default(RECEIVED)
+  rawPayload      Json               @map("raw_payload")
+  headers         Json               @default("{}")
+  ipAddress       String?            @map("ip_address") @db.VarChar(45)
+  signature       String?            @db.VarChar(512)
+  signatureValid  Boolean?           @map("signature_valid")
+  processedAt     DateTime?          @map("processed_at")
+  failureReason   String?            @map("failure_reason") @db.VarChar(1000)
+  retryCount      Int                @default(0) @map("retry_count")
+  receivedAt      DateTime           @default(now()) @map("received_at")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  // Relations
+  transaction Transaction? @relation(fields: [transactionId], references: [id])
+
+  @@index([status])
+  @@index([provider])
+  @@index([transactionId])
+  @@index([externalEventId])
+  @@index([receivedAt])
+  @@map("webhook_events")
+}
+
+// =============================================================================
+// AUDIT LOGS (Immutable audit trail)
+// =============================================================================
+
+model AuditLog {
+  id           String      @id @default(uuid()) @db.Uuid
+  userId       String?     @map("user_id") @db.Uuid
+  auditedById  String?     @map("audited_by_id") @db.Uuid
+  routerId     String?     @map("router_id") @db.Uuid
+  action       AuditAction
+  entityType   String      @map("entity_type") @db.VarChar(100)
+  entityId     String?     @map("entity_id") @db.VarChar(255)
+  oldValues    Json?       @map("old_values")
+  newValues    Json?       @map("new_values")
+  ipAddress    String?     @map("ip_address") @db.VarChar(45)
+  userAgent    String?     @map("user_agent") @db.VarChar(500)
+  requestId    String?     @map("request_id") @db.VarChar(100)
+  description  String?     @db.VarChar(1000)
+  createdAt    DateTime    @default(now()) @map("created_at")
+
+  // Relations (no cascade delete - audit logs are permanent)
+  user       User?   @relation("UserAuditLogs", fields: [userId], references: [id])
+  auditedBy  User?   @relation("AuditedByLogs", fields: [auditedById], references: [id])
+  router     Router? @relation(fields: [routerId], references: [id])
+
+  @@index([userId])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// =============================================================================
+// DAILY REVENUE SNAPSHOTS (Pre-aggregated for dashboard performance)
+// =============================================================================
+
+model RevenueSnapshot {
+  id               String   @id @default(uuid()) @db.Uuid
+  date             DateTime @db.Date
+  totalTransactions Int     @default(0) @map("total_transactions")
+  successfulTransactions Int @default(0) @map("successful_transactions")
+  failedTransactions Int    @default(0) @map("failed_transactions")
+  grossRevenueXof  Int      @default(0) @map("gross_revenue_xof")
+  refundedXof      Int      @default(0) @map("refunded_xof")
+  netRevenueXof    Int      @default(0) @map("net_revenue_xof")
+  uniqueCustomers  Int      @default(0) @map("unique_customers")
+  metadata         Json?    @default("{}")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@unique([date])
+  @@index([date])
+  @@map("revenue_snapshots")
+}
+
+// =============================================================================
+// SYSTEM CONFIGURATION (Key-value store for platform settings)
+// =============================================================================
+
+model SystemConfig {
+  key         String   @id @db.VarChar(100)
+  value       String   @db.Text
+  description String?  @db.VarChar(500)
+  isSecret    Boolean  @default(false) @map("is_secret")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  updatedBy   String?  @map("updated_by") @db.Uuid
+
+  @@map("system_configs")
+}

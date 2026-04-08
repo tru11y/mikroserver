@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 40% 98%; /* Soft off-white */
+    --foreground: 222.2 47.4% 11.2%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 47.4% 11.2%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 47.4% 11.2%;
+    --primary: 236 82% 64%; /* Soft Indigo */
+    --primary-foreground: 210 40% 98%;
+    --secondary: 214 32% 91%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 214 32% 91%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 214 32% 91%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214 32% 91%; /* Lower contrast borders */
+    --input: 214 32% 91%;
+    --ring: 236 82% 64%;
+    --radius: 1rem; /* Soft rounded corners */
+    --success: 142.1 76.2% 36.3%;
+    --warning: 37.7 92.1% 50.2%;
+  }
+
+  .dark {
+    --background: 222.2 47.4% 11.2%; /* Softer dark scale */
+    --foreground: 210 40% 98%;
+    --card: 217.2 32.6% 17.5%; /* Raised card lightness */
+    --card-foreground: 210 40% 98%;
+    --popover: 217.2 32.6% 17.5%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 236 82% 74%; /* Lighter soft indigo */
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 25%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 25%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 25%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 25%; /* Less contrast */
+    --input: 217.2 32.6% 25%;
+    --ring: 236 82% 74%;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground; }
+}

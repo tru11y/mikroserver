@@ -1,0 +1,11 @@
+{
+  "name": "mikroserver",
+  "version": "1.0.0",
+  "description": "WiFi Monetization Platform — Monorepo",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend",
+    "mobile"
+  ]
+}

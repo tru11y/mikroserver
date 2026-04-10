@@ -1,0 +1,896 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                                                         String          @id @default(uuid()) @db.Uuid
+  email                                                      String          @unique @db.VarChar(255)
+  passwordHash                                               String          @map("password_hash") @db.VarChar(255)
+  firstName                                                  String          @map("first_name") @db.VarChar(100)
+  lastName                                                   String          @map("last_name") @db.VarChar(100)
+  phone                                                      String?         @unique @db.VarChar(20)
+  role                                                       UserRole        @default(ADMIN)
+  status                                                     UserStatus      @default(PENDING_VERIFICATION)
+  emailVerifiedAt                                            DateTime?       @map("email_verified_at")
+  twoFactorSecret                                            String?         @map("two_factor_secret") @db.VarChar(255)
+  twoFactorEnabledAt                                         DateTime?       @map("two_factor_enabled_at")
+  lastLoginAt                                                DateTime?       @map("last_login_at")
+  lastLoginIp                                                String?         @map("last_login_ip") @db.VarChar(45)
+  failedLoginAttempts                                        Int             @default(0) @map("failed_login_attempts")
+  lockedUntil                                                DateTime?       @map("locked_until")
+  passwordChangedAt                                          DateTime?       @map("password_changed_at")
+  createdAt                                                  DateTime        @default(now()) @map("created_at")
+  updatedAt                                                  DateTime        @updatedAt @map("updated_at")
+  deletedAt                                                  DateTime?       @map("deleted_at")
+  permissionProfile                                          String?         @map("permission_profile") @db.VarChar(50)
+  permissions                                                Json?           @default("[]")
+  customer_id                                                String?         @unique @db.VarChar(100)
+  current_subscription_id                                    String?         @unique @db.Uuid
+  default_payment_method                                     PaymentMethod?
+  balance_xof                                                Int             @default(0)
+  last_payment_at                                            DateTime?
+  auditedByLogs                                              AuditLog[]      @relation("AuditedByLogs")
+  auditLogs                                                  AuditLog[]      @relation("UserAuditLogs")
+  passwordResetTokens                                        PasswordResetToken[]
+  refreshTokens                                              RefreshToken[]
+  subscriptions_subscriptions_user_idTousers                 subscriptions[] @relation("subscriptions_user_idTousers")
+  subscriptions_users_current_subscription_idTosubscriptions subscriptions?  @relation("users_current_subscription_idTosubscriptions", fields: [current_subscription_id], references: [id])
+  vouchers                                                   Voucher[]       @relation("UserVouchers")
+  routersOwned     Router[]     @relation("RouterOwner")
+  notifications    Notification[]
+  pushSubscriptions PushSubscription[]
+  operatorSubscription OperatorSubscription?
+  resellerConfig   ResellerConfig? @relation("ResellerUser")
+  managedResellers ResellerConfig[] @relation("ResellerParent")
+  invoices         Invoice[]
+  provisioningSessions ProvisioningSession[]
+  whiteLabelConfig WhiteLabelConfig?
+  apiKeys          ApiKey[]
+  churnScore       ChurnScore?
+
+  @@index([email])
+  @@index([status])
+  @@index([role])
+  @@index([deletedAt])
+  @@index([current_subscription_id])
+  @@index([customer_id])
+  @@map("users")
+}
+
+model RefreshToken {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  tokenHash  String    @unique @map("token_hash") @db.VarChar(255)
+  familyId   String    @map("family_id") @db.Uuid
+  issuedAt   DateTime  @default(now()) @map("issued_at")
+  expiresAt  DateTime  @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+  replacedBy String?   @map("replaced_by") @db.Uuid
+  userAgent  String?   @map("user_agent") @db.VarChar(500)
+  ipAddress  String?   @map("ip_address") @db.VarChar(45)
+  isRevoked  Boolean   @default(false) @map("is_revoked")
+  user       User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([familyId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  tokenHash  String    @unique @map("token_hash") @db.VarChar(255)
+  codeHash   String    @map("code_hash") @db.VarChar(255)
+  expiresAt  DateTime  @map("expires_at")
+  usedAt     DateTime? @map("used_at")
+  ipAddress  String?   @map("ip_address") @db.VarChar(45)
+  userAgent  String?   @map("user_agent") @db.VarChar(500)
+  createdAt  DateTime  @default(now()) @map("created_at")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([userId, expiresAt])
+  @@map("password_reset_tokens")
+}
+
+model Router {
+  id              String       @id @default(uuid()) @db.Uuid
+  name            String       @unique @db.VarChar(100)
+  description     String?      @db.VarChar(500)
+  location        String?      @db.VarChar(255)
+  wireguardIp     String?      @unique @map("wireguard_ip") @db.VarChar(15)
+  apiPort         Int          @default(8728) @map("api_port")
+  apiUsername     String       @map("api_username") @db.VarChar(100)
+  apiPasswordHash String       @map("api_password_hash") @db.VarChar(255)
+  hotspotProfile  String       @default("default") @map("hotspot_profile") @db.VarChar(100)
+  hotspotServer   String       @default("hotspot1") @map("hotspot_server") @db.VarChar(100)
+  status          RouterStatus @default(OFFLINE)
+  lastSeenAt      DateTime?    @map("last_seen_at")
+  lastHeartbeatAt DateTime?    @map("last_heartbeat_at")
+  metadata        Json?        @default("{}")
+  site            String?      @db.VarChar(100)
+  tags            String[]     @default([])
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+  deletedAt       DateTime?    @map("deleted_at")
+  ownerId          String?      @map("owner_id") @db.Uuid
+  publicIp         String?      @map("public_ip") @db.VarChar(45)
+  auditLogs       AuditLog[]
+  sessions        Session[]
+  vouchers        Voucher[]
+  owner            User?        @relation("RouterOwner", fields: [ownerId], references: [id])
+  notifications    Notification[]
+  provisioningSessions ProvisioningSession[]
+  customerProfiles CustomerProfile[]
+
+  @@index([status])
+  @@index([wireguardIp])
+  @@index([deletedAt])
+  @@index([site])
+  @@map("routers")
+}
+
+model Plan {
+  id              String          @id @default(uuid()) @db.Uuid
+  name            String          @db.VarChar(100)
+  slug            String          @unique @db.VarChar(120)
+  description     String?         @db.VarChar(500)
+  durationMinutes Int             @map("duration_minutes")
+  priceXof        Int             @map("price_xof")
+  downloadKbps    Int?            @map("download_kbps")
+  uploadKbps      Int?            @map("upload_kbps")
+  dataLimitMb     Int?            @map("data_limit_mb")
+  userProfile     String          @default("default") @map("user_profile") @db.VarChar(100)
+  status          PlanStatus      @default(ACTIVE)
+  displayOrder    Int             @default(0) @map("display_order")
+  isPopular       Boolean         @default(false) @map("is_popular")
+  metadata        Json?           @default("{}")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  deletedAt       DateTime?       @map("deleted_at")
+  subscriptions   subscriptions[]
+  transactions    Transaction[]
+  vouchers        Voucher[]
+
+  @@index([status])
+  @@index([slug])
+  @@index([deletedAt])
+  @@map("plans")
+}
+
+model Transaction {
+  id                String            @id @default(uuid()) @db.Uuid
+  reference         String            @unique @db.VarChar(100)
+  externalReference String?           @unique @map("external_reference") @db.VarChar(255)
+  planId            String?           @map("plan_id") @db.Uuid
+  boostTierId       String?           @map("boost_tier_id") @db.Uuid
+  customerPhone     String?           @map("customer_phone") @db.VarChar(20)
+  customerName      String?           @map("customer_name") @db.VarChar(200)
+  amountXof         Int               @map("amount_xof")
+  status            TransactionStatus @default(PENDING)
+  provider          PaymentProvider   @default(WAVE)
+  paymentUrl        String?           @map("payment_url") @db.VarChar(1000)
+  paidAt            DateTime?         @map("paid_at")
+  failedAt          DateTime?         @map("failed_at")
+  expiresAt         DateTime          @map("expires_at")
+  failureReason     String?           @map("failure_reason") @db.VarChar(500)
+  idempotencyKey    String            @unique @map("idempotency_key") @db.VarChar(255)
+  metadata          Json?             @default("{}")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+  plan              Plan?             @relation(fields: [planId], references: [id])
+  boostTier         BoostTier?        @relation(fields: [boostTierId], references: [id])
+  voucher           Voucher?
+  speedBoost        SpeedBoost?
+  webhookEvents     WebhookEvent[]
+
+  @@index([status])
+  @@index([reference])
+  @@index([customerPhone])
+  @@index([externalReference])
+  @@index([createdAt])
+  @@index([createdAt, status])
+  @@index([provider])
+  @@map("transactions")
+}
+
+model Voucher {
+  id                String         @id @default(uuid()) @db.Uuid
+  transactionId     String?        @unique @map("transaction_id") @db.Uuid
+  planId            String         @map("plan_id") @db.Uuid
+  routerId          String?        @map("router_id") @db.Uuid
+  code              String         @unique @db.VarChar(32)
+  passwordHash      String         @map("password_hash") @db.VarChar(255)
+  passwordPlain     String         @map("password_plain") @db.VarChar(50)
+  status            VoucherStatus  @default(GENERATED)
+  generatedAt       DateTime       @default(now()) @map("generated_at")
+  deliveredAt       DateTime?      @map("delivered_at")
+  activatedAt       DateTime?      @map("activated_at")
+  expiresAt         DateTime?      @map("expires_at")
+  revokedAt         DateTime?      @map("revoked_at")
+  deliveryAttempts  Int            @default(0) @map("delivery_attempts")
+  lastDeliveryError String?        @map("last_delivery_error") @db.VarChar(1000)
+  mikrotikComment   String?        @map("mikrotik_comment") @db.VarChar(255)
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+  createdById       String?        @map("created_by_id") @db.Uuid
+  generationType    GenerationType @default(AUTO) @map("generation_type")
+  ip_bindings       ip_bindings[]
+  session           Session?
+  subscriptions     subscriptions?
+  createdBy         User?          @relation("UserVouchers", fields: [createdById], references: [id])
+  plan              Plan           @relation(fields: [planId], references: [id])
+  router            Router?        @relation(fields: [routerId], references: [id])
+  transaction       Transaction?   @relation(fields: [transactionId], references: [id])
+
+  @@index([status])
+  @@index([code])
+  @@index([routerId])
+  @@index([planId])
+  @@index([expiresAt])
+  @@index([status, routerId])
+  @@map("vouchers")
+}
+
+model Session {
+  id              String        @id @default(uuid()) @db.Uuid
+  voucherId       String        @unique @map("voucher_id") @db.Uuid
+  routerId        String        @map("router_id") @db.Uuid
+  mikrotikId      String?       @map("mikrotik_id") @db.VarChar(100)
+  macAddress      String?       @map("mac_address") @db.VarChar(17)
+  ipAddress       String?       @map("ip_address") @db.VarChar(45)
+  status          SessionStatus @default(ACTIVE)
+  bytesIn         BigInt        @default(0) @map("bytes_in")
+  bytesOut        BigInt        @default(0) @map("bytes_out")
+  startedAt       DateTime      @default(now()) @map("started_at")
+  lastSeenAt      DateTime?     @map("last_seen_at")
+  terminatedAt    DateTime?     @map("terminated_at")
+  terminateReason String?       @map("terminate_reason") @db.VarChar(255)
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  router          Router        @relation(fields: [routerId], references: [id])
+  voucher         Voucher       @relation(fields: [voucherId], references: [id])
+  speedBoosts     SpeedBoost[]
+
+  @@index([status])
+  @@index([routerId])
+  @@index([macAddress])
+  @@index([startedAt])
+  @@index([createdAt])
+  @@map("sessions")
+}
+
+model WebhookEvent {
+  id              String             @id @default(uuid()) @db.Uuid
+  transactionId   String?            @map("transaction_id") @db.Uuid
+  provider        PaymentProvider
+  externalEventId String?            @unique @map("external_event_id") @db.VarChar(255)
+  status          WebhookEventStatus @default(RECEIVED)
+  rawPayload      Json               @map("raw_payload")
+  headers         Json               @default("{}")
+  ipAddress       String?            @map("ip_address") @db.VarChar(45)
+  signature       String?            @db.VarChar(512)
+  signatureValid  Boolean?           @map("signature_valid")
+  processedAt     DateTime?          @map("processed_at")
+  failureReason   String?            @map("failure_reason") @db.VarChar(1000)
+  retryCount      Int                @default(0) @map("retry_count")
+  receivedAt      DateTime           @default(now()) @map("received_at")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+  transaction     Transaction?       @relation(fields: [transactionId], references: [id])
+
+  @@index([status])
+  @@index([provider])
+  @@index([transactionId])
+  @@index([externalEventId])
+  @@index([receivedAt])
+  @@map("webhook_events")
+}
+
+model AuditLog {
+  id          String      @id @default(uuid()) @db.Uuid
+  userId      String?     @map("user_id") @db.Uuid
+  auditedById String?     @map("audited_by_id") @db.Uuid
+  routerId    String?     @map("router_id") @db.Uuid
+  action      AuditAction
+  entityType  String      @map("entity_type") @db.VarChar(100)
+  entityId    String?     @map("entity_id") @db.VarChar(255)
+  oldValues   Json?       @map("old_values")
+  newValues   Json?       @map("new_values")
+  ipAddress   String?     @map("ip_address") @db.VarChar(45)
+  userAgent   String?     @map("user_agent") @db.VarChar(500)
+  requestId   String?     @map("request_id") @db.VarChar(100)
+  description String?     @db.VarChar(1000)
+  createdAt   DateTime    @default(now()) @map("created_at")
+  auditedBy   User?       @relation("AuditedByLogs", fields: [auditedById], references: [id])
+  router      Router?     @relation(fields: [routerId], references: [id])
+  user        User?       @relation("UserAuditLogs", fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model RevenueSnapshot {
+  id                     String   @id @default(uuid()) @db.Uuid
+  date                   DateTime @unique @db.Date
+  totalTransactions      Int      @default(0) @map("total_transactions")
+  successfulTransactions Int      @default(0) @map("successful_transactions")
+  failedTransactions     Int      @default(0) @map("failed_transactions")
+  grossRevenueXof        Int      @default(0) @map("gross_revenue_xof")
+  refundedXof            Int      @default(0) @map("refunded_xof")
+  netRevenueXof          Int      @default(0) @map("net_revenue_xof")
+  uniqueCustomers        Int      @default(0) @map("unique_customers")
+  metadata               Json?    @default("{}")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  @@index([date])
+  @@map("revenue_snapshots")
+}
+
+model SystemConfig {
+  key         String   @id @db.VarChar(100)
+  value       String
+  description String?  @db.VarChar(500)
+  isSecret    Boolean  @default(false) @map("is_secret")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  updatedBy   String?  @map("updated_by") @db.Uuid
+
+  @@map("system_configs")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model ip_bindings {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  voucher_id  String    @db.Uuid
+  ip_address  String    @db.VarChar(45)
+  subnet_mask String?   @db.VarChar(45)
+  is_active   Boolean   @default(true)
+  created_at  DateTime  @default(now())
+  updated_at  DateTime
+  deleted_at  DateTime?
+  vouchers    Voucher   @relation(fields: [voucher_id], references: [id], onDelete: Cascade)
+
+  @@unique([voucher_id, ip_address])
+  @@index([ip_address])
+  @@index([is_active])
+  @@index([voucher_id])
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model subscriptions {
+  id                                                 String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                                            String             @db.Uuid
+  plan_id                                            String             @db.Uuid
+  voucher_id                                         String?            @unique @db.Uuid
+  status                                             SubscriptionStatus @default(ACTIVE)
+  start_date                                         DateTime
+  end_date                                           DateTime
+  auto_renew                                         Boolean            @default(true)
+  price_xof                                          Int
+  payment_method                                     PaymentMethod?
+  last_billed_at                                     DateTime?
+  next_billing_at                                    DateTime?
+  cancelled_at                                       DateTime?
+  cancellation_reason                                String?            @db.VarChar(500)
+  created_at                                         DateTime           @default(now())
+  updated_at                                         DateTime
+  plans                                              Plan               @relation(fields: [plan_id], references: [id])
+  users_subscriptions_user_idTousers                 User               @relation("subscriptions_user_idTousers", fields: [user_id], references: [id])
+  vouchers                                           Voucher?           @relation(fields: [voucher_id], references: [id])
+  users_users_current_subscription_idTosubscriptions User?              @relation("users_current_subscription_idTosubscriptions")
+
+  @@index([end_date])
+  @@index([plan_id])
+  @@index([status])
+  @@index([user_id])
+  @@index([voucher_id])
+}
+
+model Notification {
+  id         String           @id @default(uuid()) @db.Uuid
+  userId     String           @map("user_id") @db.Uuid
+  type       NotificationType
+  title      String           @db.VarChar(255)
+  body       String           @db.VarChar(1000)
+  data       Json?            @default("{}")
+  isRead     Boolean          @default(false) @map("is_read")
+  readAt     DateTime?        @map("read_at")
+  routerId   String?          @map("router_id") @db.Uuid
+  sessionId  String?          @map("session_id") @db.Uuid
+  createdAt  DateTime         @default(now()) @map("created_at")
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  router     Router?          @relation(fields: [routerId], references: [id], onDelete: SetNull)
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  endpoint  String   @unique @db.VarChar(2000)
+  p256dh    String   @map("p256dh") @db.VarChar(255)
+  auth      String   @db.VarChar(255)
+  userAgent String?  @map("user_agent") @db.VarChar(500)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
+}
+
+model ProvisioningSession {
+  id              String             @id @default(uuid()) @db.Uuid
+  userId          String             @map("user_id") @db.Uuid
+  routerName      String?            @map("router_name") @db.VarChar(100)
+  location        String?            @db.VarChar(255)
+  publicIp        String?            @map("public_ip") @db.VarChar(45)
+  apiPort         Int                @default(8728) @map("api_port")
+  apiUsername     String             @map("api_username") @db.VarChar(100)
+  apiPassword     String?            @map("api_password") @db.VarChar(255)
+  bootstrapToken  String?            @unique @map("bootstrap_token") @db.VarChar(128)
+  status          ProvisioningStatus @default(PENDING)
+  currentStep     String?            @map("current_step") @db.VarChar(100)
+  stepLog         Json               @default("[]") @map("step_log")
+  routerId        String?            @unique @map("router_id") @db.Uuid
+  error           String?            @db.VarChar(1000)
+  wgPrivateKey    String?            @map("wg_private_key") @db.VarChar(255)
+  wgPublicKey     String?            @map("wg_public_key") @db.VarChar(255)
+  assignedWgIp    String?            @map("assigned_wg_ip") @db.VarChar(15)
+  routerIdentity  String?            @map("router_identity") @db.VarChar(255)
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+  expiresAt       DateTime           @map("expires_at")
+  user            User               @relation(fields: [userId], references: [id])
+  router          Router?            @relation(fields: [routerId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([expiresAt])
+  @@index([bootstrapToken])
+  @@map("provisioning_sessions")
+}
+
+model CustomerProfile {
+  id              String    @id @default(uuid()) @db.Uuid
+  macAddress      String    @map("mac_address") @db.VarChar(17)
+  routerId        String    @map("router_id") @db.Uuid
+  lastUsername    String?   @map("last_username") @db.VarChar(100)
+  firstName       String?   @map("first_name") @db.VarChar(100)
+  lastName        String?   @map("last_name") @db.VarChar(100)
+  phone           String?   @db.VarChar(20)
+  firstSeenAt     DateTime  @map("first_seen_at")
+  lastSeenAt      DateTime  @map("last_seen_at")
+  totalSessions   Int       @default(0) @map("total_sessions")
+  totalDataBytes  BigInt    @default(0) @map("total_data_bytes")
+  totalSpentXof   Int       @default(0) @map("total_spent_xof")
+  isBlocked       Boolean   @default(false) @map("is_blocked")
+  notes           String?   @db.VarChar(1000)
+  metadata        Json?     @default("{}")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  router          Router    @relation(fields: [routerId], references: [id])
+
+  @@unique([macAddress, routerId])
+  @@index([routerId])
+  @@index([lastSeenAt])
+  @@index([macAddress])
+  @@index([isBlocked])
+  @@map("customer_profiles")
+}
+
+model SaasTier {
+  id               String                @id @default(uuid()) @db.Uuid
+  name             String                @unique @db.VarChar(100)
+  slug             String                @unique @db.VarChar(50)
+  description      String?               @db.VarChar(500)
+  priceXofMonthly  Int                   @map("price_xof_monthly")
+  priceXofYearly   Int?                  @map("price_xof_yearly")
+  maxRouters       Int?                  @map("max_routers")
+  maxMonthlyTx     Int?                  @map("max_monthly_tx")
+  maxResellers     Int?                  @map("max_resellers")
+  features         Json                  @default("[]")
+  isActive         Boolean               @default(true) @map("is_active")
+  isFree           Boolean               @default(false) @map("is_free")
+  displayOrder     Int                   @default(0) @map("display_order")
+  trialDays        Int                   @default(0) @map("trial_days")
+  createdAt        DateTime              @default(now()) @map("created_at")
+  updatedAt        DateTime              @updatedAt @map("updated_at")
+  operatorSubscriptions OperatorSubscription[]
+
+  @@map("saas_tiers")
+}
+
+model OperatorSubscription {
+  id                 String             @id @default(uuid()) @db.Uuid
+  userId             String             @unique @map("user_id") @db.Uuid
+  tierId             String             @map("tier_id") @db.Uuid
+  status             SubscriptionStatus @default(ACTIVE)
+  billingCycle       BillingCycle       @default(MONTHLY) @map("billing_cycle")
+  startDate          DateTime           @map("start_date")
+  endDate            DateTime           @map("end_date")
+  autoRenew          Boolean            @default(true) @map("auto_renew")
+  priceXof           Int                @map("price_xof")
+  trialEndsAt        DateTime?          @map("trial_ends_at")
+  cancelledAt        DateTime?          @map("cancelled_at")
+  cancellationReason String?            @map("cancellation_reason") @db.VarChar(500)
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+  user               User               @relation(fields: [userId], references: [id])
+  tier               SaasTier           @relation(fields: [tierId], references: [id])
+
+  @@index([status])
+  @@index([endDate])
+  @@map("operator_subscriptions")
+}
+
+model ResellerConfig {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @unique @map("user_id") @db.Uuid
+  parentId        String?  @map("parent_id") @db.Uuid
+  commissionRate  Decimal  @default(10.00) @map("commission_rate") @db.Decimal(5,2)
+  creditBalance   Int      @default(0) @map("credit_balance")
+  totalSales      Int      @default(0) @map("total_sales")
+  totalCommission Int      @default(0) @map("total_commission")
+  isActive        Boolean  @default(true) @map("is_active")
+  allowedRouters  Json     @default("[]") @map("allowed_routers")
+  maxVouchersDay  Int?     @map("max_vouchers_day")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  user            User     @relation("ResellerUser", fields: [userId], references: [id])
+  parent          User?    @relation("ResellerParent", fields: [parentId], references: [id])
+  payouts         CommissionPayout[]
+
+  @@index([parentId])
+  @@map("reseller_configs")
+}
+
+model Invoice {
+  id           String        @id @default(uuid()) @db.Uuid
+  number       String        @unique @db.VarChar(50)
+  userId       String        @map("user_id") @db.Uuid
+  type         InvoiceType
+  status       InvoiceStatus @default(DRAFT)
+  subtotalXof  Int           @map("subtotal_xof")
+  taxXof       Int           @default(0) @map("tax_xof")
+  totalXof     Int           @map("total_xof")
+  periodStart  DateTime?     @map("period_start")
+  periodEnd    DateTime?     @map("period_end")
+  dueDate      DateTime?     @map("due_date")
+  paidAt       DateTime?     @map("paid_at")
+  notes        String?       @db.VarChar(1000)
+  lineItems    Json          @default("[]") @map("line_items")
+  metadata     Json?         @default("{}")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  user         User          @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("invoices")
+}
+
+model WhiteLabelConfig {
+  id           String   @id @default(cuid())
+  userId       String   @unique @map("user_id") @db.Uuid
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platformName String   @default("MikroServer") @map("platform_name") @db.VarChar(255)
+  logoUrl      String?  @map("logo_url") @db.VarChar(2000)
+  faviconUrl   String?  @map("favicon_url") @db.VarChar(2000)
+  primaryColor String   @default("#6366f1") @map("primary_color") @db.VarChar(7)
+  accentColor  String   @default("#8b5cf6") @map("accent_color") @db.VarChar(7)
+  supportEmail String?  @map("support_email") @db.VarChar(255)
+  supportPhone String?  @map("support_phone") @db.VarChar(30)
+  footerText   String?  @map("footer_text") @db.VarChar(500)
+  customCss    String?  @map("custom_css") @db.VarChar(5000)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("white_label_configs")
+}
+
+model ApiKey {
+  id          String    @id @default(cuid())
+  userId      String    @map("user_id") @db.Uuid
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String    @db.VarChar(255)
+  keyHash     String    @map("key_hash") @db.VarChar(64)
+  keyPrefix   String    @map("key_prefix") @db.VarChar(12)
+  permissions String[]
+  lastUsedAt  DateTime? @map("last_used_at")
+  expiresAt   DateTime? @map("expires_at")
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  revokedAt   DateTime? @map("revoked_at")
+
+  @@index([userId])
+  @@index([keyHash])
+  @@index([isActive])
+  @@map("api_keys")
+}
+
+enum NotificationType {
+  NEW_CONNECTION
+  SESSION_EXPIRED
+  PAYMENT_RECEIVED
+  ROUTER_OFFLINE
+  ROUTER_ONLINE
+  VOUCHER_EXPIRING
+  SUBSCRIPTION_EXPIRING
+  SECURITY_ALERT
+  LOW_STOCK
+  SYSTEM
+  CHURN_RISK
+  BOOST_ACTIVATED
+}
+
+enum ProvisioningStatus {
+  PENDING
+  PENDING_BOOTSTRAP
+  CONNECTING
+  CONFIGURING_WIREGUARD
+  CONFIGURING_HOTSPOT
+  VERIFYING
+  COMPLETED
+  FAILED
+  EXPIRED
+}
+
+enum BillingCycle {
+  MONTHLY
+  YEARLY
+}
+
+enum InvoiceType {
+  PLATFORM_FEE
+  COMMISSION_PAYOUT
+  REFUND
+  CREDIT_NOTE
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+  VOID
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  VIEWER
+  RESELLER
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+}
+
+enum PlanStatus {
+  ACTIVE
+  ARCHIVED
+  DRAFT
+}
+
+enum BandwidthUnit {
+  KBPS
+  MBPS
+  GBPS
+  UNLIMITED
+}
+
+enum TransactionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+  EXPIRED
+  CANCELLED
+}
+
+enum PaymentProvider {
+  WAVE
+  CINETPAY
+  ORANGE_MONEY
+  MTN_MOMO
+  MANUAL
+}
+
+enum GenerationType {
+  AUTO
+  MANUAL
+}
+
+enum VoucherStatus {
+  GENERATED
+  DELIVERED
+  ACTIVE
+  EXPIRED
+  REVOKED
+  DELIVERY_FAILED
+  PENDING_OFFLINE
+}
+
+enum RouterStatus {
+  ONLINE
+  OFFLINE
+  DEGRADED
+  MAINTENANCE
+}
+
+enum SessionStatus {
+  ACTIVE
+  EXPIRED
+  TERMINATED
+  DISCONNECTED
+}
+
+enum WebhookEventStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  FAILED
+  DUPLICATE
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  EXPORT
+  PAYMENT_RECEIVED
+  VOUCHER_GENERATED
+  VOUCHER_DELIVERED
+  ROUTER_CONNECTED
+  ROUTER_DISCONNECTED
+  CONFIG_CHANGED
+  SECURITY_ALERT
+  ROUTER_OWNER_NOTIFY
+  WHITE_LABEL_UPDATED
+  BOOST_APPLIED
+  BOOST_REVERTED
+  COMMISSION_PAYOUT_REQUESTED
+  COMMISSION_PAYOUT_PROCESSED
+}
+
+enum QueueJobStatus {
+  WAITING
+  ACTIVE
+  COMPLETED
+  FAILED
+  DELAYED
+  PAUSED
+}
+
+enum PaymentMethod {
+  WAVE
+  ORANGE_MONEY
+  MTN_MOMO
+  CINETPAY
+  MANUAL
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PENDING
+  CANCELLED
+  EXPIRED
+  SUSPENDED
+}
+
+enum BoostStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  REVERTED
+  FAILED
+}
+
+enum PayoutStatus {
+  REQUESTED
+  PROCESSING
+  COMPLETED
+  REJECTED
+}
+
+enum ChurnRisk {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model BoostTier {
+  id              String        @id @default(uuid()) @db.Uuid
+  name            String        @db.VarChar(100)
+  downloadKbps    Int           @map("download_kbps")
+  uploadKbps      Int           @map("upload_kbps")
+  durationMinutes Int           @map("duration_minutes")
+  priceXof        Int           @map("price_xof")
+  isActive        Boolean       @default(true) @map("is_active")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  transactions    Transaction[]
+  boosts          SpeedBoost[]
+
+  @@map("boost_tiers")
+}
+
+model SpeedBoost {
+  id                String      @id @default(uuid()) @db.Uuid
+  sessionId         String      @map("session_id") @db.Uuid
+  tierId            String      @map("tier_id") @db.Uuid
+  transactionId     String?     @unique @map("transaction_id") @db.Uuid
+  routerId          String      @map("router_id") @db.Uuid
+  voucherUsername   String      @map("voucher_username") @db.VarChar(50)
+  status            BoostStatus @default(PENDING)
+  appliedAt         DateTime?   @map("applied_at")
+  expiresAt         DateTime?   @map("expires_at")
+  revertedAt        DateTime?   @map("reverted_at")
+  originalRateLimit String?     @map("original_rate_limit") @db.VarChar(50)
+  createdAt         DateTime    @default(now()) @map("created_at")
+  updatedAt         DateTime    @updatedAt @map("updated_at")
+  session           Session     @relation(fields: [sessionId], references: [id])
+  tier              BoostTier   @relation(fields: [tierId], references: [id])
+  transaction       Transaction? @relation(fields: [transactionId], references: [id])
+
+  @@index([status])
+  @@index([sessionId])
+  @@index([expiresAt])
+  @@map("speed_boosts")
+}
+
+model CommissionPayout {
+  id            String         @id @default(uuid()) @db.Uuid
+  resellerId    String         @map("reseller_id") @db.Uuid
+  amountXof     Int            @map("amount_xof")
+  status        PayoutStatus   @default(REQUESTED)
+  requestedAt   DateTime       @default(now()) @map("requested_at")
+  processedAt   DateTime?      @map("processed_at")
+  waveReference String?        @map("wave_reference") @db.VarChar(255)
+  notes         String?        @db.VarChar(1000)
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  reseller      ResellerConfig @relation(fields: [resellerId], references: [id])
+
+  @@index([resellerId])
+  @@index([status])
+  @@map("commission_payouts")
+}
+
+model ChurnScore {
+  id               String     @id @default(uuid()) @db.Uuid
+  userId           String     @unique @map("user_id") @db.Uuid
+  score            Int
+  riskLevel        ChurnRisk  @map("risk_level")
+  prevRiskLevel    ChurnRisk? @map("prev_risk_level")
+  factors          Json
+  lastCalculatedAt DateTime   @default(now()) @map("last_calculated_at")
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
+  user             User       @relation(fields: [userId], references: [id])
+
+  @@map("churn_scores")
+}

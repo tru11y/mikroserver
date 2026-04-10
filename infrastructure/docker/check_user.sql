@@ -1,0 +1,1 @@
+SELECT id, email, role, status, LEFT(password_hash, 50) as hash_start FROM users WHERE email = 'admin@mikroserver.local';

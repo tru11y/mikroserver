@@ -102,10 +102,11 @@ async function main() {
 
   for (const plan of plans) {
     await prisma.plan.upsert({
-      where: { slug: plan.slug },
+      where: { slug_ownerId: { slug: plan.slug, ownerId: null } },
       update: {},
       create: {
         ...plan,
+        ownerId: null,
         status: PlanStatus.ACTIVE,
         metadata: {}
       } as any,

@@ -1,7 +1,26 @@
-import { Injectable } from "@nestjs/common";
+import {
+  Injectable,
+  ConflictException,
+  NotFoundException,
+} from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
-import { UserRole, UserStatus, TransactionStatus } from "@prisma/client";
+import {
+  BillingCycle,
+  SubscriptionStatus,
+  UserRole,
+  UserStatus,
+  TransactionStatus,
+} from "@prisma/client";
 import { startOfMonth } from "date-fns";
+import { SaasService } from "../saas/saas.service";
+import { AuthPasswordService } from "../auth/auth-password.service";
+import { normalizeAuthEmail } from "../auth/auth.utils";
+import {
+  AssignSubscriptionDto,
+  CancelSubscriptionDto,
+  ProvisionOperatorDto,
+  RenewSubscriptionDto,
+} from "./dto/admin.dto";
 
 export interface OperatorSummary {
   id: string;
@@ -15,6 +34,8 @@ export interface OperatorSummary {
   tierSlug: string | null;
   /** Operator subscription status */
   subscriptionStatus: string | null;
+  /** Subscription end date */
+  subscriptionEndDate: Date | null;
   /** Number of routers owned */
   routerCount: number;
   /** Number of active routers */
@@ -32,9 +53,23 @@ export interface OperatorListResult {
   total: number;
 }
 
+export interface ProvisionOperatorResult {
+  operator: OperatorSummary;
+  tempPassword: string;
+  subscription: object | null;
+}
+
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly saasService: SaasService,
+    private readonly passwordService: AuthPasswordService,
+  ) {}
+
+  // ---------------------------------------------------------------------------
+  // Operator listing & detail
+  // ---------------------------------------------------------------------------
 
   /**
    * Returns all ADMIN users with aggregated usage stats.
@@ -63,6 +98,7 @@ export class AdminService {
           operatorSubscription: {
             select: {
               status: true,
+              endDate: true,
               tier: {
                 select: { name: true, slug: true },
               },
@@ -79,15 +115,12 @@ export class AdminService {
       }),
     ]);
 
-    // Per-operator stats require separate queries (Prisma doesn't support
-    // nested aggregations in the same pass).  We batch them in parallel.
     const monthStart = startOfMonth(new Date());
 
     const statsResults = await Promise.all(
       operators.map(async (op) => {
         const routerIds = op.routersOwned.map((r) => r.id);
 
-        // Short-circuit: no routers means no vouchers and no revenue
         if (routerIds.length === 0) {
           return { voucherCount: 0, revenueMonthXof: 0, revenueTotalXof: 0 };
         }
@@ -96,7 +129,6 @@ export class AdminService {
           this.prisma.voucher.count({
             where: { routerId: { in: routerIds } },
           }),
-
           this.prisma.transaction.aggregate({
             where: {
               status: TransactionStatus.COMPLETED,
@@ -105,7 +137,6 @@ export class AdminService {
             },
             _sum: { amountXof: true },
           }),
-
           this.prisma.transaction.aggregate({
             where: {
               status: TransactionStatus.COMPLETED,
@@ -141,6 +172,7 @@ export class AdminService {
         subscriptionStatus: op.operatorSubscription
           ? String(op.operatorSubscription.status)
           : null,
+        subscriptionEndDate: op.operatorSubscription?.endDate ?? null,
         routerCount: op.routersOwned.length,
         activeRouterCount: activeRouters,
         totalVouchers: stats.voucherCount,
@@ -154,7 +186,6 @@ export class AdminService {
 
   /**
    * Returns a single operator's detail with full usage stats.
-   * Only callable by SUPER_ADMIN.
    */
   async getOperator(operatorId: string): Promise<OperatorSummary> {
     const op = await this.prisma.user.findUniqueOrThrow({
@@ -169,6 +200,7 @@ export class AdminService {
         operatorSubscription: {
           select: {
             status: true,
+            endDate: true,
             tier: { select: { name: true, slug: true } },
           },
         },
@@ -182,10 +214,11 @@ export class AdminService {
     const routerIds = op.routersOwned.map((r) => r.id);
     const monthStart = startOfMonth(new Date());
 
+    const activeRouters = op.routersOwned.filter(
+      (r) => r.status === "ONLINE" || r.status === "DEGRADED",
+    ).length;
+
     if (routerIds.length === 0) {
-      const activeRouters = op.routersOwned.filter(
-        (r) => r.status === "ONLINE" || r.status === "DEGRADED",
-      ).length;
       return {
         id: op.id,
         email: op.email,
@@ -198,6 +231,7 @@ export class AdminService {
         subscriptionStatus: op.operatorSubscription
           ? String(op.operatorSubscription.status)
           : null,
+        subscriptionEndDate: op.operatorSubscription?.endDate ?? null,
         routerCount: 0,
         activeRouterCount: activeRouters,
         totalVouchers: 0,
@@ -227,10 +261,6 @@ export class AdminService {
       }),
     ]);
 
-    const activeRouters = op.routersOwned.filter(
-      (r) => r.status === "ONLINE" || r.status === "DEGRADED",
-    ).length;
-
     return {
       id: op.id,
       email: op.email,
@@ -243,11 +273,217 @@ export class AdminService {
       subscriptionStatus: op.operatorSubscription
         ? String(op.operatorSubscription.status)
         : null,
+      subscriptionEndDate: op.operatorSubscription?.endDate ?? null,
       routerCount: op.routersOwned.length,
       activeRouterCount: activeRouters,
       totalVouchers: voucherCount,
       revenueThisMonthXof: revenueMonth._sum.amountXof ?? 0,
       revenueTotalXof: revenueTotal._sum.amountXof ?? 0,
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Operator provisioning
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Crée un compte opérateur (rôle ADMIN) et l'active immédiatement.
+   * Optionnellement lui assigne un tier SaaS.
+   * Retourne le mot de passe temporaire en clair (à transmettre à l'opérateur).
+   */
+  async provisionOperator(
+    dto: ProvisionOperatorDto,
+  ): Promise<ProvisionOperatorResult> {
+    const normalizedEmail = normalizeAuthEmail(dto.email);
+
+    const existing = await this.prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+    if (existing) {
+      throw new ConflictException(
+        `Un compte existe déjà pour l'email ${normalizedEmail}`,
+      );
+    }
+
+    const tempPassword =
+      dto.tempPassword ?? this.generateTempPassword();
+    const passwordHash = await this.passwordService.hashPassword(tempPassword);
+
+    const user = await this.prisma.user.create({
+      data: {
+        email: normalizedEmail,
+        passwordHash,
+        firstName: dto.firstName.trim(),
+        lastName: dto.lastName.trim(),
+        phone: dto.phone?.trim() ?? null,
+        role: UserRole.ADMIN,
+        status: UserStatus.ACTIVE,
+        emailVerifiedAt: new Date(),
+        passwordChangedAt: new Date(),
+      },
+    });
+
+    let subscription: object | null = null;
+
+    if (dto.tierId) {
+      subscription = await this.saasService.subscribe(
+        user.id,
+        dto.tierId,
+        dto.billingCycle ?? BillingCycle.MONTHLY,
+      );
+    }
+
+    const operatorSummary = await this.getOperator(user.id);
+
+    return {
+      operator: operatorSummary,
+      tempPassword,
+      subscription,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Subscription management (SUPER_ADMIN acting on any operator)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Liste tous les abonnements opérateurs avec tier et dates.
+   */
+  async listSubscriptions(page = 1, limit = 25) {
+    const skip = (Math.max(1, page) - 1) * Math.min(limit, 100);
+    const take = Math.min(limit, 100);
+
+    const [items, total] = await Promise.all([
+      this.prisma.operatorSubscription.findMany({
+        orderBy: { createdAt: "desc" },
+        skip,
+        take,
+        include: {
+          tier: {
+            select: {
+              name: true,
+              slug: true,
+              priceXofMonthly: true,
+              priceXofYearly: true,
+            },
+          },
+          user: {
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+              status: true,
+            },
+          },
+        },
+      }),
+      this.prisma.operatorSubscription.count(),
+    ]);
+
+    return { items, total, page, limit };
+  }
+
+  /**
+   * Assigne ou change le tier d'un opérateur.
+   * Remplace l'abonnement existant (upsert).
+   */
+  async assignSubscription(operatorId: string, dto: AssignSubscriptionDto) {
+    await this.assertOperatorExists(operatorId);
+    return this.saasService.subscribe(
+      operatorId,
+      dto.tierId,
+      dto.billingCycle ?? BillingCycle.MONTHLY,
+    );
+  }
+
+  /**
+   * Renouvelle l'abonnement d'un opérateur en étendant la date de fin.
+   */
+  async renewSubscription(operatorId: string, dto: RenewSubscriptionDto) {
+    const sub = await this.prisma.operatorSubscription.findUnique({
+      where: { userId: operatorId },
+    });
+    if (!sub) {
+      throw new NotFoundException(
+        `Aucun abonnement trouvé pour l'opérateur ${operatorId}`,
+      );
+    }
+
+    const months =
+      dto.months ?? (sub.billingCycle === BillingCycle.YEARLY ? 12 : 1);
+
+    // Extend from current endDate or now (whichever is later)
+    const baseDate = sub.endDate > new Date() ? sub.endDate : new Date();
+    const newEndDate = new Date(baseDate);
+    newEndDate.setMonth(newEndDate.getMonth() + months);
+
+    return this.prisma.operatorSubscription.update({
+      where: { userId: operatorId },
+      data: {
+        endDate: newEndDate,
+        status: SubscriptionStatus.ACTIVE,
+        cancelledAt: null,
+        cancellationReason: null,
+      },
+      include: { tier: true },
+    });
+  }
+
+  /**
+   * Résilie l'abonnement d'un opérateur.
+   */
+  async cancelSubscription(operatorId: string, dto: CancelSubscriptionDto) {
+    const sub = await this.prisma.operatorSubscription.findUnique({
+      where: { userId: operatorId },
+    });
+    if (!sub) {
+      throw new NotFoundException(
+        `Aucun abonnement trouvé pour l'opérateur ${operatorId}`,
+      );
+    }
+    return this.saasService.cancel(operatorId, dto.reason);
+  }
+
+  /**
+   * Retourne l'abonnement d'un opérateur spécifique.
+   */
+  async getOperatorSubscription(operatorId: string) {
+    await this.assertOperatorExists(operatorId);
+    return this.saasService.getOperatorSubscription(operatorId);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private helpers
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Liste tous les tiers SaaS (actifs et inactifs) — vue SUPER_ADMIN.
+   */
+  async listAllTiers() {
+    return this.prisma.saasTier.findMany({
+      orderBy: { displayOrder: "asc" },
+    });
+  }
+
+  private async assertOperatorExists(operatorId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: operatorId, deletedAt: null },
+      select: { id: true, role: true },
+    });
+    if (!user) {
+      throw new NotFoundException(`Opérateur ${operatorId} introuvable`);
+    }
+    return user;
+  }
+
+  private generateTempPassword(): string {
+    const chars =
+      "ABCDEFGHJKMNPQRSTWXYZabcdefghjkmnpqrstwxyz23456789!@#$";
+    let password = "";
+    for (let i = 0; i < 12; i++) {
+      password += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return password;
   }
 }

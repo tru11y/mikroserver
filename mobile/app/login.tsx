@@ -90,7 +90,7 @@ export default function LoginScreen() {
               value={apiUrl}
               onChangeText={setApiUrl}
               keyboardType="url"
-              placeholder="http://139.84.241.27/proxy/api/v1"
+              placeholder="http://139.84.241.27:3001/proxy/api/v1"
             />
             <ActionButton
               label="Enregistrer l'URL API"

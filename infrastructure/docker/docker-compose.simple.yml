@@ -115,7 +115,7 @@ services:
       METRICS_ENABLED: "true"
       SNAPSHOT_CRON: "0 0 * * *"
       CORS_ORIGINS: "http://${VPS_IP}"
-      API_PREFIX: api/v1
+      API_PREFIX: api
       APP_NAME: MikroServer
     ports:
       - "3003:3003"

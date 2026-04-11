@@ -42,6 +42,7 @@ model User {
   subscriptions_users_current_subscription_idTosubscriptions subscriptions?  @relation("users_current_subscription_idTosubscriptions", fields: [current_subscription_id], references: [id])
   vouchers                                                   Voucher[]       @relation("UserVouchers")
   routersOwned     Router[]     @relation("RouterOwner")
+  ownedPlans       Plan[]       @relation("PlanOwner")
   notifications    Notification[]
   pushSubscriptions PushSubscription[]
   operatorSubscription OperatorSubscription?
@@ -141,7 +142,7 @@ model Router {
 model Plan {
   id              String          @id @default(uuid()) @db.Uuid
   name            String          @db.VarChar(100)
-  slug            String          @unique @db.VarChar(120)
+  slug            String          @db.VarChar(120)
   description     String?         @db.VarChar(500)
   durationMinutes Int             @map("duration_minutes")
   priceXof        Int             @map("price_xof")
@@ -156,12 +157,16 @@ model Plan {
   createdAt       DateTime        @default(now()) @map("created_at")
   updatedAt       DateTime        @updatedAt @map("updated_at")
   deletedAt       DateTime?       @map("deleted_at")
+  /// Propriétaire (opérateur). NULL = plan global SUPER_ADMIN (non utilisé en prod multi-tenant).
+  ownerId         String?         @map("owner_id") @db.Uuid
+  owner           User?           @relation("PlanOwner", fields: [ownerId], references: [id])
   subscriptions   subscriptions[]
   transactions    Transaction[]
   vouchers        Voucher[]
 
+  @@unique([slug, ownerId])
   @@index([status])
-  @@index([slug])
+  @@index([ownerId])
   @@index([deletedAt])
   @@map("plans")
 }

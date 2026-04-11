@@ -6,6 +6,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import {
   BillingCycle,
+  PlanStatus,
   SubscriptionStatus,
   UserRole,
   UserStatus,
@@ -333,6 +334,8 @@ export class AdminService {
       );
     }
 
+    await this.seedOperatorPlans(user.id);
+
     const operatorSummary = await this.getOperator(user.id);
 
     return {
@@ -475,6 +478,65 @@ export class AdminService {
       throw new NotFoundException(`Opérateur ${operatorId} introuvable`);
     }
     return user;
+  }
+
+  /**
+   * Crée le catalogue de forfaits par défaut pour un nouvel opérateur.
+   * Ces forfaits sont isolés par ownerId et visibles uniquement par cet opérateur.
+   */
+  private async seedOperatorPlans(operatorId: string): Promise<void> {
+    const defaults = [
+      {
+        name: "30 minutes",
+        slug: "30min",
+        description: "Accès internet 30 minutes",
+        durationMinutes: 30,
+        priceXof: 200,
+        displayOrder: 1,
+      },
+      {
+        name: "1 heure",
+        slug: "1h",
+        description: "Accès internet 1 heure",
+        durationMinutes: 60,
+        priceXof: 500,
+        displayOrder: 2,
+      },
+      {
+        name: "2 heures",
+        slug: "2h",
+        description: "Accès internet 2 heures",
+        durationMinutes: 120,
+        priceXof: 1000,
+        displayOrder: 3,
+      },
+      {
+        name: "3 heures",
+        slug: "3h",
+        description: "Accès internet 3 heures",
+        durationMinutes: 180,
+        priceXof: 2000,
+        displayOrder: 4,
+      },
+      {
+        name: "Journée complète",
+        slug: "journee",
+        description: "Accès internet toute la journée",
+        durationMinutes: 1440,
+        priceXof: 5000,
+        isPopular: true,
+        displayOrder: 5,
+      },
+    ];
+
+    await this.prisma.plan.createMany({
+      data: defaults.map((p) => ({
+        ...p,
+        status: PlanStatus.ACTIVE,
+        ownerId: operatorId,
+      })),
+      skipDuplicates: true,
+    });
   }
 
   private generateTempPassword(): string {

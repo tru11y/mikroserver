@@ -7,7 +7,12 @@ import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { CreatePlanDto, UpdatePlanDto } from "./dto/plan.dto";
-import { Plan, PlanStatus, AuditAction, Prisma } from "@prisma/client";
+import { Plan, PlanStatus, AuditAction, Prisma, UserRole } from "@prisma/client";
+
+export interface PlanActor {
+  sub: string;
+  role: UserRole;
+}
 import {
   PlanTicketSettings,
   PlanTicketSettingsInput,
@@ -51,13 +56,20 @@ export class PlansService {
 
   async findAll(
     includeArchived = false,
+    actor?: PlanActor,
   ): Promise<Array<Plan & { ticketSettings: PlanTicketSettings }>> {
+    const ownerScope =
+      !actor || actor.role === UserRole.SUPER_ADMIN
+        ? {}
+        : { ownerId: actor.sub };
+
     const plans = await this.prisma.plan.findMany({
       where: includeArchived
-        ? {}
+        ? ownerScope
         : {
             deletedAt: null,
             status: PlanStatus.ACTIVE,
+            ...ownerScope,
           },
       orderBy: [{ displayOrder: "asc" }, { priceXof: "asc" }],
     });
@@ -95,9 +107,15 @@ export class PlansService {
 
   async findOne(
     id: string,
+    actor?: PlanActor,
   ): Promise<Plan & { ticketSettings: PlanTicketSettings }> {
-    const plan = await this.prisma.plan.findUnique({
-      where: { id, deletedAt: null },
+    const ownerScope =
+      !actor || actor.role === UserRole.SUPER_ADMIN
+        ? {}
+        : { ownerId: actor.sub };
+
+    const plan = await this.prisma.plan.findFirst({
+      where: { id, deletedAt: null, ...ownerScope },
     });
 
     if (!plan) throw new NotFoundException(`Plan ${id} not found`);
@@ -106,7 +124,7 @@ export class PlansService {
 
   async create(
     dto: CreatePlanDto,
-    adminId: string,
+    actor: PlanActor,
   ): Promise<Plan & { ticketSettings: PlanTicketSettings }> {
     const slug =
       dto.slug ??
@@ -116,16 +134,23 @@ export class PlansService {
         .replace(/[^a-z0-9-]/g, "")
         .slice(0, 120);
 
-    const existing = await this.prisma.plan.findUnique({ where: { slug } });
+    const ownerId =
+      actor.role === UserRole.SUPER_ADMIN ? null : actor.sub;
+
+    // Composite uniqueness check: same slug can exist for different operators
+    const existing = await this.prisma.plan.findFirst({
+      where: { slug, ownerId },
+    });
     if (existing) {
       throw new ConflictException(`Plan slug "${slug}" already exists`);
     }
 
-    const data = this.buildPlanPayload(dto, slug) as Prisma.PlanCreateInput;
+    const payload = this.buildPlanPayload(dto, slug) as Prisma.PlanCreateInput;
+    const data: Prisma.PlanCreateInput = { ...payload, ownerId };
     const plan = await this.prisma.plan.create({ data });
 
     await this.auditService.log({
-      userId: adminId,
+      userId: actor.sub,
       action: AuditAction.CREATE,
       entityType: "Plan",
       entityId: plan.id,
@@ -139,9 +164,9 @@ export class PlansService {
   async update(
     id: string,
     dto: UpdatePlanDto,
-    adminId: string,
+    actor: PlanActor,
   ): Promise<Plan & { ticketSettings: PlanTicketSettings }> {
-    const existing = await this.findOne(id);
+    const existing = await this.findOne(id, actor);
     const data = this.buildPlanPayload(
       dto,
       undefined,
@@ -154,7 +179,7 @@ export class PlansService {
     });
 
     await this.auditService.log({
-      userId: adminId,
+      userId: actor.sub,
       action: AuditAction.UPDATE,
       entityType: "Plan",
       entityId: id,
@@ -167,9 +192,9 @@ export class PlansService {
 
   async archive(
     id: string,
-    adminId: string,
+    actor: PlanActor,
   ): Promise<Plan & { ticketSettings: PlanTicketSettings }> {
-    const plan = await this.findOne(id);
+    const plan = await this.findOne(id, actor);
 
     const updated = await this.prisma.plan.update({
       where: { id },
@@ -177,7 +202,7 @@ export class PlansService {
     });
 
     await this.auditService.log({
-      userId: adminId,
+      userId: actor.sub,
       action: AuditAction.DELETE,
       entityType: "Plan",
       entityId: id,
@@ -189,9 +214,12 @@ export class PlansService {
 
   async restore(
     id: string,
-    adminId: string,
+    actor: PlanActor,
   ): Promise<Plan & { ticketSettings: PlanTicketSettings }> {
-    const plan = await this.prisma.plan.findUnique({ where: { id } });
+    const ownerScope =
+      actor.role === UserRole.SUPER_ADMIN ? {} : { ownerId: actor.sub };
+
+    const plan = await this.prisma.plan.findFirst({ where: { id, ...ownerScope } });
     if (!plan) throw new NotFoundException(`Plan ${id} not found`);
     if (plan.status !== PlanStatus.ARCHIVED) {
       throw new ConflictException(`Plan ${id} is not archived`);
@@ -203,7 +231,7 @@ export class PlansService {
     });
 
     await this.auditService.log({
-      userId: adminId,
+      userId: actor.sub,
       action: AuditAction.UPDATE,
       entityType: "Plan",
       entityId: id,

@@ -13,17 +13,17 @@ import { BillingCycle } from "@prisma/client";
 export class ProvisionOperatorDto {
   @ApiProperty({ example: "jean.kouassi@wifi-abidjan.ci" })
   @IsEmail()
-  email: string;
+  email!: string;
 
   @ApiProperty({ example: "Jean" })
   @IsString()
   @MaxLength(100)
-  firstName: string;
+  firstName!: string;
 
   @ApiProperty({ example: "Kouassi" })
   @IsString()
   @MaxLength(100)
-  lastName: string;
+  lastName!: string;
 
   @ApiPropertyOptional({ example: "+2250700000000" })
   @IsOptional()
@@ -58,7 +58,7 @@ export class ProvisionOperatorDto {
 export class AssignSubscriptionDto {
   @ApiProperty({ description: "UUID du tier SaaS" })
   @IsUUID()
-  tierId: string;
+  tierId!: string;
 
   @ApiPropertyOptional({ enum: BillingCycle, default: BillingCycle.MONTHLY })
   @IsOptional()

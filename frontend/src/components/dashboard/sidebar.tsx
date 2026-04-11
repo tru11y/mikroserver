@@ -149,7 +149,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       : []),
     ...(canViewPlans ? [{ href: '/plans', icon: Tag, label: 'Forfaits' }] : []),
     ...(canViewCustomers ? [{ href: '/customers', icon: Users, label: 'Clients' }] : []),
-    ...(isSuperAdmin ? [{ href: '/users', icon: Users, label: 'Utilisateurs' }] : []),
+    ...(isSuperAdmin ? [
+      { href: '/operators', icon: Crown, label: 'Opérateurs', separator: true },
+      { href: '/users', icon: Users, label: 'Utilisateurs', subItem: true },
+    ] : []),
     ...(canViewUsers ? [{ href: '/resellers', icon: Users, label: 'Revendeurs' }] : []),
     { href: '/notifications', icon: Bell, label: 'Notifications', separator: true },
     ...(canViewTransactions

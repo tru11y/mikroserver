@@ -198,7 +198,7 @@ export function RouterOverviewSection({
                 href={`http://${routerInfo.wireguardIp}/`}
                 target="_blank"
                 rel="noopener noreferrer"
-                title="WebFig — disponible si connecté au tunnel WireGuard"
+                title={`WebFig — IP WireGuard ${routerInfo.wireguardIp} · Nécessite d'être connecté au tunnel VPN`}
                 className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors hover:bg-muted"
               >
                 <Globe className="h-4 w-4" />
@@ -206,7 +206,7 @@ export function RouterOverviewSection({
               </a>
               <a
                 href={`winbox://${routerInfo.wireguardIp}`}
-                title="Ouvrir dans Winbox"
+                title={`Winbox — IP WireGuard ${routerInfo.wireguardIp} · Nécessite Winbox installé et le tunnel VPN actif`}
                 className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors hover:bg-muted"
               >
                 <Monitor className="h-4 w-4" />

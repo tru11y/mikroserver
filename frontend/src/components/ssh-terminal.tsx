@@ -24,6 +24,12 @@ export function SshTerminal({ routerId, accessToken, wsUrl }: SshTerminalProps) 
     if (wsUrl) return wsUrl;
     if (typeof window === 'undefined') return 'ws://localhost:3003';
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const port = window.location.port;
+    // Port standard (80/443) → NGINX est en frontal, il proxie /ws/ssh
+    if (!port || port === '80' || port === '443') {
+      return `${proto}//${window.location.hostname}`;
+    }
+    // Port non-standard → accès direct (ex: :3001), SSH gateway sur :3003
     return `${proto}//${window.location.hostname}:3003`;
   }, [wsUrl]);
 

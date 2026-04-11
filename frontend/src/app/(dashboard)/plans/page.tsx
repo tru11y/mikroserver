@@ -4,16 +4,18 @@ import { useState, type Dispatch, type SetStateAction } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiError, unwrap } from '@/lib/api';
 import { hasPermission } from '@/lib/permissions';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
-  Archive,
   Clock,
   Copy,
   Pencil,
   Plus,
   RefreshCw,
+  RotateCcw,
   Star,
   Tag,
   Ticket,
+  Trash2,
   Wifi,
 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -538,6 +540,7 @@ export default function PlansPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [confirmDeletePlanId, setConfirmDeletePlanId] = useState<string | null>(null);
   const [form, setForm] = useState<CreatePlanForm>(buildDefaultForm());
 
   const { data: meData, isLoading: isMeLoading } = useQuery({
@@ -582,6 +585,14 @@ export default function PlansPage() {
 
   const archiveMutation = useMutation({
     mutationFn: (id: string) => api.plans.archive(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['plans'] });
+      setConfirmDeletePlanId(null);
+    },
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: (id: string) => api.plans.restore(id),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['plans'] });
     },
@@ -784,14 +795,16 @@ export default function PlansPage() {
                 </div>
 
                 {canManagePlans && (
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => openEdit(plan)}
-                      className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      <Pencil className="h-3 w-3" />
-                      Modifier
-                    </button>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {plan.status === 'ACTIVE' && (
+                      <button
+                        onClick={() => openEdit(plan)}
+                        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <Pencil className="h-3 w-3" />
+                        Modifier
+                      </button>
+                    )}
 
                     <button
                       onClick={() => duplicateMutation.mutate(plan)}
@@ -804,12 +817,23 @@ export default function PlansPage() {
 
                     {plan.status === 'ACTIVE' && (
                       <button
-                        onClick={() => archiveMutation.mutate(plan.id)}
+                        onClick={() => setConfirmDeletePlanId(plan.id)}
                         disabled={archiveMutation.isPending}
                         className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-red-400 transition-colors disabled:opacity-50"
                       >
-                        <Archive className="h-3 w-3" />
-                        Archiver
+                        <Trash2 className="h-3 w-3" />
+                        Supprimer
+                      </button>
+                    )}
+
+                    {plan.status === 'ARCHIVED' && (
+                      <button
+                        onClick={() => restoreMutation.mutate(plan.id)}
+                        disabled={restoreMutation.isPending}
+                        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-emerald-400 transition-colors disabled:opacity-50"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                        Désarchiver
                       </button>
                     )}
                   </div>
@@ -819,6 +843,18 @@ export default function PlansPage() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmDeletePlanId !== null}
+        title="Supprimer ce forfait ?"
+        description="Le forfait sera archivé et retiré de la liste active. Il restera visible dans les archives et pourra être restauré."
+        confirmLabel="Supprimer"
+        isLoading={archiveMutation.isPending}
+        onConfirm={() => {
+          if (confirmDeletePlanId) archiveMutation.mutate(confirmDeletePlanId);
+        }}
+        onCancel={() => setConfirmDeletePlanId(null)}
+      />
 
       {canManagePlans && (showForm || editingPlan) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">

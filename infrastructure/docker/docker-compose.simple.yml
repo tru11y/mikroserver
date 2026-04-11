@@ -117,6 +117,8 @@ services:
       CORS_ORIGINS: "http://${VPS_IP}"
       API_PREFIX: api/v1
       APP_NAME: MikroServer
+    ports:
+      - "3003:3003"
     volumes:
       - app-logs:/app/logs
     networks:

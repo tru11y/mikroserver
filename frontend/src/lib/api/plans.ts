@@ -7,4 +7,5 @@ export const plansApi = {
   create: (data: unknown) => apiClient.post('/plans', data),
   update: (id: string, data: unknown) => apiClient.patch(`/plans/${id}`, data),
   archive: (id: string) => apiClient.delete(`/plans/${id}`),
+  restore: (id: string) => apiClient.patch(`/plans/${id}/restore`, {}),
 };

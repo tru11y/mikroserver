@@ -187,6 +187,32 @@ export class PlansService {
     return this.decoratePlan(updated);
   }
 
+  async restore(
+    id: string,
+    adminId: string,
+  ): Promise<Plan & { ticketSettings: PlanTicketSettings }> {
+    const plan = await this.prisma.plan.findUnique({ where: { id } });
+    if (!plan) throw new NotFoundException(`Plan ${id} not found`);
+    if (plan.status !== PlanStatus.ARCHIVED) {
+      throw new ConflictException(`Plan ${id} is not archived`);
+    }
+
+    const updated = await this.prisma.plan.update({
+      where: { id },
+      data: { status: PlanStatus.ACTIVE, deletedAt: null },
+    });
+
+    await this.auditService.log({
+      userId: adminId,
+      action: AuditAction.UPDATE,
+      entityType: "Plan",
+      entityId: id,
+      description: `Plan "${plan.name}" restored`,
+    });
+
+    return this.decoratePlan(updated);
+  }
+
   private decoratePlan(
     plan: Plan,
   ): Plan & { ticketSettings: PlanTicketSettings } {

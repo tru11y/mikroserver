@@ -79,4 +79,15 @@ export class PlansController {
   ) {
     return this.plansService.archive(id, user.sub);
   }
+
+  @Patch(":id/restore")
+  @Roles(UserRole.VIEWER)
+  @Permissions("plans.manage")
+  @ApiOperation({ summary: "Restore an archived plan" })
+  restore(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.plansService.restore(id, user.sub);
+  }
 }

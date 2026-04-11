@@ -145,8 +145,8 @@ export class PlansService {
       throw new ConflictException(`Plan slug "${slug}" already exists`);
     }
 
-    const payload = this.buildPlanPayload(dto, slug) as Prisma.PlanCreateInput;
-    const data: Prisma.PlanCreateInput = { ...payload, ownerId };
+    const payload = this.buildPlanPayload(dto, slug) as Prisma.PlanUncheckedCreateInput;
+    const data: Prisma.PlanUncheckedCreateInput = { ...payload, ownerId };
     const plan = await this.prisma.plan.create({ data });
 
     await this.auditService.log({

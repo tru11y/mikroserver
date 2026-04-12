@@ -1,87 +1,65 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ScrollView, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { api, extractErrorMessage } from "@/src/lib/api";
 import { formatBytes } from "@/src/lib/format";
 import { useAuthGuard } from "@/src/hooks/use-auth-guard";
 import {
   ActionButton,
+  Card,
   EmptyState,
   ErrorBanner,
   LoadingView,
   Page,
-  SectionCard,
+  Row,
   SectionTitle,
 } from "@/src/components/ui";
 
 export default function SessionsScreen() {
-  const guard = useAuthGuard();
-  const queryClient = useQueryClient();
-  const [routerFilter, setRouterFilter] = useState<string | undefined>(undefined);
+  const guard        = useAuthGuard();
+  const queryClient  = useQueryClient();
+  const [filter, setFilter] = useState<string | undefined>(undefined);
   const [terminatingId, setTerminatingId] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionError, setActionError]     = useState<string | null>(null);
 
   const routersQuery = useQuery({
     queryKey: ["routers"],
-    queryFn: () => api.routers.list(),
+    queryFn:  () => api.routers.list(),
   });
 
   const sessionsQuery = useQuery({
-    queryKey: ["sessions", routerFilter ?? "all"],
-    queryFn: () => api.sessions.active(routerFilter),
+    queryKey:        ["sessions", filter ?? "all"],
+    queryFn:         () => api.sessions.active(filter),
     refetchInterval: 10_000,
   });
 
   const terminateMutation = useMutation({
-    mutationFn: (payload: { routerId: string; mikrotikId: string }) =>
-      api.sessions.terminate(payload.routerId, payload.mikrotikId),
-    onMutate: (payload) => {
-      setActionError(null);
-      setTerminatingId(payload.mikrotikId);
-    },
+    mutationFn: (p: { routerId: string; mikrotikId: string }) =>
+      api.sessions.terminate(p.routerId, p.mikrotikId),
+    onMutate: (p) => { setActionError(null); setTerminatingId(p.mikrotikId); },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["sessions"] });
       await queryClient.invalidateQueries({ queryKey: ["router-live"] });
     },
-    onError: (error) => {
-      setActionError(extractErrorMessage(error));
-    },
-    onSettled: () => {
-      setTerminatingId(null);
-    },
+    onError:   (e) => setActionError(extractErrorMessage(e)),
+    onSettled: () => setTerminatingId(null),
   });
 
-  const routers = routersQuery.data ?? [];
+  const routers  = routersQuery.data ?? [];
   const sessions = sessionsQuery.data ?? [];
-  const routerName = useMemo(() => {
-    if (!routerFilter) {
-      return "Tous les routeurs";
-    }
-    return routers.find((router) => router.id === routerFilter)?.name ?? "Routeur";
-  }, [routerFilter, routers]);
+  const routerName = useMemo(
+    () => filter ? (routers.find((r) => r.id === filter)?.name ?? "Routeur") : "Tous",
+    [filter, routers],
+  );
 
   if (!guard.isReady || guard.isBlocked) {
-    return (
-      <Page scroll={false}>
-        <LoadingView label="Chargement des sessions..." />
-      </Page>
-    );
+    return <Page scroll={false}><LoadingView label="Chargement des sessions..." /></Page>;
   }
-
   if (sessionsQuery.isLoading && !sessionsQuery.data) {
-    return (
-      <Page scroll={false}>
-        <LoadingView label="Chargement des sessions..." />
-      </Page>
-    );
+    return <Page scroll={false}><LoadingView label="Chargement des sessions..." /></Page>;
   }
-
   if (sessionsQuery.error) {
-    return (
-      <Page>
-        <ErrorBanner message="Impossible de charger les sessions actives." />
-      </Page>
-    );
+    return <Page><ErrorBanner message="Impossible de charger les sessions actives." /></Page>;
   }
 
   return (
@@ -93,23 +71,22 @@ export default function SessionsScreen() {
 
       {actionError ? <ErrorBanner message={actionError} /> : null}
 
-      <SectionCard>
-        <SectionTitle title="Filtrer par routeur" />
+      {/* Router filter chips */}
+      <Card>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View style={{ flexDirection: "row", gap: 8 }}>
-            <ActionButton
-              kind={routerFilter ? "secondary" : "primary"}
-              label="Tous"
-              onPress={() => setRouterFilter(undefined)}
-            />
-            {routers.map((router) => (
-              <ActionButton
-                key={router.id}
-                kind={routerFilter === router.id ? "primary" : "secondary"}
-                label={router.name}
-                onPress={() => setRouterFilter(router.id)}
-              />
-            ))}
+            {[{ id: undefined, name: "Tous" }, ...routers].map((r) => {
+              const active = filter === r.id;
+              return (
+                <View
+                  key={r.id ?? "all"}
+                  onTouchEnd={() => setFilter(r.id)}
+                  style={[S.chip, active && S.chipActive]}
+                >
+                  <Text style={[S.chipText, active && S.chipTextActive]}>{r.name}</Text>
+                </View>
+              );
+            })}
           </View>
         </ScrollView>
         <ActionButton
@@ -118,56 +95,44 @@ export default function SessionsScreen() {
           onPress={() => void sessionsQuery.refetch()}
           disabled={sessionsQuery.isFetching}
         />
-      </SectionCard>
+      </Card>
 
       {sessions.length === 0 ? (
-        <EmptyState
-          title="Aucune session active"
-          subtitle="Les clients connectés apparaîtront ici."
-        />
+        <EmptyState title="Aucune session active" subtitle="Les clients connectés apparaîtront ici." />
       ) : (
-        <SectionCard>
-          {sessions.map((session) => (
-            <View
-              key={session.id}
-              style={{
-                borderWidth: 1,
-                borderColor: "#2b4060",
-                borderRadius: 10,
-                padding: 10,
-                marginBottom: 8,
-                gap: 4,
-              }}
-            >
-              <Text style={{ color: "#edf5ff", fontWeight: "700", fontSize: 14 }}>
-                {session.username}
-              </Text>
-              <Text style={{ color: "#c3d5f4", fontSize: 12 }}>
-                {session.ipAddress} · {session.macAddress}
-              </Text>
-              <Text style={{ color: "#9fb3d3", fontSize: 12 }}>
-                {session.routerName || "Routeur inconnu"} · Uptime {session.uptime}
-              </Text>
-              <Text style={{ color: "#8ea3c6", fontSize: 12 }}>
-                ↓ {formatBytes(session.bytesIn)} · ↑ {formatBytes(session.bytesOut)}
-              </Text>
-              <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
-                <ActionButton
-                  kind="danger"
-                  label={terminatingId === session.id ? "Coupure..." : "Couper session"}
-                  onPress={() =>
-                    terminateMutation.mutate({
-                      routerId: session.routerId,
-                      mikrotikId: session.id,
-                    })
-                  }
-                  disabled={terminateMutation.isPending}
-                />
-              </View>
-            </View>
-          ))}
-        </SectionCard>
+        sessions.map((session) => (
+          <View key={session.id} style={S.sessionCard}>
+            <Text style={S.sessionUser}>{session.username}</Text>
+            <Text style={S.sessionMeta}>{session.ipAddress} · {session.macAddress}</Text>
+            <Text style={S.sessionMeta}>
+              {session.routerName || "Routeur inconnu"} · Uptime {session.uptime}
+            </Text>
+            <Text style={S.sessionStats}>
+              ↓ {formatBytes(session.bytesIn)} · ↑ {formatBytes(session.bytesOut)}
+            </Text>
+            <Row style={{ marginTop: 4 }}>
+              <ActionButton
+                flex
+                kind="danger"
+                label={terminatingId === session.id ? "Coupure..." : "Couper session"}
+                onPress={() => terminateMutation.mutate({ routerId: session.routerId, mikrotikId: session.id })}
+                disabled={terminateMutation.isPending}
+              />
+            </Row>
+          </View>
+        ))
       )}
     </Page>
   );
 }
+
+const S = StyleSheet.create({
+  chip:          { borderRadius: 99, borderWidth: 1, borderColor: "#1e2f4a", backgroundColor: "#0d1829", paddingHorizontal: 12, paddingVertical: 7 },
+  chipActive:    { borderColor: "#6366f1", backgroundColor: "#111f35" },
+  chipText:      { color: "#6b849f", fontSize: 13, fontWeight: "600" },
+  chipTextActive:{ color: "#a5b4fc", fontSize: 13, fontWeight: "700" },
+  sessionCard:   { backgroundColor: "#0d1829", borderWidth: 1, borderColor: "#1e2f4a", borderRadius: 14, padding: 14, gap: 4 },
+  sessionUser:   { color: "#f0f5ff", fontWeight: "700", fontSize: 14 },
+  sessionMeta:   { color: "#c4d3ef", fontSize: 12 },
+  sessionStats:  { color: "#6b849f", fontSize: 12 },
+});

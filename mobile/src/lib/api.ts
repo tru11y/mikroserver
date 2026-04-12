@@ -275,7 +275,7 @@ export type SettingEntry = {
 export type SettingsMap = Record<string, SettingEntry>;
 
 const DEFAULT_API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL?.trim() || "http://139.84.241.27:3001/proxy/api/v1";
+  process.env.EXPO_PUBLIC_API_BASE_URL?.trim() || "http://139.84.241.27/proxy/api/v1";
 
 let apiBaseUrl = normalizeApiBaseUrl(DEFAULT_API_BASE_URL);
 let accessToken: string | null = null;

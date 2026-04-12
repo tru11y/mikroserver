@@ -101,16 +101,19 @@ async function main() {
   ];
 
   for (const plan of plans) {
-    await prisma.plan.upsert({
-      where: { slug_ownerId: { slug: plan.slug, ownerId: null } },
-      update: {},
-      create: {
-        ...plan,
-        ownerId: null,
-        status: PlanStatus.ACTIVE,
-        metadata: {}
-      } as any,
+    const exists = await prisma.plan.findFirst({
+      where: { slug: plan.slug, ownerId: null },
     });
+    if (!exists) {
+      await prisma.plan.create({
+        data: {
+          ...plan,
+          ownerId: null,
+          status: PlanStatus.ACTIVE,
+          metadata: {},
+        } as any,
+      });
+    }
     console.log(`✓ Plan: ${plan.name} (${plan.priceXof} FCFA)`);
   }
 

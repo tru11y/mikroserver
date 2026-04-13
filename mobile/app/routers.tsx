@@ -1,99 +1,42 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { Alert, Modal, ScrollView, Text, View } from "react-native";
+import { Alert, ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import {
-  api,
-  extractErrorMessage,
-  type CreateRouterPayload,
+  api, extractErrorMessage,
   type RouterItem,
-  type UpdateRouterPayload,
 } from "@/src/lib/api";
 import { formatDateTime } from "@/src/lib/format";
 import { useAuthGuard } from "@/src/hooks/use-auth-guard";
 import {
   ActionButton,
+  Card,
   EmptyState,
   ErrorBanner,
   InputField,
   LoadingView,
   Page,
-  SectionCard,
   SectionTitle,
+  StatusBadge,
+  SuccessBanner,
 } from "@/src/components/ui";
 
-type RouterForm = {
-  name: string;
-  description: string;
-  location: string;
-  wireguardIp: string;
-  apiPort: string;
-  apiUsername: string;
-  apiPassword: string;
-  hotspotProfile: string;
-  hotspotServer: string;
-};
-
-const EMPTY_FORM: RouterForm = {
-  name: "",
-  description: "",
-  location: "",
-  wireguardIp: "",
-  apiPort: "8728",
-  apiUsername: "admin",
-  apiPassword: "",
-  hotspotProfile: "default",
-  hotspotServer: "hotspot1",
-};
-
-function toCreatePayload(form: RouterForm): CreateRouterPayload {
-  return {
-    name: form.name.trim(),
-    description: form.description.trim() || undefined,
-    location: form.location.trim() || undefined,
-    wireguardIp: form.wireguardIp.trim(),
-    apiPort: Number(form.apiPort || 8728),
-    apiUsername: form.apiUsername.trim(),
-    apiPassword: form.apiPassword,
-    hotspotProfile: form.hotspotProfile.trim() || undefined,
-    hotspotServer: form.hotspotServer.trim() || undefined,
-  };
-}
-
-function toUpdatePayload(form: RouterForm): UpdateRouterPayload {
-  return {
-    name: form.name.trim() || undefined,
-    description: form.description.trim() || undefined,
-    location: form.location.trim() || undefined,
-    apiUsername: form.apiUsername.trim() || undefined,
-    apiPassword: form.apiPassword.trim() || undefined,
-    hotspotProfile: form.hotspotProfile.trim() || undefined,
-    hotspotServer: form.hotspotServer.trim() || undefined,
-  };
-}
-
-function fromRouter(router: RouterItem): RouterForm {
-  return {
-    name: router.name,
-    description: router.description ?? "",
-    location: router.location ?? "",
-    wireguardIp: router.wireguardIp,
-    apiPort: String(router.apiPort),
-    apiUsername: router.apiUsername,
-    apiPassword: "",
-    hotspotProfile: router.hotspotProfile,
-    hotspotServer: router.hotspotServer,
-  };
-}
+type AddForm = { ip: string; username: string; password: string; comment: string };
+const EMPTY: AddForm = { ip: "", username: "admin", password: "", comment: "" };
 
 export default function RoutersScreen() {
   const guard = useAuthGuard();
-  const expoRouter = useRouter();
+  const nav = useRouter();
   const qc = useQueryClient();
-  const [showEditor, setShowEditor] = useState(false);
-  const [editingRouter, setEditingRouter] = useState<RouterItem | null>(null);
-  const [form, setForm] = useState<RouterForm>(EMPTY_FORM);
+
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState<AddForm>(EMPTY);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // After creation: track the pending router ID for polling
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [pollTimeout, setPollTimeout] = useState(false);
+  const pollStart = useRef<number>(0);
 
   const routersQuery = useQuery({
     queryKey: ["routers"],
@@ -101,255 +44,213 @@ export default function RoutersScreen() {
     refetchInterval: 30_000,
   });
 
-  const createMutation = useMutation({
-    mutationFn: (payload: CreateRouterPayload) => api.routers.create(payload),
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["routers"] });
-      setShowEditor(false);
-      setEditingRouter(null);
-      setForm(EMPTY_FORM);
-      setFormError(null);
-    },
-    onError: (error) => setFormError(extractErrorMessage(error)),
+  // Poll the pending router until wireguardIp is set (max 90s)
+  const pendingQuery = useQuery({
+    queryKey: ["router", pendingId],
+    queryFn: () => api.routers.get(pendingId!),
+    enabled: !!pendingId,
+    refetchInterval: 5_000,
   });
 
-  const updateMutation = useMutation({
-    mutationFn: (payload: { id: string; data: UpdateRouterPayload }) =>
-      api.routers.update(payload.id, payload.data),
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["routers"] });
-      setShowEditor(false);
-      setEditingRouter(null);
-      setForm(EMPTY_FORM);
-      setFormError(null);
-    },
-    onError: (error) => setFormError(extractErrorMessage(error)),
-  });
+  useEffect(() => {
+    if (!pendingId) return;
+    pollStart.current = Date.now();
+    setPollTimeout(false);
+  }, [pendingId]);
 
-  const removeMutation = useMutation({
-    mutationFn: (id: string) => api.routers.remove(id),
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["routers"] });
-    },
-  });
+  useEffect(() => {
+    if (!pendingId || !pendingQuery.data) return;
+    const router = pendingQuery.data;
 
-  const healthMutation = useMutation({
-    mutationFn: (id: string) => api.routers.healthCheck(id),
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["routers"] });
-    },
-  });
-
-  function openCreate() {
-    setEditingRouter(null);
-    setForm(EMPTY_FORM);
-    setFormError(null);
-    setShowEditor(true);
-  }
-
-  function openEdit(router: RouterItem) {
-    setEditingRouter(router);
-    setForm(fromRouter(router));
-    setFormError(null);
-    setShowEditor(true);
-  }
-
-  async function saveRouter() {
-    if (!form.name || !form.apiUsername || (!editingRouter && !form.apiPassword)) {
-      setFormError("Nom, utilisateur API et mot de passe sont obligatoires.");
+    if (router.wireguardIp) {
+      // Tunnel is up — refresh list and close
+      void qc.invalidateQueries({ queryKey: ["routers"] });
+      setPendingId(null);
+      setShowAdd(false);
       return;
     }
 
-    if (editingRouter) {
-      await updateMutation.mutateAsync({
-        id: editingRouter.id,
-        data: toUpdatePayload(form),
+    // Timeout after 90s
+    if (Date.now() - pollStart.current > 90_000) {
+      setPollTimeout(true);
+      setPendingId(null);
+    }
+  }, [pendingQuery.data, pendingId]);
+
+  const createMut = useMutation({
+    mutationFn: (f: AddForm) => {
+      const name = f.comment.trim() || `Routeur ${f.ip.trim()}`;
+      return api.routers.create({
+        name,
+        wireguardIp: f.ip.trim(),
+        apiUsername: f.username.trim(),
+        apiPassword: f.password,
+        description: f.comment.trim() || undefined,
       });
-      return;
-    }
+    },
+    onMutate: () => { setFormError(null); },
+    onSuccess: (router) => {
+      setForm(EMPTY);
+      setPendingId(router.id);
+    },
+    onError: (e) => setFormError(extractErrorMessage(e)),
+  });
 
-    if (!form.wireguardIp) {
-      setFormError("IP WireGuard obligatoire.");
-      return;
-    }
-
-    await createMutation.mutateAsync(toCreatePayload(form));
-  }
+  const removeMut = useMutation({
+    mutationFn: (id: string) => api.routers.remove(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["routers"] }),
+  });
 
   function confirmDelete(router: RouterItem) {
-    Alert.alert("Supprimer routeur", `Supprimer ${router.name} ?`, [
+    Alert.alert("Supprimer", `Supprimer ${router.name} ?`, [
       { text: "Annuler", style: "cancel" },
-      {
-        text: "Supprimer",
-        style: "destructive",
-        onPress: () => removeMutation.mutate(router.id),
-      },
+      { text: "Supprimer", style: "destructive", onPress: () => removeMut.mutate(router.id) },
     ]);
   }
 
   if (!guard.isReady || guard.isBlocked) {
-    return (
-      <Page scroll={false}>
-        <LoadingView label="Chargement des routeurs..." />
-      </Page>
-    );
+    return <Page scroll={false}><LoadingView label="Chargement..." /></Page>;
   }
-
   if (routersQuery.isLoading) {
-    return (
-      <Page scroll={false}>
-        <LoadingView label="Chargement des routeurs..." />
-      </Page>
-    );
+    return <Page scroll={false}><LoadingView label="Chargement des routeurs..." /></Page>;
   }
-
   if (routersQuery.error) {
-    return (
-      <Page>
-        <ErrorBanner message="Impossible de charger les routeurs." />
-      </Page>
-    );
+    return <Page><ErrorBanner message="Impossible de charger les routeurs." /></Page>;
   }
 
   const routers = routersQuery.data ?? [];
-  const online = routers.filter((router) => router.status === "ONLINE").length;
+  const online = routers.filter((r) => r.status === "ONLINE").length;
 
   return (
-    <Page>
-      <SectionTitle
-        title="Routeurs"
-        subtitle={`${routers.length} total · ${online} en ligne`}
-      />
+    <>
+      <Page>
+        <SectionTitle title="Routeurs" subtitle={`${routers.length} total · ${online} en ligne`} />
 
-      <SectionCard>
-        <ActionButton label="Ajouter un routeur" onPress={openCreate} />
-      </SectionCard>
+        <Card>
+          <ActionButton label="Ajouter un routeur" onPress={() => {
+            setForm(EMPTY); setFormError(null); setPollTimeout(false); setShowAdd(true);
+          }} />
+        </Card>
 
-      {routers.length === 0 ? (
-        <EmptyState title="Aucun routeur configuré" subtitle="Ajoute ton premier routeur MikroTik." />
-      ) : (
-        <SectionCard>
-          {routers.map((router) => (
-            <View
-              key={router.id}
-              style={{
-                borderWidth: 1,
-                borderColor: "#2a3f5e",
-                borderRadius: 10,
-                padding: 10,
-                marginBottom: 8,
-                gap: 4,
-              }}
-            >
-              <Text style={{ color: "#edf5ff", fontWeight: "700", fontSize: 14 }}>
-                {router.name}
-              </Text>
-              <Text style={{ color: "#bdd0ef", fontSize: 12 }}>
-                {router.status} · {router.wireguardIp}:{router.apiPort}
-              </Text>
-              <Text style={{ color: "#97abc9", fontSize: 12 }}>
-                {router.location || "Sans localisation"} · Dernier seen:{" "}
-                {formatDateTime(router.lastSeenAt)}
-              </Text>
-
-              <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
-                <ActionButton
-                  kind="secondary"
-                  label="Détail live"
-                  onPress={() => expoRouter.push(`/router/${router.id}`)}
-                />
-                <ActionButton
-                  kind="secondary"
-                  label="Health check"
-                  onPress={() => healthMutation.mutate(router.id)}
-                  disabled={healthMutation.isPending}
-                />
+        {routers.length === 0 ? (
+          <EmptyState title="Aucun routeur" subtitle="Ajoute ton premier routeur MikroTik." />
+        ) : (
+          routers.map((router) => (
+            <View key={router.id} style={S.card}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <View style={{ flex: 1, gap: 3 }}>
+                  <Text style={S.name}>{router.name}</Text>
+                  <Text style={S.meta}>
+                    {router.wireguardIp ? `WG: ${router.wireguardIp}` : "Tunnel en attente"} · Port {router.apiPort}
+                  </Text>
+                  {router.location ? <Text style={S.meta}>{router.location}</Text> : null}
+                  <Text style={S.meta}>Vu · {formatDateTime(router.lastSeenAt)}</Text>
+                </View>
+                <StatusBadge status={router.status} />
               </View>
-
-              <View style={{ flexDirection: "row", gap: 8 }}>
-                <ActionButton kind="secondary" label="Modifier" onPress={() => openEdit(router)} />
-                <ActionButton
-                  kind="danger"
-                  label="Supprimer"
-                  onPress={() => confirmDelete(router)}
-                  disabled={removeMutation.isPending}
-                />
+              <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
+                <ActionButton flex kind="secondary" label="Détail live"
+                  onPress={() => nav.push(`/router/${router.id}`)} />
+                <ActionButton flex kind="danger" label="Supprimer"
+                  onPress={() => confirmDelete(router)} disabled={removeMut.isPending} />
               </View>
             </View>
-          ))}
-        </SectionCard>
-      )}
+          ))
+        )}
+      </Page>
 
-      <Modal visible={showEditor} animationType="slide" onRequestClose={() => setShowEditor(false)}>
-        <ScrollView
-          style={{ flex: 1, backgroundColor: "#0b1018" }}
-          contentContainerStyle={{ padding: 14, gap: 10, paddingBottom: 24 }}
-          keyboardShouldPersistTaps="handled"
-        >
-          <SectionTitle title={editingRouter ? "Modifier routeur" : "Nouveau routeur"} />
-          <SectionCard>
-            {formError ? <ErrorBanner message={formError} /> : null}
-            <InputField
-              label="Nom"
-              value={form.name}
-              onChangeText={(value) => setForm((f) => ({ ...f, name: value }))}
-            />
-            {!editingRouter ? (
-              <InputField
-                label="IP WireGuard"
-                value={form.wireguardIp}
-                onChangeText={(value) => setForm((f) => ({ ...f, wireguardIp: value }))}
+      {/* ── Modal ajout ─────────────────────────────────────── */}
+      <Modal visible={showAdd} animationType="slide" onRequestClose={() => !pendingId && setShowAdd(false)}>
+        <ScrollView style={S.modal} contentContainerStyle={S.modalContent}
+          keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+
+          <View style={S.modalHeader}>
+            <Text style={S.modalTitle}>Ajouter un routeur</Text>
+            {!pendingId && (
+              <Pressable onPress={() => setShowAdd(false)} hitSlop={12}>
+                <Text style={S.closeBtn}>✕</Text>
+              </Pressable>
+            )}
+          </View>
+
+          {/* ── Étape 1 : formulaire ─── */}
+          {!pendingId ? (
+            <>
+              {formError ? <ErrorBanner message={formError} /> : null}
+              {pollTimeout ? <ErrorBanner message="Tunnel WireGuard non établi dans le délai imparti. Vérifiez que l'IP et les identifiants sont corrects et réessayez." /> : null}
+
+              <Card>
+                <InputField label="IP du routeur MikroTik (accessible depuis internet)"
+                  value={form.ip} onChangeText={(v) => setForm((f) => ({ ...f, ip: v }))}
+                  keyboardType="numeric" placeholder="ex: 197.234.12.5" />
+                <InputField label="Utilisateur API RouterOS"
+                  value={form.username} onChangeText={(v) => setForm((f) => ({ ...f, username: v }))} />
+                <InputField label="Mot de passe API"
+                  value={form.password} onChangeText={(v) => setForm((f) => ({ ...f, password: v }))}
+                  secureTextEntry />
+                <InputField label="Nom / commentaire"
+                  value={form.comment} onChangeText={(v) => setForm((f) => ({ ...f, comment: v }))}
+                  placeholder="ex: Bureau principal" />
+              </Card>
+
+              <Card>
+                <Text style={S.hint}>
+                  Le serveur va automatiquement configurer le tunnel WireGuard sur le routeur via l'API RouterOS.
+                  Assurez-vous que le port API (8728) est accessible depuis internet.
+                </Text>
+              </Card>
+
+              <ActionButton
+                label={createMut.isPending ? "Connexion au routeur..." : "Ajouter et configurer"}
+                onPress={() => {
+                  if (!form.ip.trim() || !form.username.trim() || !form.password) {
+                    setFormError("IP, utilisateur et mot de passe sont obligatoires.");
+                    return;
+                  }
+                  createMut.mutate(form);
+                }}
+                disabled={createMut.isPending} loading={createMut.isPending}
               />
-            ) : null}
-            {!editingRouter ? (
-              <InputField
-                label="Port API"
-                value={form.apiPort}
-                onChangeText={(value) => setForm((f) => ({ ...f, apiPort: value }))}
-                keyboardType="numeric"
-              />
-            ) : null}
-            <InputField
-              label="Utilisateur API"
-              value={form.apiUsername}
-              onChangeText={(value) => setForm((f) => ({ ...f, apiUsername: value }))}
-            />
-            <InputField
-              label={editingRouter ? "Nouveau mot de passe API (optionnel)" : "Mot de passe API"}
-              value={form.apiPassword}
-              onChangeText={(value) => setForm((f) => ({ ...f, apiPassword: value }))}
-              secureTextEntry
-            />
-            <InputField
-              label="Localisation"
-              value={form.location}
-              onChangeText={(value) => setForm((f) => ({ ...f, location: value }))}
-            />
-            <InputField
-              label="Description"
-              value={form.description}
-              onChangeText={(value) => setForm((f) => ({ ...f, description: value }))}
-            />
-            <InputField
-              label="Profil hotspot"
-              value={form.hotspotProfile}
-              onChangeText={(value) => setForm((f) => ({ ...f, hotspotProfile: value }))}
-            />
-            <InputField
-              label="Serveur hotspot"
-              value={form.hotspotServer}
-              onChangeText={(value) => setForm((f) => ({ ...f, hotspotServer: value }))}
-            />
-            <ActionButton
-              label={createMutation.isPending || updateMutation.isPending ? "Sauvegarde..." : "Enregistrer"}
-              onPress={() => void saveRouter()}
-              disabled={createMutation.isPending || updateMutation.isPending}
-            />
-            <ActionButton kind="secondary" label="Fermer" onPress={() => setShowEditor(false)} />
-          </SectionCard>
+              <ActionButton kind="ghost" label="Annuler" onPress={() => setShowAdd(false)} />
+            </>
+          ) : (
+            /* ── Étape 2 : provisioning en cours ─── */
+            <View style={S.waitBox}>
+              <ActivityIndicator size="large" color="#6366f1" />
+              <Text style={S.waitTitle}>Configuration WireGuard en cours…</Text>
+              <Text style={S.waitDesc}>
+                Le serveur configure automatiquement le tunnel VPN sur votre routeur.
+                {"\n"}Cela prend généralement 10 à 30 secondes.
+              </Text>
+              {pendingQuery.data && !pendingQuery.data.wireguardIp && (
+                <View style={S.stepRow}>
+                  <Text style={S.stepDone}>✓ Routeur créé</Text>
+                  <Text style={S.stepDone}>✓ Clés WireGuard générées</Text>
+                  <Text style={S.stepPending}>⟳ Attente connexion tunnel…</Text>
+                </View>
+              )}
+            </View>
+          )}
         </ScrollView>
       </Modal>
-    </Page>
+    </>
   );
 }
 
+const S = StyleSheet.create({
+  card:         { backgroundColor: "#0d1829", borderWidth: 1, borderColor: "#1e2f4a", borderRadius: 14, padding: 14, gap: 6 },
+  name:         { color: "#f0f5ff", fontWeight: "700", fontSize: 15 },
+  meta:         { color: "#6b849f", fontSize: 12 },
+  modal:        { flex: 1, backgroundColor: "#060e1c" },
+  modalContent: { padding: 16, paddingBottom: 40, gap: 14 },
+  modalHeader:  { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  modalTitle:   { color: "#f0f5ff", fontSize: 18, fontWeight: "700", flex: 1 },
+  closeBtn:     { color: "#6b849f", fontSize: 20 },
+  hint:         { color: "#6b849f", fontSize: 12, lineHeight: 18 },
+  waitBox:      { alignItems: "center", gap: 16, paddingVertical: 40 },
+  waitTitle:    { color: "#f0f5ff", fontSize: 16, fontWeight: "700", textAlign: "center" },
+  waitDesc:     { color: "#6b849f", fontSize: 13, textAlign: "center", lineHeight: 20 },
+  stepRow:      { gap: 6, marginTop: 8, alignItems: "flex-start" },
+  stepDone:     { color: "#4ade80", fontSize: 13 },
+  stepPending:  { color: "#818cf8", fontSize: 13 },
+});

@@ -111,7 +111,7 @@ export default function VouchersGenerateScreen() {
                 style={[S.selectItem, router.id === routerId && S.selectItemActive]}>
                 <Text style={[S.selectTitle, router.id === routerId && S.selectTitleActive]}>{router.name}</Text>
                 <Text style={S.selectMeta}>
-                  {router.wireguardIp}:{router.apiPort}{router.location ? ` · ${router.location}` : ""}
+                  {router.wireguardIp ?? "—"}:{router.apiPort}{router.location ? ` · ${router.location}` : ""}
                 </Text>
               </Pressable>
             ))}

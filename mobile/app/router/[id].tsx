@@ -7,7 +7,7 @@ import {
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { Ionicons } from "@expo/vector-icons";
-import { api, extractErrorMessage, type RouterStatus } from "@/src/lib/api";
+import { api, extractErrorMessage } from "@/src/lib/api";
 import { formatBps, formatBytes, formatDateTime } from "@/src/lib/format";
 import { useAuthGuard } from "@/src/hooks/use-auth-guard";
 import {
@@ -181,7 +181,7 @@ export default function RouterDetailScreen() {
           <View style={{ flex: 1, gap: 3 }}>
             <Text style={S.routerName}>{r.name}</Text>
             {r.location ? <Text style={S.routerMeta}>{r.location}</Text> : null}
-            <Text style={S.routerMeta}>{r.wireguardIp}:{r.apiPort}</Text>
+            <Text style={S.routerMeta}>{r.wireguardIp ?? "—"}:{r.apiPort}</Text>
           </View>
           <StatusBadge status={r.status} />
         </View>
@@ -301,7 +301,7 @@ export default function RouterDetailScreen() {
               WinBox est disponible uniquement sur PC (Windows/macOS). Utilisez les informations ci-dessous depuis votre PC connecté au VPN WireGuard.
             </Text>
             <View style={{ gap: 10, marginTop: 8 }}>
-              <CredRow label="IP WireGuard" value={r.wireguardIp} onCopy={r.wireguardIp} />
+              <CredRow label="IP WireGuard" value={r.wireguardIp ?? "—"} onCopy={r.wireguardIp ?? undefined} />
               <CredRow label="Port"         value={String(r.apiPort)} />
               <CredRow label="Utilisateur"  value={r.apiUsername} onCopy={r.apiUsername} />
             </View>

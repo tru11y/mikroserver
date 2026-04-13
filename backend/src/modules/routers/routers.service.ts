@@ -44,6 +44,11 @@ import {
   getVpsPublicKey,
   isPeerConnected,
 } from "../provisioning/wireguard.utils";
+import { executeRouterOperationResult } from "./router-routeros.transport";
+import { runCommand } from "./router-api.commands";
+import type { MikroTikModule } from "./router-api.types";
+// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+const MikroNode = require("mikrotik") as MikroTikModule;
 
 const WG_SUBNET = "10.66.66";
 const WG_SERVER_IP = "10.66.66.1";
@@ -271,9 +276,9 @@ export class RoutersService {
         description: `Router "${restored.name}" restored${localIp ? ` (local IP: ${localIp})` : ""}`,
       });
 
-      // Trigger async WG provisioning (non-blocking)
-      void this.provisionWireGuard(restored.id).catch((err: unknown) => {
-        this.logger.warn(`[WG] Provisioning failed for ${restored.id}: ${String(err)}`);
+      // Trigger async WG provisioning via RouterOS API (non-blocking)
+      void this.provisionWireGuardViaApi(restored.id).catch((err: unknown) => {
+        this.logger.warn(`[WG] Auto-provisioning failed for ${restored.id}: ${String(err)}`);
       });
 
       return this.findOne(restored.id);
@@ -311,9 +316,9 @@ export class RoutersService {
       description: `Router "${router.name}" added${localIp ? ` (local IP: ${localIp})` : ""}`,
     });
 
-    // Trigger async WG provisioning (non-blocking — don't await)
-    void this.provisionWireGuard(router.id).catch((err: unknown) => {
-      this.logger.warn(`[WG] Provisioning failed for ${router.id}: ${String(err)}`);
+    // Trigger async WG provisioning via RouterOS API (non-blocking — don't await)
+    void this.provisionWireGuardViaApi(router.id).catch((err: unknown) => {
+      this.logger.warn(`[WG] Auto-provisioning failed for ${router.id}: ${String(err)}`);
     });
 
     return this.findOne(router.id);
@@ -1087,6 +1092,140 @@ export class RoutersService {
       }
     }
     throw new Error("Subnet WireGuard plein (10.66.66.2–254 épuisé).");
+  }
+
+  /**
+   * Fully automatic WireGuard provisioning:
+   * 1. Generate keys + assign WG IP
+   * 2. Push WG config directly to router via RouterOS API (using localIp from metadata)
+   * 3. Poll until tunnel is established, then set wireguardIp in DB
+   *
+   * Falls back to key-only provisioning if API push fails (e.g. router not reachable yet).
+   */
+  private async provisionWireGuardViaApi(routerId: string): Promise<void> {
+    const router = await this.prisma.router.findUnique({
+      where: { id: routerId },
+      select: {
+        id: true, name: true, metadata: true,
+        apiPort: true, apiUsername: true, apiPasswordHash: true,
+      },
+    });
+    if (!router) return;
+
+    const meta = (router.metadata ?? {}) as Record<string, unknown>;
+
+    // Idempotent
+    if (meta.wg && (meta.wg as Record<string, unknown>).wgIp) {
+      this.logger.debug(`[WG] Router ${routerId} already provisioned`);
+      return;
+    }
+
+    const localIp = meta.localIp as string | undefined;
+
+    // Generate keys + assign WG IP
+    const wgIp = await this.assignNextWgIp();
+    const { privateKey, publicKey } = await generateWireGuardKeyPair();
+    const vpsPublicKey = await getVpsPublicKey();
+
+    const vpsEndpoint =
+      this.configService.get<string>("WG_SERVER_ENDPOINT") ??
+      `${this.configService.get<string>("HOST") ?? "139.84.241.27"}:${WG_LISTEN_PORT}`;
+    const [vpsIp, vpsPortStr] = vpsEndpoint.split(":");
+    const vpsPort = Number(vpsPortStr ?? WG_LISTEN_PORT);
+
+    // Add peer on VPS
+    await addWireGuardPeer(publicKey, wgIp);
+
+    // Push WG config to router via RouterOS API if we have a direct IP
+    if (localIp) {
+      try {
+        await executeRouterOperationResult({
+          mikroNode: MikroNode,
+          wireguardIp: localIp, // direct/public IP of router before WG tunnel
+          apiPort: router.apiPort,
+          username: router.apiUsername,
+          password: router.apiPasswordHash,
+          timeoutMs: 15000,
+          operation: async (conn) => {
+            // Create WireGuard interface
+            await runCommand(conn, [
+              "/interface/wireguard/add",
+              "=name=wg-mks",
+              `=listen-port=${WG_LISTEN_PORT}`,
+              `=private-key=${privateKey}`,
+            ]);
+            // Add VPS as peer
+            await runCommand(conn, [
+              "/interface/wireguard/peers/add",
+              "=interface=wg-mks",
+              `=public-key=${vpsPublicKey}`,
+              "=allowed-address=0.0.0.0/0",
+              `=endpoint-address=${vpsIp}`,
+              `=endpoint-port=${vpsPort}`,
+              "=persistent-keepalive=25",
+            ]);
+            // Assign WG tunnel IP to the interface
+            await runCommand(conn, [
+              "/ip/address/add",
+              `=address=${wgIp}/24`,
+              "=interface=wg-mks",
+            ]);
+          },
+        });
+        this.logger.log(
+          `[WG] Config pushed to "${router.name}" via RouterOS API at ${localIp}`,
+        );
+      } catch (err) {
+        this.logger.warn(
+          `[WG] RouterOS API push failed for "${router.name}" (${localIp}): ${String(err)}` +
+          ` — keys generated, tunnel will connect when router is reachable`,
+        );
+      }
+    } else {
+      this.logger.warn(
+        `[WG] No localIp for "${router.name}" — keys generated, manual WG setup needed`,
+      );
+    }
+
+    // Save WG metadata regardless of API push success
+    await this.prisma.router.update({
+      where: { id: routerId },
+      data: {
+        metadata: {
+          ...meta,
+          wg: {
+            wgIp,
+            privateKey,
+            publicKey,
+            vpsPublicKey,
+            endpoint: vpsEndpoint,
+            listenPort: WG_LISTEN_PORT,
+            provisionedAt: new Date().toISOString(),
+          },
+        },
+      },
+    });
+
+    // Poll for tunnel establishment (up to 90s)
+    for (let i = 0; i < 18; i++) {
+      await new Promise<void>((r) => setTimeout(r, 5000));
+      const connected = await isPeerConnected(publicKey);
+      if (connected) {
+        await this.prisma.router.update({
+          where: { id: routerId },
+          data: { wireguardIp: wgIp },
+        });
+        this.logger.log(
+          `[WG] Tunnel established for "${router.name}" → ${wgIp}`,
+        );
+        void this.routerApiService.checkRouterHealth(routerId).catch(() => {});
+        return;
+      }
+    }
+
+    this.logger.warn(
+      `[WG] Tunnel not established within 90s for "${router.name}" — will be detected by periodic scan`,
+    );
   }
 
   /**

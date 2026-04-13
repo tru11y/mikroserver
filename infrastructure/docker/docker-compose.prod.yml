@@ -141,6 +141,11 @@ services:
       WEBHOOK_RATE_LIMIT_MAX: ${WEBHOOK_RATE_LIMIT_MAX:-200}
       LOG_LEVEL: info
       LOG_PRETTY: "false"
+    # WireGuard management: nsenter into host network namespace to run `wg` commands
+    pid: host
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
     # Port NOT exposed externally — Nginx on the host proxies to the internal network.
     # Exposing 3000 would bypass Nginx rate limiting and security headers.
     volumes:

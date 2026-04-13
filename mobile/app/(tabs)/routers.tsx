@@ -40,23 +40,26 @@ export default function RoutersScreen() {
     refetchInterval: 5_000,
   });
 
+  // Start a hard 90s timer when provisioning begins (not data-dependent)
   useEffect(() => {
     if (!pendingId) return;
-    pollStart.current = Date.now();
     setTimedOut(false);
+    const timer = setTimeout(() => {
+      setTimedOut(true);
+      setPendingId(null);
+    }, 90_000);
+    return () => clearTimeout(timer);
   }, [pendingId]);
 
+  // Detect tunnel up (wireguardIp set by backend)
   useEffect(() => {
     if (!pendingId || !pendingQuery.data) return;
     if (pendingQuery.data.wireguardIp) {
       void qc.invalidateQueries({ queryKey: ["routers"] });
       setPendingId(null);
       setShowAdd(false);
-    } else if (Date.now() - pollStart.current > 90_000) {
-      setTimedOut(true);
-      setPendingId(null);
     }
-  }, [pendingQuery.data]);
+  }, [pendingQuery.data, pendingId, qc]);
 
   const createMut = useMutation({
     mutationFn: (f: AddForm) => api.routers.create({

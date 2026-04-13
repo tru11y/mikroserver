@@ -18,11 +18,10 @@ import {
   Page,
   SectionTitle,
   StatusBadge,
-  SuccessBanner,
 } from "@/src/components/ui";
 
-type AddForm = { ip: string; username: string; password: string; comment: string };
-const EMPTY: AddForm = { ip: "", username: "admin", password: "", comment: "" };
+type AddForm = { ip: string; port: string; username: string; password: string; comment: string };
+const EMPTY: AddForm = { ip: "", port: "8728", username: "admin", password: "", comment: "" };
 
 export default function RoutersScreen() {
   const guard = useAuthGuard();
@@ -83,6 +82,7 @@ export default function RoutersScreen() {
       return api.routers.create({
         name,
         wireguardIp: f.ip.trim(),
+        apiPort: Number(f.port) || 8728,
         apiUsername: f.username.trim(),
         apiPassword: f.password,
         description: f.comment.trim() || undefined,
@@ -177,41 +177,41 @@ export default function RoutersScreen() {
           {!pendingId ? (
             <>
               {formError ? <ErrorBanner message={formError} /> : null}
-              {pollTimeout ? <ErrorBanner message="Tunnel WireGuard non établi dans le délai imparti. Vérifiez que l'IP et les identifiants sont corrects et réessayez." /> : null}
+              {pollTimeout ? <ErrorBanner message="Tunnel non établi. Vérifiez IP/identifiants et réessayez." /> : null}
 
-              <Card>
-                <InputField label="IP du routeur MikroTik (accessible depuis internet)"
-                  value={form.ip} onChangeText={(v) => setForm((f) => ({ ...f, ip: v }))}
-                  keyboardType="numeric" placeholder="ex: 197.234.12.5" />
-                <InputField label="Utilisateur API RouterOS"
-                  value={form.username} onChangeText={(v) => setForm((f) => ({ ...f, username: v }))} />
-                <InputField label="Mot de passe API"
-                  value={form.password} onChangeText={(v) => setForm((f) => ({ ...f, password: v }))}
-                  secureTextEntry />
-                <InputField label="Nom / commentaire"
-                  value={form.comment} onChangeText={(v) => setForm((f) => ({ ...f, comment: v }))}
-                  placeholder="ex: Bureau principal" />
-              </Card>
+              {/* Address + Port */}
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <View style={{ flex: 3 }}>
+                  <InputField label="Address" value={form.ip}
+                    onChangeText={(v) => setForm((f) => ({ ...f, ip: v }))}
+                    keyboardType="numeric" placeholder="192.168.88.1" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <InputField label="Port" value={form.port}
+                    onChangeText={(v) => setForm((f) => ({ ...f, port: v }))}
+                    keyboardType="numeric" />
+                </View>
+              </View>
 
-              <Card>
-                <Text style={S.hint}>
-                  Le serveur va automatiquement configurer le tunnel WireGuard sur le routeur via l'API RouterOS.
-                  Assurez-vous que le port API (8728) est accessible depuis internet.
-                </Text>
-              </Card>
+              <InputField label="Username" value={form.username}
+                onChangeText={(v) => setForm((f) => ({ ...f, username: v }))} />
+              <InputField label="Password" value={form.password}
+                onChangeText={(v) => setForm((f) => ({ ...f, password: v }))}
+                secureTextEntry />
+              <InputField label="Comment" value={form.comment}
+                onChangeText={(v) => setForm((f) => ({ ...f, comment: v }))} />
 
               <ActionButton
-                label={createMut.isPending ? "Connexion au routeur..." : "Ajouter et configurer"}
+                label={createMut.isPending ? "Connecting..." : "Connect"}
                 onPress={() => {
                   if (!form.ip.trim() || !form.username.trim() || !form.password) {
-                    setFormError("IP, utilisateur et mot de passe sont obligatoires.");
+                    setFormError("Address, username and password are required.");
                     return;
                   }
                   createMut.mutate(form);
                 }}
                 disabled={createMut.isPending} loading={createMut.isPending}
               />
-              <ActionButton kind="ghost" label="Annuler" onPress={() => setShowAdd(false)} />
             </>
           ) : (
             /* ── Étape 2 : provisioning en cours ─── */

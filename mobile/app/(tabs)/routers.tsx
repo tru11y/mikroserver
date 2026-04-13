@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { api, extractErrorMessage, type RouterItem } from "@/src/lib/api";
+import { api, extractErrorMessage, type RouterItem, type WgProvision } from "@/src/lib/api";
 import { formatDateTime } from "@/src/lib/format";
 import { useAuthGuard } from "@/src/hooks/use-auth-guard";
 import {
@@ -13,17 +13,21 @@ import {
 type AddForm = { address: string; port: string; username: string; password: string; comment: string };
 const EMPTY: AddForm = { address: "", port: "8728", username: "admin", password: "", comment: "" };
 
+type PushStep = "idle" | "pushing" | "polling" | "done" | "error";
+
 export default function RoutersScreen() {
   const guard = useAuthGuard();
   const nav   = useRouter();
   const qc    = useQueryClient();
 
-  const [showAdd,    setShowAdd]    = useState(false);
-  const [form,       setForm]       = useState<AddForm>(EMPTY);
-  const [formError,  setFormError]  = useState<string | null>(null);
-  const [pendingId,  setPendingId]  = useState<string | null>(null);
-  const [timedOut,   setTimedOut]   = useState(false);
-  const pollStart = useRef(0);
+  const [showAdd,   setShowAdd]   = useState(false);
+  const [form,      setForm]      = useState<AddForm>(EMPTY);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [pushStep,  setPushStep]  = useState<PushStep>("idle");
+  const [pushError, setPushError] = useState<string | null>(null);
+  const wgRef = useRef<WgProvision | null>(null);
+  const addrRef = useRef<AddForm>(EMPTY);
 
   const patch = (p: Partial<AddForm>) => setForm((f) => ({ ...f, ...p }));
 
@@ -40,26 +44,66 @@ export default function RoutersScreen() {
     refetchInterval: 5_000,
   });
 
-  // Start a hard 90s timer when provisioning begins (not data-dependent)
+  // 3-minute timeout for tunnel polling
   useEffect(() => {
     if (!pendingId) return;
-    setTimedOut(false);
     const timer = setTimeout(() => {
-      setTimedOut(true);
+      setPushStep("error");
+      setPushError("Tunnel non établi (3min). Vérifiez que le routeur peut atteindre le VPS (51820/UDP).");
       setPendingId(null);
-    }, 90_000);
+    }, 180_000);
     return () => clearTimeout(timer);
   }, [pendingId]);
 
-  // Detect tunnel up (wireguardIp set by backend)
+  // Detect tunnel up
   useEffect(() => {
     if (!pendingId || !pendingQuery.data) return;
     if (pendingQuery.data.wireguardIp) {
       void qc.invalidateQueries({ queryKey: ["routers"] });
       setPendingId(null);
+      setPushStep("done");
       setShowAdd(false);
     }
   }, [pendingQuery.data, pendingId, qc]);
+
+  async function pushWireGuardConfig(wg: WgProvision, addr: AddForm): Promise<void> {
+    const base = `http://${addr.address}:80`;
+    const auth = "Basic " + btoa(`${addr.username}:${addr.password}`);
+    const h = { Authorization: auth, "Content-Type": "application/json" };
+    const [vpsIp, vpsPort] = wg.vpsEndpoint.split(":");
+
+    const post = async (path: string, body: Record<string, string>) => {
+      const res = await fetch(`${base}/rest${path}`, {
+        method: "PUT",
+        headers: h,
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(`RouterOS ${path}: ${res.status} ${text}`);
+      }
+    };
+
+    await post("/interface/wireguard", {
+      name: "wg-mks",
+      "listen-port": String(wg.listenPort),
+      "private-key": wg.privateKey,
+    });
+
+    await post("/interface/wireguard/peers", {
+      interface: "wg-mks",
+      "public-key": wg.vpsPublicKey,
+      "allowed-address": "0.0.0.0/0",
+      "endpoint-address": vpsIp ?? "",
+      "endpoint-port": vpsPort ?? "51820",
+      "persistent-keepalive": "25",
+    });
+
+    await post("/ip/address", {
+      address: `${wg.wgIp}/24`,
+      interface: "wg-mks",
+    });
+  }
 
   const createMut = useMutation({
     mutationFn: (f: AddForm) => api.routers.create({
@@ -70,9 +114,34 @@ export default function RoutersScreen() {
       apiPassword: f.password,
       description: f.comment.trim() || undefined,
     }),
-    onMutate:  () => { setFormError(null); setTimedOut(false); },
-    onSuccess: (router) => { setForm(EMPTY); setPendingId(router.id); },
-    onError:   (e) => setFormError(extractErrorMessage(e)),
+    onMutate:  () => { setFormError(null); setPushError(null); setPushStep("idle"); },
+    onSuccess: async (router: RouterItem) => {
+      addrRef.current = form;
+      setForm(EMPTY);
+      const wg = router.wgProvision;
+      if (!wg) {
+        setPushError("Clés WireGuard non reçues du serveur.");
+        setPushStep("error");
+        return;
+      }
+      wgRef.current = wg;
+      setPushStep("pushing");
+      try {
+        await pushWireGuardConfig(wg, addrRef.current);
+        setPushStep("polling");
+        setPendingId(router.id);
+      } catch (e) {
+        // RouterOS REST API failed (v6 or port 80 closed) — still poll, manual setup needed
+        setPushError(
+          `Config auto échouée: ${String(e)}\n` +
+          `Le routeur doit être RouterOS v7+ avec www service actif.\n` +
+          `En attente de connexion manuelle...`
+        );
+        setPushStep("polling");
+        setPendingId(router.id);
+      }
+    },
+    onError: (e) => setFormError(extractErrorMessage(e)),
   });
 
   const removeMut = useMutation({
@@ -92,6 +161,8 @@ export default function RoutersScreen() {
     ]);
   }
 
+  const isProvisioning = pushStep === "pushing" || pushStep === "polling";
+
   if (!guard.isReady || guard.isBlocked) return <Page scroll={false}><LoadingView /></Page>;
   if (routersQuery.isLoading)            return <Page scroll={false}><LoadingView label="Chargement des routeurs..." /></Page>;
   if (routersQuery.error)                return <Page><ErrorBanner message="Impossible de charger les routeurs." /></Page>;
@@ -108,7 +179,7 @@ export default function RoutersScreen() {
               <Text style={S.countTitle}>{routers.length} routeurs</Text>
               <Text style={S.countMeta}>{online} en ligne</Text>
             </View>
-            <ActionButton label="+ Ajouter" onPress={() => { setForm(EMPTY); setFormError(null); setTimedOut(false); setShowAdd(true); }} />
+            <ActionButton label="+ Ajouter" onPress={() => { setForm(EMPTY); setFormError(null); setPushError(null); setPushStep("idle"); setShowAdd(true); }} />
           </View>
         </Card>
 
@@ -144,25 +215,23 @@ export default function RoutersScreen() {
         }
       </Page>
 
-      {/* ── Modal ──────────────────────────────────────────────── */}
-      <Modal visible={showAdd} animationType="slide" onRequestClose={() => !pendingId && setShowAdd(false)}>
+      <Modal visible={showAdd} animationType="slide" onRequestClose={() => !isProvisioning && setShowAdd(false)}>
         <ScrollView style={S.modal} contentContainerStyle={S.modalContent}
           keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
           <View style={S.modalHeader}>
             <Text style={S.modalTitle}>New Router</Text>
-            {!pendingId && (
+            {!isProvisioning && (
               <Pressable onPress={() => setShowAdd(false)} hitSlop={10}>
                 <Text style={S.closeBtn}>✕</Text>
               </Pressable>
             )}
           </View>
 
-          {!pendingId ? (
-            /* ── Formulaire ── */
+          {!isProvisioning ? (
             <>
-              {formError ? <ErrorBanner message={formError} /> : null}
-              {timedOut  ? <ErrorBanner message="Tunnel non établi (90s). Vérifiez IP/port/identifiants." /> : null}
+              {formError  ? <ErrorBanner message={formError} /> : null}
+              {pushError  ? <ErrorBanner message={pushError} /> : null}
 
               <View style={{ flexDirection: "row", gap: 10 }}>
                 <View style={{ flex: 3 }}>
@@ -193,18 +262,21 @@ export default function RoutersScreen() {
               />
             </>
           ) : (
-            /* ── Provisioning en cours ── */
             <View style={S.waitBox}>
               <ActivityIndicator size="large" color="#6366f1" />
-              <Text style={S.waitTitle}>Configuration WireGuard en cours…</Text>
-              <Text style={S.waitDesc}>
-                Le serveur configure automatiquement le tunnel VPN sur le routeur.{"\n"}
-                Cela prend généralement 10 à 30 secondes.
+              <Text style={S.waitTitle}>
+                {pushStep === "pushing" ? "Configuration RouterOS en cours…" : "Attente connexion tunnel…"}
               </Text>
+              {pushError ? <ErrorBanner message={pushError} /> : null}
               <View style={{ gap: 6, marginTop: 8, alignSelf: "flex-start" }}>
                 <Text style={S.stepDone}>✓ Routeur enregistré</Text>
                 <Text style={S.stepDone}>✓ Clés WireGuard générées</Text>
-                <Text style={S.stepPending}>⟳ Attente connexion tunnel…</Text>
+                {pushStep === "pushing"
+                  ? <Text style={S.stepPending}>⟳ Push config RouterOS…</Text>
+                  : <Text style={S.stepDone}>✓ Config RouterOS envoyée</Text>}
+                {pushStep === "polling"
+                  ? <Text style={S.stepPending}>⟳ Attente connexion tunnel…</Text>
+                  : null}
               </View>
             </View>
           )}
@@ -227,7 +299,6 @@ const S = StyleSheet.create({
   closeBtn:     { color: "#6b849f", fontSize: 22 },
   waitBox:      { alignItems: "center", gap: 16, paddingVertical: 40 },
   waitTitle:    { color: "#f0f5ff", fontSize: 16, fontWeight: "700", textAlign: "center" },
-  waitDesc:     { color: "#6b849f", fontSize: 13, textAlign: "center", lineHeight: 20 },
   stepDone:     { color: "#4ade80", fontSize: 13 },
   stepPending:  { color: "#818cf8", fontSize: 13 },
 });

@@ -234,7 +234,7 @@ export class RoutersService {
     dto: CreateRouterDto,
     adminId: string,
     requestingUserRole?: string,
-  ): Promise<RouterSafeView> {
+  ): Promise<RouterSafeView & { wgProvision: { privateKey: string; wgIp: string; vpsPublicKey: string; vpsEndpoint: string; listenPort: number } }> {
     // Check for existing router with same name (including deleted ones)
     // Note: wireguardIp from form is the local IP stored in metadata; DB wireguardIp is assigned by WG provisioning
     const existing = await this.prisma.router.findFirst({
@@ -276,12 +276,10 @@ export class RoutersService {
         description: `Router "${restored.name}" restored${localIp ? ` (local IP: ${localIp})` : ""}`,
       });
 
-      // Trigger async WG provisioning via RouterOS API (non-blocking)
-      void this.provisionWireGuardViaApi(restored.id).catch((err: unknown) => {
-        this.logger.warn(`[WG] Auto-provisioning failed for ${restored.id}: ${String(err)}`);
-      });
-
-      return this.findOne(restored.id);
+      // Generate WG config for mobile to push directly to router
+      const wgProvision = await this.generateWgProvision(restored.id);
+      const view = await this.findOne(restored.id);
+      return { ...view, wgProvision };
     }
 
     // ADMIN users automatically own the router they create
@@ -316,12 +314,54 @@ export class RoutersService {
       description: `Router "${router.name}" added${localIp ? ` (local IP: ${localIp})` : ""}`,
     });
 
-    // Trigger async WG provisioning via RouterOS API (non-blocking — don't await)
-    void this.provisionWireGuardViaApi(router.id).catch((err: unknown) => {
-      this.logger.warn(`[WG] Auto-provisioning failed for ${router.id}: ${String(err)}`);
+    // Generate WG config synchronously — mobile will push it to the router directly
+    const wgProvision = await this.generateWgProvision(router.id);
+    const view = await this.findOne(router.id);
+    return { ...view, wgProvision };
+  }
+
+  /**
+   * Generate WireGuard keys, add VPS peer, save to DB, start polling for tunnel.
+   * Returns config that the mobile app will push to the router via RouterOS REST API.
+   */
+  private async generateWgProvision(routerId: string): Promise<{
+    privateKey: string; wgIp: string; vpsPublicKey: string; vpsEndpoint: string; listenPort: number;
+  }> {
+    const wgIp = await this.assignNextWgIp();
+    const { privateKey, publicKey } = await generateWireGuardKeyPair();
+    const vpsPublicKey = await getVpsPublicKey();
+    const vpsEndpoint =
+      this.configService.get<string>("WG_SERVER_ENDPOINT") ??
+      `${this.configService.get<string>("HOST") ?? "139.84.241.27"}:${WG_LISTEN_PORT}`;
+
+    await addWireGuardPeer(publicKey, wgIp);
+
+    await this.prisma.router.update({
+      where: { id: routerId },
+      data: {
+        metadata: {
+          wg: { wgIp, privateKey, publicKey, vpsPublicKey, endpoint: vpsEndpoint, listenPort: WG_LISTEN_PORT, provisionedAt: new Date().toISOString() },
+        },
+      },
     });
 
-    return this.findOne(router.id);
+    // Poll for tunnel in background (mobile will push config → tunnel should connect)
+    void this.pollForTunnel(routerId, publicKey, wgIp).catch(() => {});
+
+    return { privateKey, wgIp, vpsPublicKey, vpsEndpoint, listenPort: WG_LISTEN_PORT };
+  }
+
+  private async pollForTunnel(routerId: string, publicKey: string, wgIp: string): Promise<void> {
+    for (let i = 0; i < 36; i++) { // 3 minutes
+      await new Promise<void>((r) => setTimeout(r, 5000));
+      if (await isPeerConnected(publicKey)) {
+        await this.prisma.router.update({ where: { id: routerId }, data: { wireguardIp: wgIp } });
+        this.logger.log(`[WG] Tunnel established → ${wgIp}`);
+        void this.routerApiService.checkRouterHealth(routerId).catch(() => {});
+        return;
+      }
+    }
+    this.logger.warn(`[WG] Tunnel not established within 3min for router ${routerId}`);
   }
 
   async update(

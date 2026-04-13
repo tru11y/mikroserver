@@ -102,6 +102,14 @@ export type PlanPayload = {
 
 export type RouterStatus = "ONLINE" | "OFFLINE" | "DEGRADED" | "MAINTENANCE";
 
+export type WgProvision = {
+  privateKey: string;
+  wgIp: string;
+  vpsPublicKey: string;
+  vpsEndpoint: string;
+  listenPort: number;
+};
+
 export type RouterItem = {
   id: string;
   name: string;
@@ -115,6 +123,7 @@ export type RouterItem = {
   status: RouterStatus;
   lastSeenAt?: string;
   createdAt: string;
+  wgProvision?: WgProvision;
 };
 
 export type CreateRouterPayload = {

@@ -575,8 +575,7 @@ export class RoutersService {
         `WebFig proxy not available for WireGuard IP ${router.wireguardIp}`,
       );
     }
-    // Ensure WebFig is reachable before returning URL — fire-and-forget on failure
-    await this.ensureWebfigEnabled(id).catch((err: unknown) => {
+    void this.ensureWebfigEnabled(id).catch((err: unknown) => {
       this.logger.warn(`[WebFig] Pre-check failed for ${id}: ${String(err)}`);
     });
     const vpsIp = this.configService.get<string>(

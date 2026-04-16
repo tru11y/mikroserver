@@ -157,4 +157,16 @@ export const routersApi = {
       { dryRun },
       withRouterHeavyTimeout,
     ),
+  getAccess: (id: string) => apiClient.get(`/routers/${id}/access`),
+  updateAccess: (
+    id: string,
+    data: {
+      winboxPort?: number;
+      webfigPort?: number;
+      sshPort?: number;
+      accessUsername?: string;
+      accessPassword?: string;
+    },
+  ) => apiClient.put(`/routers/${id}/access`, data),
+  testAccess: (id: string) => apiClient.get(`/routers/${id}/access/test`),
 };

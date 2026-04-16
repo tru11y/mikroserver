@@ -119,6 +119,9 @@ const envSchema = z
     CIRCUIT_BREAKER_RESET_MS: z.string().default("30000").transform(Number),
     CIRCUIT_BREAKER_THRESHOLD: z.string().default("50").transform(Number),
 
+    // --- Encryption (router credentials) ---
+    ENCRYPTION_KEY: z.string().min(64),
+
     // --- Security ---
     RATE_LIMIT_TTL_MS: z.string().default("60000").transform(Number),
     RATE_LIMIT_MAX: z.string().default("100").transform(Number),

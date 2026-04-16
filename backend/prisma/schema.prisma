@@ -124,6 +124,11 @@ model Router {
   deletedAt       DateTime?    @map("deleted_at")
   ownerId          String?      @map("owner_id") @db.Uuid
   publicIp         String?      @map("public_ip") @db.VarChar(45)
+  winboxPort       Int          @default(8291) @map("winbox_port")
+  webfigPort       Int          @default(80) @map("webfig_port")
+  sshPort          Int          @default(22) @map("ssh_port")
+  accessUsername   String       @default("admin") @map("access_username") @db.VarChar(100)
+  accessPassword   String?      @map("access_password") @db.VarChar(512)
   auditLogs       AuditLog[]
   sessions        Session[]
   vouchers        Voucher[]

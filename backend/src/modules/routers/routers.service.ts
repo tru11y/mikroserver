@@ -562,8 +562,8 @@ export class RoutersService {
 
   async getWebfigSession(
     id: string,
-    requestingUserId: string,
-    requestingUserRole: string,
+    requestingUserId?: string,
+    requestingUserRole?: string,
   ): Promise<{ proxyUrl: string; port: number }> {
     const router = await this.findOne(id, requestingUserId, requestingUserRole);
     if (!router.wireguardIp) {

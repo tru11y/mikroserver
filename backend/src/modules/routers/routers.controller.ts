@@ -150,6 +150,20 @@ export class RoutersController {
     return this.routersService.bulkAction(dto, user.sub);
   }
 
+  @Public()
+  @Post(":id/webfig-session")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      "Get WebFig proxy URL for remote browser access (TCP stream via VPS port 9000+N)",
+  })
+  webfigSession(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload | undefined,
+  ) {
+    return this.routersService.getWebfigSession(id, user?.sub, user?.role);
+  }
+
   @Get(":id/live-stats")
   @Roles(UserRole.VIEWER)
   @Permissions("routers.live_stats")

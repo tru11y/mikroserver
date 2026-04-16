@@ -45,7 +45,7 @@ import {
   isPeerConnected,
 } from "../provisioning/wireguard.utils";
 import { executeRouterOperationResult } from "./router-routeros.transport";
-import { runCommand } from "./router-api.commands";
+import { runCommand, runParsedCommand } from "./router-api.commands";
 import type { MikroTikModule } from "./router-api.types";
 // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
 const MikroNode = require("mikrotik") as MikroTikModule;
@@ -558,6 +558,140 @@ export class RoutersService {
 
   async getLiveStats(id: string): Promise<RouterLiveStats> {
     return this.routerApiService.getLiveStats(id);
+  }
+
+  async getWebfigSession(
+    id: string,
+    requestingUserId: string,
+    requestingUserRole: string,
+  ): Promise<{ proxyUrl: string; port: number }> {
+    const router = await this.findOne(id, requestingUserId, requestingUserRole);
+    if (!router.wireguardIp) {
+      throw new Error("Router has no WireGuard IP assigned");
+    }
+    const lastOctet = parseInt(router.wireguardIp.split(".")[3], 10);
+    if (isNaN(lastOctet) || lastOctet < 2 || lastOctet > 254) {
+      throw new Error(
+        `WebFig proxy not available for WireGuard IP ${router.wireguardIp}`,
+      );
+    }
+    // Ensure WebFig is reachable before returning URL — fire-and-forget on failure
+    await this.ensureWebfigEnabled(id).catch((err: unknown) => {
+      this.logger.warn(`[WebFig] Pre-check failed for ${id}: ${String(err)}`);
+    });
+    const vpsIp = this.configService.get<string>(
+      "VPS_PUBLIC_IP",
+      "139.84.241.27",
+    );
+    const port = 9000 + lastOctet;
+    return { proxyUrl: `http://${vpsIp}:${port}`, port };
+  }
+
+  /**
+   * Idempotent: enables the www service on port 80 restricted to the WireGuard
+   * subnet and ensures the input-chain firewall accept rule exists.
+   * Retries once on transient failures. Never throws — caller decides how to handle.
+   */
+  private async ensureWebfigEnabled(routerId: string): Promise<void> {
+    const router = await this.prisma.router.findUnique({
+      where: { id: routerId, deletedAt: null },
+      select: {
+        wireguardIp: true,
+        apiPort: true,
+        apiUsername: true,
+        apiPasswordHash: true,
+      },
+    });
+    if (!router?.wireguardIp) return;
+
+    const maxAttempts = 2;
+    let lastErr: unknown;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await executeRouterOperationResult({
+          mikroNode: MikroNode,
+          wireguardIp: router.wireguardIp,
+          apiPort: router.apiPort,
+          username: router.apiUsername,
+          password: router.apiPasswordHash,
+          timeoutMs: 12000,
+          operation: async (conn) => {
+            // Auto-detect WireGuard interface name (prefer wg-mks, fallback to first)
+            const wgIfaces = await runParsedCommand<{ name?: string }>(
+              conn,
+              MikroNode.parseItems,
+              "/interface/wireguard/print",
+            );
+            const wgIface =
+              wgIfaces.find((i) => i.name === "wg-mks")?.name ??
+              wgIfaces[0]?.name ??
+              "wg-mks";
+
+            // Check www service state
+            const services = await runParsedCommand<{
+              name?: string;
+              disabled?: string;
+              port?: string;
+              address?: string;
+            }>(conn, MikroNode.parseItems, "/ip/service/print", [
+              "?name=www",
+            ]);
+            const www = services[0];
+            const needsServiceUpdate =
+              !www ||
+              www.disabled !== "false" ||
+              www.port !== "80" ||
+              www.address !== "10.66.66.0/24";
+
+            if (needsServiceUpdate) {
+              await runCommand(conn, [
+                "/ip/service/set",
+                "=name=www",
+                "=disabled=no",
+                "=port=80",
+                "=address=10.66.66.0/24",
+              ]);
+              this.logger.log(
+                `[WebFig] www service configured on router ${routerId}`,
+              );
+            }
+
+            // Check for existing firewall accept rule
+            const rules = await runParsedCommand<{
+              ".id"?: string;
+              comment?: string;
+            }>(conn, MikroNode.parseItems, "/ip/firewall/filter/print", [
+              "?comment=auto-webfig",
+            ]);
+
+            if (rules.length === 0) {
+              await runCommand(conn, [
+                "/ip/firewall/filter/add",
+                "=chain=input",
+                "=action=accept",
+                "=protocol=tcp",
+                "=dst-port=80",
+                `=in-interface=${wgIface}`,
+                "=comment=auto-webfig",
+                "=place-before=0",
+              ]);
+              this.logger.log(
+                `[WebFig] Firewall rule added on router ${routerId} (iface=${wgIface})`,
+              );
+            }
+          },
+        });
+        return; // success
+      } catch (err) {
+        lastErr = err;
+        if (attempt < maxAttempts) {
+          await new Promise<void>((r) => setTimeout(r, 2000));
+        }
+      }
+    }
+
+    throw lastErr;
   }
 
   async getBandwidthStats(id: string): Promise<RouterBandwidthStats> {

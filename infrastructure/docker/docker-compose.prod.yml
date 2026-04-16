@@ -144,8 +144,8 @@ services:
     # WireGuard management: privileged + pid:host for nsenter into host network namespace
     privileged: true
     pid: host
-    # Port NOT exposed externally — Nginx on the host proxies to the internal network.
-    # Exposing 3000 would bypass Nginx rate limiting and security headers.
+    ports:
+      - "3000:3000"
     volumes:
       - app-logs:/app/logs
     networks:

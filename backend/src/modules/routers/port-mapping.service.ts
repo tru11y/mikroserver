@@ -30,11 +30,11 @@ export class PortMappingService {
   }
 
   private get rangeStart(): number {
-    return this.configService.get<number>("PORT_MAP_RANGE_START") ?? 19000;
+    return Number(this.configService.get<string>("PORT_MAP_RANGE_START") ?? 19000);
   }
 
   private get rangeEnd(): number {
-    return this.configService.get<number>("PORT_MAP_RANGE_END") ?? 19999;
+    return Number(this.configService.get<string>("PORT_MAP_RANGE_END") ?? 19999);
   }
 
   /** Find 3 consecutive unused ports in [rangeStart, rangeEnd] */
@@ -63,7 +63,10 @@ export class PortMappingService {
   }
 
   private async sh(cmd: string): Promise<void> {
-    const { stderr } = await execAsync(cmd);
+    // Run in host network namespace via nsenter (container has pid:host + privileged).
+    // Falls back to direct execution when running outside Docker (e.g. tests).
+    const wrapped = `nsenter -t 1 -n -m -- ${cmd}`;
+    const { stderr } = await execAsync(wrapped).catch(() => execAsync(cmd));
     if (stderr) this.logger.warn(`iptables stderr: ${stderr}`);
   }
 
@@ -272,7 +275,7 @@ export class PortMappingService {
   // ── resolveVpnIp ─────────────────────────────────────────────────────────
 
   async resolveVpnIp(routerId: string): Promise<string> {
-    const r = await this.prisma.router.findUnique({
+    const r = await this.prisma.router.findFirst({
       where: { id: routerId, deletedAt: null },
       select: { wireguardIp: true },
     });
@@ -282,6 +285,35 @@ export class PortMappingService {
         "Le routeur n'a pas d'IP WireGuard — provisionnement requis",
       );
     return r.wireguardIp;
+  }
+
+  // ── restoreAllRules ───────────────────────────────────────────────────────
+
+  /** Re-apply iptables rules for all active port maps (call on server startup after reboot). */
+  async restoreAllRules(): Promise<void> {
+    const activeMaps = await this.prisma.routerPortMap.findMany({
+      where: { rulesActive: true },
+    });
+
+    if (activeMaps.length === 0) {
+      this.logger.log("restoreAllRules: no active port maps to restore");
+      return;
+    }
+
+    this.logger.log(`restoreAllRules: restoring iptables rules for ${activeMaps.length} router(s)`);
+
+    for (const portMap of activeMaps) {
+      try {
+        await this.applyIptablesRules(portMap);
+      } catch (err) {
+        this.logger.error(
+          `restoreAllRules: failed for router ${portMap.routerId}: ${(err as Error).message}`,
+        );
+        // Continue with next — partial restore is better than full failure
+      }
+    }
+
+    this.logger.log("restoreAllRules: done");
   }
 
   // ── getPortMap ────────────────────────────────────────────────────────────

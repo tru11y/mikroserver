@@ -16,9 +16,262 @@ import {
   Pencil,
   X,
   Save,
+  Network,
+  Zap,
+  Download,
+  Smartphone,
+  ExternalLink,
 } from 'lucide-react';
-import { api, unwrap } from '@/lib/api';
+import { api, unwrap, apiError } from '@/lib/api';
 import type { RouterAccessCredentials } from './router-detail.types';
+
+// ─── Port-map types ───────────────────────────────────────────────────────────
+
+interface PortMapInfo {
+  rulesActive: boolean;
+  vpnIp: string;
+  webfig: { url: string; port: number };
+  winbox: { address: string; port: number; deepLink: string };
+  ssh: { command: string; host: string; port: number };
+  credentials: { username: string };
+}
+
+interface PortTestResult {
+  reachable: boolean;
+  latencyMs: number;
+}
+
+function isMobileDevice(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+}
+
+function isHttpNotFound(error: unknown): boolean {
+  return (error as { response?: { status?: number } })?.response?.status === 404;
+}
+
+// ─── Inline copy button (with text label) ─────────────────────────────────────
+
+function CopyText({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = useCallback(() => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, [text]);
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      className="inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-xs font-medium text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200"
+    >
+      {copied ? (
+        <><Check className="h-3.5 w-3.5 text-emerald-400" /><span className="text-emerald-400">Copié !</span></>
+      ) : (
+        <><Copy className="h-3.5 w-3.5" /><span>Copier</span></>
+      )}
+    </button>
+  );
+}
+
+// ─── Port-map status badge ────────────────────────────────────────────────────
+
+function PortTestBadge({ test }: { test?: PortTestResult }) {
+  if (!test) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-zinc-800 px-2.5 py-0.5 text-xs text-zinc-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-zinc-500" />
+        Test…
+      </span>
+    );
+  }
+  return test.reachable ? (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs text-emerald-400 ring-1 ring-emerald-500/20">
+      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+      En ligne · {test.latencyMs}ms
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/10 px-2.5 py-0.5 text-xs text-red-400 ring-1 ring-red-500/20">
+      <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
+      Hors ligne
+    </span>
+  );
+}
+
+// ─── Public port-map card ────────────────────────────────────────────────────
+
+function PublicAccessSection({ routerId }: { routerId: string }) {
+  const queryClient = useQueryClient();
+  const [allocateError, setAllocateError] = useState<string | null>(null);
+  const mobile = isMobileDevice();
+
+  const { data: portMap, isLoading, error } = useQuery({
+    queryKey: ['router-port-map', routerId],
+    queryFn: async () => {
+      const res = await api.routers.portMap(routerId);
+      return unwrap<PortMapInfo>(res);
+    },
+    retry: (failureCount, err) => !isHttpNotFound(err) && failureCount < 1,
+  });
+
+  const { data: testResult } = useQuery({
+    queryKey: ['router-port-map-test', routerId],
+    queryFn: async () => {
+      const res = await api.routers.testPortMap(routerId);
+      return unwrap<PortTestResult>(res);
+    },
+    enabled: Boolean(portMap?.rulesActive),
+    refetchInterval: 30_000,
+    retry: false,
+  });
+
+  const allocateMutation = useMutation({
+    mutationFn: () => api.routers.allocatePortMap(routerId),
+    onMutate: () => setAllocateError(null),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['router-port-map', routerId] }),
+    onError: (err) => setAllocateError(apiError(err, "Échec de l'allocation des ports")),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-2 animate-pulse">
+        <div className="h-4 w-36 rounded bg-zinc-800" />
+        <div className="h-20 rounded bg-zinc-800" />
+      </div>
+    );
+  }
+
+  // Not configured
+  if (!portMap || isHttpNotFound(error)) {
+    return (
+      <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h4 className="flex items-center gap-2 text-sm font-semibold text-zinc-200">
+              <Network className="h-4 w-4 text-zinc-400" />
+              Accès public (ports DNAT)
+            </h4>
+            <p className="mt-1 text-xs text-zinc-500">
+              Alloue des ports publics sur le VPS pour accéder sans VPN via Winbox, WebFig ou SSH.
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-2 shrink-0">
+            {allocateError && (
+              <p className="text-xs text-red-400">{allocateError}</p>
+            )}
+            <button
+              type="button"
+              disabled={allocateMutation.isPending}
+              onClick={() => allocateMutation.mutate()}
+              className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-indigo-500 disabled:opacity-60"
+            >
+              {allocateMutation.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Zap className="h-3.5 w-3.5" />
+              )}
+              Activer l&apos;accès distant
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-indigo-500/20 bg-zinc-900/60 p-4 space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h4 className="flex items-center gap-2 text-sm font-semibold text-zinc-200">
+          <Network className="h-4 w-4 text-indigo-400" />
+          Accès public (ports DNAT)
+        </h4>
+        <span
+          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ${
+            portMap.rulesActive
+              ? 'bg-emerald-500/10 text-emerald-400 ring-emerald-500/20'
+              : 'bg-amber-500/10 text-amber-400 ring-amber-500/20'
+          }`}
+        >
+          <span className={`h-1.5 w-1.5 rounded-full ${portMap.rulesActive ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+          {portMap.rulesActive ? 'Règles actives' : 'Règles inactives'}
+        </span>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        {/* Winbox */}
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <Monitor className="h-3.5 w-3.5 text-blue-400" />
+            <span className="text-xs font-semibold text-zinc-300">Winbox / App</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="rounded bg-zinc-800 px-2 py-1 font-mono text-xs text-zinc-200">{portMap.winbox.address}</span>
+            <CopyText text={portMap.winbox.address} />
+          </div>
+          <p className="text-[10px] text-zinc-500">Collez dans Winbox.exe → Connect</p>
+          {mobile ? (
+            <a
+              href={portMap.winbox.deepLink}
+              className="inline-flex items-center gap-1.5 rounded-md bg-zinc-800 px-2.5 py-1.5 text-xs font-medium text-zinc-200 hover:bg-zinc-700 transition-colors"
+            >
+              <Smartphone className="h-3.5 w-3.5" />
+              MikroTik App
+            </a>
+          ) : (
+            <a
+              href="https://mikrotik.com/download"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-md bg-zinc-800 px-2.5 py-1.5 text-xs font-medium text-zinc-200 hover:bg-zinc-700 transition-colors"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Télécharger Winbox
+            </a>
+          )}
+        </div>
+
+        {/* WebFig */}
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <Globe className="h-3.5 w-3.5 text-violet-400" />
+            <span className="text-xs font-semibold text-zinc-300">WebFig (navigateur)</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="truncate rounded bg-zinc-800 px-2 py-1 font-mono text-xs text-zinc-200">{portMap.webfig.url}</span>
+            <CopyText text={portMap.webfig.url} />
+          </div>
+          <p className="text-[10px] text-zinc-500">Accès direct sans VPN</p>
+          <button
+            type="button"
+            onClick={() => window.open(portMap.webfig.url, '_blank', 'noopener,noreferrer')}
+            className="inline-flex items-center gap-1.5 rounded-md bg-zinc-800 px-2.5 py-1.5 text-xs font-medium text-zinc-200 hover:bg-zinc-700 transition-colors"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            Ouvrir WebFig
+          </button>
+        </div>
+
+        {/* SSH */}
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Terminal className="h-3.5 w-3.5 text-emerald-400" />
+              <span className="text-xs font-semibold text-zinc-300">SSH Terminal</span>
+            </div>
+            <PortTestBadge test={testResult} />
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="truncate rounded bg-zinc-800 px-2 py-1 font-mono text-xs text-zinc-200">{portMap.ssh.command}</span>
+            <CopyText text={portMap.ssh.command} />
+          </div>
+          <p className="text-[10px] text-zinc-500">Port {portMap.ssh.port} · WireGuard</p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Copy button ─────────────────────────────────────────────────────────────
 
@@ -303,6 +556,9 @@ export function RouterAccessCard({ routerId }: { routerId: string }) {
 
   return (
     <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-6 space-y-4">
+      {/* Public port-map section */}
+      <PublicAccessSection routerId={routerId} />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

@@ -119,3 +119,27 @@ export class PortMappingController {
     return this.portMappingService.deletePortMap(id);
   }
 }
+
+/**
+ * Admin-scoped port mapping endpoints.
+ * POST /admin/port-mapping/restore-all
+ */
+@ApiTags("admin-port-mapping")
+@Controller({ path: "admin/port-mapping", version: "1" })
+@ApiBearerAuth()
+export class AdminPortMappingController {
+  constructor(private readonly portMappingService: PortMappingService) {}
+
+  /**
+   * Re-apply iptables rules for all routers where rulesActive = true.
+   * Useful after a VPS reboot if the server auto-start missed some rules.
+   */
+  @Post("restore-all")
+  @Roles(UserRole.ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Re-apply all active iptables DNAT rules (post-reboot recovery)" })
+  async restoreAll() {
+    await this.portMappingService.restoreAllRules();
+    return { success: true };
+  }
+}

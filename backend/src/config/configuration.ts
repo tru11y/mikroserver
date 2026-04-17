@@ -122,6 +122,11 @@ const envSchema = z
     // --- Encryption (router credentials) ---
     ENCRYPTION_KEY: z.string().min(64),
 
+    // --- VPS public IP (used for port-mapping URLs) ---
+    VPS_PUBLIC_IP: z.string().default("127.0.0.1"),
+    PORT_MAP_RANGE_START: z.string().default("19000").transform(Number),
+    PORT_MAP_RANGE_END: z.string().default("19999").transform(Number),
+
     // --- Security ---
     RATE_LIMIT_TTL_MS: z.string().default("60000").transform(Number),
     RATE_LIMIT_MAX: z.string().default("100").transform(Number),

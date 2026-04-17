@@ -142,6 +142,9 @@ services:
       LOG_LEVEL: info
       LOG_PRETTY: "false"
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      VPS_PUBLIC_IP: ${VPS_PUBLIC_IP:-139.84.241.27}
+      PORT_MAP_RANGE_START: ${PORT_MAP_RANGE_START:-19000}
+      PORT_MAP_RANGE_END: ${PORT_MAP_RANGE_END:-19999}
     # WireGuard management: privileged + pid:host for nsenter into host network namespace
     privileged: true
     pid: host

@@ -136,12 +136,28 @@ model Router {
   notifications    Notification[]
   provisioningSessions ProvisioningSession[]
   customerProfiles CustomerProfile[]
+  portMap          RouterPortMap?
 
   @@index([status])
   @@index([wireguardIp])
   @@index([deletedAt])
   @@index([site])
   @@map("routers")
+}
+
+model RouterPortMap {
+  id               String   @id @default(cuid())
+  routerId         String   @unique @map("router_id") @db.Uuid
+  router           Router   @relation(fields: [routerId], references: [id])
+  publicWebfigPort Int      @unique @map("public_webfig_port")
+  publicWinboxPort Int      @unique @map("public_winbox_port")
+  publicSshPort    Int      @unique @map("public_ssh_port")
+  vpnIp            String   @map("vpn_ip") @db.VarChar(45)
+  rulesActive      Boolean  @default(false) @map("rules_active")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("router_port_maps")
 }
 
 model Plan {

@@ -65,9 +65,15 @@ export class PortMappingService {
   private async sh(cmd: string): Promise<void> {
     // Run in host network namespace via nsenter (container has pid:host + privileged).
     // Falls back to direct execution when running outside Docker (e.g. tests).
-    const wrapped = `nsenter -t 1 -n -m -- ${cmd}`;
+    const wrapped = "nsenter -t 1 -n -m -- " + cmd;
     const { stderr } = await execAsync(wrapped).catch(() => execAsync(cmd));
     if (stderr) this.logger.warn(`iptables stderr: ${stderr}`);
+  }
+
+  /** Delete an iptables rule, ignoring "not found" errors (idempotent). */
+  private async shDel(cmd: string): Promise<void> {
+    const wrapped = "nsenter -t 1 -n -m -- " + cmd;
+    await execAsync(wrapped).catch(() => execAsync(cmd)).catch(() => null);
   }
 
   // ── allocatePortsForRouter ────────────────────────────────────────────────
@@ -116,6 +122,14 @@ export class PortMappingService {
     try {
       // Enable IP forwarding
       await this.sh("sysctl -w net.ipv4.ip_forward=1");
+
+      // Remove existing rules first (idempotent — tolerates missing rules)
+      await this.shDel(`iptables -t nat -D PREROUTING -p tcp --dport ${publicWebfigPort} -j DNAT --to-destination ${vpnIp}:80`);
+      await this.shDel(`iptables -t nat -D POSTROUTING -p tcp -d ${vpnIp} --dport 80 -j MASQUERADE`);
+      await this.shDel(`iptables -t nat -D PREROUTING -p tcp --dport ${publicWinboxPort} -j DNAT --to-destination ${vpnIp}:8291`);
+      await this.shDel(`iptables -t nat -D POSTROUTING -p tcp -d ${vpnIp} --dport 8291 -j MASQUERADE`);
+      await this.shDel(`iptables -t nat -D PREROUTING -p tcp --dport ${publicSshPort} -j DNAT --to-destination ${vpnIp}:22`);
+      await this.shDel(`iptables -t nat -D POSTROUTING -p tcp -d ${vpnIp} --dport 22 -j MASQUERADE`);
 
       // WebFig: VPS:publicWebfigPort → vpnIp:80
       await this.sh(

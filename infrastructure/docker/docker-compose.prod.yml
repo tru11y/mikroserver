@@ -141,6 +141,7 @@ services:
       WEBHOOK_RATE_LIMIT_MAX: ${WEBHOOK_RATE_LIMIT_MAX:-200}
       LOG_LEVEL: info
       LOG_PRETTY: "false"
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
     # WireGuard management: privileged + pid:host for nsenter into host network namespace
     privileged: true
     pid: host

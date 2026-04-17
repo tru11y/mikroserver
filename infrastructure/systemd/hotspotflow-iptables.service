@@ -1,0 +1,14 @@
+[Unit]
+Description=HotspotFlow iptables restore
+# Wait for network stack and WireGuard tunnel before restoring DNAT rules
+After=network.target wg-quick@wg0.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/hotspotflow/restore-iptables.sh
+RemainAfterExit=yes
+# Give the API container time to start before the script retries
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

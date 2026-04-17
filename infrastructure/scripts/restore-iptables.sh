@@ -10,6 +10,10 @@
 #   cp infrastructure/systemd/hotspotflow-iptables.service /etc/systemd/system/
 #   systemctl daemon-reload
 #   systemctl enable hotspotflow-iptables.service
+#
+# Credentials file format (/etc/hotspotflow/api-credentials, chmod 600):
+#   EMAIL=admin@mikroserver.local
+#   PASSWORD=YourAdminPassword
 # =============================================================================
 
 set -euo pipefail
@@ -18,13 +22,11 @@ set -euo pipefail
 # Configuration — override via environment or edit here
 # ---------------------------------------------------------------------------
 
-# Local NestJS API (running inside Docker on host port 3001, or adjust as needed)
-API_BASE_URL="${HOTSPOTFLOW_API_URL:-http://localhost:3001/api/v1}"
+# Local NestJS API (running inside Docker on host port 3000)
+API_BASE_URL="${HOTSPOTFLOW_API_URL:-http://localhost:3000/api/v1}"
 
-# Service account JWT token with ADMIN role for the restore endpoint.
-# Generate once with: POST /api/v1/auth/login  →  copy accessToken
-# Store in /etc/hotspotflow/api-token (chmod 600, owned by root)
-TOKEN_FILE="${HOTSPOTFLOW_TOKEN_FILE:-/etc/hotspotflow/api-token}"
+# Service account credentials file (used to get a fresh JWT on each run)
+CREDENTIALS_FILE="${HOTSPOTFLOW_CREDENTIALS_FILE:-/etc/hotspotflow/api-credentials}"
 
 # Retry settings
 MAX_RETRIES=10
@@ -45,7 +47,7 @@ log() {
 wait_for_api() {
   local attempt=1
   while [ "$attempt" -le "$MAX_RETRIES" ]; do
-    if curl -sf --max-time 3 "${API_BASE_URL}/health" > /dev/null 2>&1; then
+    if curl -sf --max-time 3 "${API_BASE_URL}/health/live" > /dev/null 2>&1; then
       return 0
     fi
     log "API not ready yet (attempt ${attempt}/${MAX_RETRIES}), retrying in ${RETRY_DELAY}s…"
@@ -56,19 +58,24 @@ wait_for_api() {
 }
 
 # ---------------------------------------------------------------------------
-# Read token
+# Read credentials and login to get a fresh JWT
 # ---------------------------------------------------------------------------
 
-if [ ! -f "$TOKEN_FILE" ]; then
-  log "ERROR: token file not found: $TOKEN_FILE"
-  log "Create it with: echo 'YOUR_ACCESS_TOKEN' > $TOKEN_FILE && chmod 600 $TOKEN_FILE"
+if [ ! -f "$CREDENTIALS_FILE" ]; then
+  log "ERROR: credentials file not found: $CREDENTIALS_FILE"
+  log "Create it with:"
+  log "  echo 'EMAIL=admin@mikroserver.local' > $CREDENTIALS_FILE"
+  log "  echo 'PASSWORD=YourPassword' >> $CREDENTIALS_FILE"
+  log "  chmod 600 $CREDENTIALS_FILE && chown root:root $CREDENTIALS_FILE"
   exit 1
 fi
 
-TOKEN="$(cat "$TOKEN_FILE" | tr -d '[:space:]')"
+# Source the credentials file
+# shellcheck source=/dev/null
+source "$CREDENTIALS_FILE"
 
-if [ -z "$TOKEN" ]; then
-  log "ERROR: token file is empty: $TOKEN_FILE"
+if [ -z "${EMAIL:-}" ] || [ -z "${PASSWORD:-}" ]; then
+  log "ERROR: credentials file must define EMAIL and PASSWORD variables"
   exit 1
 fi
 
@@ -85,6 +92,36 @@ fi
 log "API is up."
 
 # ---------------------------------------------------------------------------
+# Login to get a fresh JWT token
+# ---------------------------------------------------------------------------
+
+log "Logging in as ${EMAIL}…"
+
+LOGIN_RESPONSE=$(curl -sf \
+  --max-time 10 \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"${EMAIL}\",\"password\":\"${PASSWORD}\"}" \
+  "${API_BASE_URL}/auth/login" 2>&1)
+
+CURL_EXIT=$?
+if [ "$CURL_EXIT" -ne 0 ]; then
+  log "ERROR: login curl failed (exit $CURL_EXIT)"
+  exit 1
+fi
+
+# Extract accessToken using grep + sed (no jq dependency)
+TOKEN=$(echo "$LOGIN_RESPONSE" | grep -o '"accessToken":"[^"]*"' | sed 's/"accessToken":"//;s/"//')
+
+if [ -z "$TOKEN" ]; then
+  log "ERROR: could not extract accessToken from login response"
+  log "Response: ${LOGIN_RESPONSE:0:200}"
+  exit 1
+fi
+
+log "Login successful, token obtained."
+
+# ---------------------------------------------------------------------------
 # Call restore endpoint
 # ---------------------------------------------------------------------------
 
@@ -95,6 +132,7 @@ HTTP_STATUS=$(curl -sf \
   -X POST \
   -H "Authorization: Bearer ${TOKEN}" \
   -H "Content-Type: application/json" \
+  -d '{}' \
   -o /tmp/restore-iptables-response.json \
   -w "%{http_code}" \
   "${API_BASE_URL}/admin/port-mapping/restore-all" 2>&1)

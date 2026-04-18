@@ -26,6 +26,7 @@ import {
   UpdateHotspotUserProfileDto,
   UpdateRouterDto,
 } from "./dto/router.dto";
+import { FinalizeOnboardingDto } from "./dto/finalize-onboarding.dto";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { JwtPayload } from "../auth/interfaces/jwt-payload.interface";
 import { Roles } from "../auth/decorators/roles.decorator";
@@ -79,6 +80,19 @@ export class RoutersController {
   @ApiOperation({ summary: "Add new router" })
   create(@Body() dto: CreateRouterDto, @CurrentUser() user: JwtPayload) {
     return this.routersService.create(dto, user.sub, user.role);
+  }
+
+  @Post("finalize-onboarding")
+  @Roles(UserRole.ADMIN)
+  @Permissions("routers.manage")
+  @TierLimit("routers")
+  @UseGuards(SaasTierGuard)
+  @ApiOperation({ summary: "Finalize zero-touch onboarding from mobile app" })
+  finalizeOnboarding(
+    @Body() dto: FinalizeOnboardingDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.routersService.finalizeOnboarding(user.sub, dto);
   }
 
   @Patch(":id")

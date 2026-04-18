@@ -122,6 +122,11 @@ const envSchema = z
     // --- Encryption (router credentials) ---
     ENCRYPTION_KEY: z.string().min(64),
 
+    // --- WireGuard ---
+    WG_INTERFACE: z.string().default("wg0"),
+    WG_CONFIG_PATH: z.string().default("/etc/wireguard/wg0.conf"),
+    WG_PUBLIC_ENDPOINT: optionalText,
+
     // --- VPS public IP (used for port-mapping URLs) ---
     VPS_PUBLIC_IP: z.string().default("127.0.0.1"),
     PORT_MAP_RANGE_START: z.string().default("19000").transform(Number),

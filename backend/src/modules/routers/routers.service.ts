@@ -18,6 +18,7 @@ import {
   RouterSyncSummary,
 } from "./router-api.service";
 import { AuditService } from "../audit/audit.service";
+import { CredentialsService } from "./credentials.service";
 import {
   BulkRouterActionDto,
   CreateHotspotIpBindingDto,
@@ -30,6 +31,10 @@ import {
   UpdateHotspotUserProfileDto,
   UpdateRouterDto,
 } from "./dto/router.dto";
+import {
+  FinalizeOnboardingDto,
+  RouterOnboardingResponseDto,
+} from "./dto/finalize-onboarding.dto";
 import {
   Router,
   AuditAction,
@@ -78,6 +83,7 @@ export class RoutersService {
     private readonly routerApiService: RouterApiService,
     private readonly auditService: AuditService,
     private readonly configService: ConfigService,
+    private readonly credentialsService: CredentialsService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -234,7 +240,15 @@ export class RoutersService {
     dto: CreateRouterDto,
     adminId: string,
     requestingUserRole?: string,
-  ): Promise<RouterSafeView & { wgProvision: { privateKey: string; wgIp: string; vpsPublicKey: string; vpsEndpoint: string; listenPort: number } }> {
+  ): Promise<RouterSafeView & { wgProvision: { privateKey: string; wgIp: string; vpsPublicKey: string; vpsEndpoint: string; listenPort: number } | null }> {
+    // ── Direct mode: mobile validated credentials locally, no WG tunnel needed ─
+    const isDirectMode = !!dto.address;
+
+    if (isDirectMode) {
+      return this.createDirect(dto, adminId, requestingUserRole);
+    }
+
+    // ── Legacy WireGuard tunnel mode ────────────────────────────────────────────
     // Check for existing router with same name (including deleted ones)
     // Note: wireguardIp from form is the local IP stored in metadata; DB wireguardIp is assigned by WG provisioning
     const existing = await this.prisma.router.findFirst({
@@ -251,13 +265,13 @@ export class RoutersService {
       const restored = await this.prisma.router.update({
         where: { id: existing.id },
         data: {
-          name: dto.name,
+          name: dto.name!,
           description: dto.description,
           location: dto.location,
           wireguardIp: null, // will be set by WG provisioning
           apiPort: dto.apiPort ?? 8728,
-          apiUsername: dto.apiUsername,
-          apiPasswordHash: dto.apiPassword,
+          apiUsername: dto.apiUsername ?? "admin",
+          apiPasswordHash: dto.apiPassword ?? "",
           hotspotProfile: dto.hotspotProfile ?? "default",
           hotspotServer: dto.hotspotServer ?? "hotspot1",
           site: dto.site?.trim() || null,
@@ -290,13 +304,13 @@ export class RoutersService {
 
     const router = await this.prisma.router.create({
       data: {
-        name: dto.name,
+        name: dto.name!,
         description: dto.description,
         location: dto.location,
         wireguardIp: null, // will be set once WireGuard tunnel establishes
         apiPort: dto.apiPort ?? 8728,
-        apiUsername: dto.apiUsername,
-        apiPasswordHash: dto.apiPassword,
+        apiUsername: dto.apiUsername ?? "admin",
+        apiPasswordHash: dto.apiPassword ?? "",
         hotspotProfile: dto.hotspotProfile ?? "default",
         hotspotServer: dto.hotspotServer ?? "hotspot1",
         site: dto.site?.trim() || null,
@@ -318,6 +332,80 @@ export class RoutersService {
     const wgProvision = await this.generateWgProvision(router.id);
     const view = await this.findOne(router.id);
     return { ...view, wgProvision };
+  }
+
+  /**
+   * Direct mode: mobile validated credentials on the LAN, sends router metadata.
+   * Backend persists only — no WireGuard provisioning, no outbound router connection.
+   */
+  private async createDirect(
+    dto: CreateRouterDto,
+    adminId: string,
+    requestingUserRole?: string,
+  ): Promise<RouterSafeView & { wgProvision: null }> {
+    const address = dto.address!;
+    const username = dto.username ?? dto.apiUsername ?? "admin";
+    const password = dto.password ?? dto.apiPassword ?? "";
+    const port     = dto.port ?? 80;
+    const identity = dto.identity ?? "MikroTik";
+    const comment  = dto.comment ?? dto.description;
+
+    // Auto-generate a unique display name
+    const baseName = dto.name?.trim() || `${identity} (${address})`;
+    const name = await this.resolveUniqueName(baseName);
+
+    const resolvedOwnerId =
+      dto.ownerId ?? (requestingUserRole === "ADMIN" ? adminId : undefined);
+
+    const router = await this.prisma.router.create({
+      data: {
+        name,
+        description: comment,
+        location: dto.location,
+        wireguardIp: null,
+        apiPort: 8728,              // binary API port (unused in direct mode, kept for schema)
+        apiUsername: username,
+        apiPasswordHash: password,  // stored plain (same as legacy mode, used for RouterOS API)
+        accessUsername: username,
+        accessPassword: password,
+        webfigPort: port,
+        hotspotProfile: dto.hotspotProfile ?? "default",
+        hotspotServer: dto.hotspotServer ?? "hotspot1",
+        site: dto.site?.trim() || null,
+        tags: this.normalizeTags(dto.tags),
+        metadata: {
+          lanIp: address,
+          lanPort: port,
+          identity,
+          boardName: dto.boardName,
+          rosVersion: dto.rosVersion,
+          directMode: true,
+        },
+        ...(resolvedOwnerId ? { ownerId: resolvedOwnerId } : {}),
+      },
+    });
+
+    await this.auditService.log({
+      userId: adminId,
+      action: AuditAction.CREATE,
+      entityType: "Router",
+      entityId: router.id,
+      description: `Router "${router.name}" added via direct LAN provisioning (${address}:${port})`,
+    });
+
+    const view = await this.findOne(router.id);
+    return { ...view, wgProvision: null };
+  }
+
+  /**
+   * Ensure name is unique in the routers table.
+   * If `baseName` already exists (even soft-deleted), append a short random suffix.
+   */
+  private async resolveUniqueName(baseName: string): Promise<string> {
+    const existing = await this.prisma.router.findFirst({ where: { name: baseName } });
+    if (!existing) return baseName;
+    const suffix = randomBytes(2).toString("hex");
+    return `${baseName.slice(0, 95)} #${suffix}`;
   }
 
   /**
@@ -362,6 +450,100 @@ export class RoutersService {
       }
     }
     this.logger.warn(`[WG] Tunnel not established within 3min for router ${routerId}`);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Zero-touch onboarding finalization
+  // Called by mobile app after it configured the router via LAN.
+  // ---------------------------------------------------------------------------
+
+  async finalizeOnboarding(
+    ownerId: string,
+    dto: FinalizeOnboardingDto,
+  ): Promise<RouterOnboardingResponseDto> {
+    // 1. Verify tunnel belongs to owner and is unassigned
+    const tunnel = await this.prisma.tunnel.findUnique({
+      where: { id: dto.tunnelId },
+      include: { router: true },
+    });
+    if (!tunnel || tunnel.ownerId !== ownerId || tunnel.deletedAt) {
+      throw new NotFoundException("Tunnel introuvable");
+    }
+    if (tunnel.router) {
+      throw new ConflictException("Ce tunnel est déjà associé à un routeur");
+    }
+
+    // 2. Encrypt agent password (AES-256-GCM)
+    const encrypted = this.credentialsService.encrypt(dto.agentPassword);
+
+    // 3. Create Router row
+    const router = await this.prisma.router.create({
+      data: {
+        ownerId,
+        tunnelId: dto.tunnelId,
+        name: dto.name,
+        description: dto.comment,
+        apiUsername: dto.agentUsername,
+        apiPasswordHash: "", // Legacy field — not used for zero-touch routers
+        agentUsername: dto.agentUsername,
+        encryptedAgentPassword: encrypted.ciphertext,
+        credentialsIv: encrypted.iv,
+        credentialsAuthTag: encrypted.authTag,
+        identity: dto.identity,
+        routerOsVersion: dto.routerOsVersion,
+        boardName: dto.boardName,
+        architecture: dto.architecture,
+        hotspotConfigured: dto.hotspotAlreadyConfigured,
+        hotspotInterface: dto.hotspotInterface,
+        wireguardIp: tunnel.tunnelIp,
+        status:
+          tunnel.status === "ACTIVE"
+            ? RouterStatus.ONLINE
+            : RouterStatus.OFFLINE,
+        lastSeenAt: tunnel.lastHandshakeAt,
+      },
+    });
+
+    await this.auditService.log({
+      userId: ownerId,
+      action: AuditAction.ROUTER_CONNECTED,
+      entityType: "Router",
+      entityId: router.id,
+      description: `Router "${router.name}" onboarded via zero-touch (tunnel ${tunnel.tunnelIp})`,
+    });
+
+    return {
+      id: router.id,
+      name: router.name,
+      status: router.status,
+      tunnelIp: tunnel.tunnelIp,
+      identity: dto.identity,
+      routerOsVersion: dto.routerOsVersion,
+      boardName: dto.boardName,
+      hotspotConfigured: dto.hotspotAlreadyConfigured,
+    };
+  }
+
+  /**
+   * Decrypt agent credentials for a router (used by mikrotik-client to connect via tunnel).
+   */
+  getAgentCredentials(router: {
+    encryptedAgentPassword: string | null;
+    credentialsIv: string | null;
+    credentialsAuthTag: string | null;
+  }): string | null {
+    if (
+      !router.encryptedAgentPassword ||
+      !router.credentialsIv ||
+      !router.credentialsAuthTag
+    ) {
+      return null;
+    }
+    return this.credentialsService.decrypt({
+      ciphertext: router.encryptedAgentPassword,
+      iv: router.credentialsIv,
+      authTag: router.credentialsAuthTag,
+    });
   }
 
   async update(

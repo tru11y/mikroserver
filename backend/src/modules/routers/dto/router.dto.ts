@@ -19,11 +19,12 @@ import { Type } from "class-transformer";
 import { RouterStatus } from "@prisma/client";
 
 export class CreateRouterDto {
-  @ApiProperty({ example: "Abidjan-Centre-01" })
+  @ApiPropertyOptional({ example: "Abidjan-Centre-01", description: "Display name — auto-generated from identity+address if omitted (direct mode)" })
+  @IsOptional()
   @IsString()
   @MinLength(2)
   @MaxLength(100)
-  name!: string;
+  name?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -52,12 +53,13 @@ export class CreateRouterDto {
   @MaxLength(30, { each: true })
   tags?: string[];
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: "192.168.88.1",
-    description: "RouterOS API host (IP address)",
+    description: "RouterOS API host for WireGuard tunnel mode",
   })
+  @IsOptional()
   @IsIP("4")
-  wireguardIp!: string;
+  wireguardIp?: string;
 
   @ApiPropertyOptional({ default: 8728 })
   @IsOptional()
@@ -67,19 +69,21 @@ export class CreateRouterDto {
   @Type(() => Number)
   apiPort?: number;
 
-  @ApiProperty({ example: "api-user" })
+  @ApiPropertyOptional({ example: "api-user" })
+  @IsOptional()
   @IsString()
   @MinLength(1)
   @MaxLength(100)
-  apiUsername!: string;
+  apiUsername?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: "RouterOS API password (stored as plain for API use)",
   })
+  @IsOptional()
   @IsString()
   @MinLength(1)
   @MaxLength(255)
-  apiPassword!: string;
+  apiPassword?: string;
 
   @ApiPropertyOptional({ default: "default" })
   @IsOptional()
@@ -97,6 +101,61 @@ export class CreateRouterDto {
   @IsOptional()
   @IsUUID()
   ownerId?: string;
+
+  // ── Direct mode fields (mobile local-network provisioning) ──────────────────
+  // Mobile app validates credentials directly against the router REST API,
+  // then forwards router metadata here. Backend does NOT contact the router.
+
+  @ApiPropertyOptional({ example: "192.168.88.1", description: "LAN IP of the router (direct mode — stored in metadata)" })
+  @IsOptional()
+  @IsIP("4")
+  address?: string;
+
+  @ApiPropertyOptional({ default: 80, description: "REST API port (direct mode)" })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(65535)
+  @Type(() => Number)
+  port?: number;
+
+  @ApiPropertyOptional({ description: "Username for direct LAN access" })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(100)
+  username?: string;
+
+  @ApiPropertyOptional({ description: "Password for direct LAN access (stored encrypted)" })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(255)
+  password?: string;
+
+  @ApiPropertyOptional({ example: "MikroTik", description: "Router identity from /rest/system/identity" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  identity?: string;
+
+  @ApiPropertyOptional({ example: "RB951Ui-2HnD", description: "Board name from /rest/system/resource" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  boardName?: string;
+
+  @ApiPropertyOptional({ example: "7.20.8", description: "RouterOS version from /rest/system/resource" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  rosVersion?: string;
+
+  @ApiPropertyOptional({ description: "User comment / label" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  comment?: string;
 }
 
 export class UpdateRouterDto {

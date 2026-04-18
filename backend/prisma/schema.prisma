@@ -41,6 +41,7 @@ model User {
   subscriptions_subscriptions_user_idTousers                 subscriptions[] @relation("subscriptions_user_idTousers")
   subscriptions_users_current_subscription_idTosubscriptions subscriptions?  @relation("users_current_subscription_idTosubscriptions", fields: [current_subscription_id], references: [id])
   vouchers                                                   Voucher[]       @relation("UserVouchers")
+  tunnelsOwned     Tunnel[]     @relation("TunnelOwner")
   routersOwned     Router[]     @relation("RouterOwner")
   ownedPlans       Plan[]       @relation("PlanOwner")
   notifications    Notification[]
@@ -102,6 +103,33 @@ model PasswordResetToken {
   @@map("password_reset_tokens")
 }
 
+model Tunnel {
+  id              String       @id @default(uuid()) @db.Uuid
+  ownerId         String       @map("owner_id") @db.Uuid
+  owner           User         @relation("TunnelOwner", fields: [ownerId], references: [id])
+
+  tunnelIp        String       @unique @map("tunnel_ip") @db.VarChar(45)
+  clientPublicKey String       @unique @map("client_public_key") @db.VarChar(64)
+  serverPublicKey String       @map("server_public_key") @db.VarChar(64)
+
+  status          TunnelStatus @default(PENDING)
+  lastHandshakeAt DateTime?    @map("last_handshake_at")
+  router          Router?
+
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+  deletedAt       DateTime?    @map("deleted_at")
+
+  @@index([ownerId, status])
+  @@map("tunnels")
+}
+
+enum TunnelStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+}
+
 model Router {
   id              String       @id @default(uuid()) @db.Uuid
   name            String       @unique @db.VarChar(100)
@@ -129,6 +157,22 @@ model Router {
   sshPort          Int          @default(22) @map("ssh_port")
   accessUsername   String       @default("admin") @map("access_username") @db.VarChar(100)
   accessPassword   String?      @map("access_password") @db.VarChar(512)
+
+  // ── Zero-touch onboarding fields ──────────────────────────────────────────
+  tunnelId                String?      @unique @map("tunnel_id") @db.Uuid
+  tunnel                  Tunnel?      @relation(fields: [tunnelId], references: [id])
+  agentUsername            String       @default("hsfl-agent") @map("agent_username") @db.VarChar(64)
+  encryptedAgentPassword  String?      @map("encrypted_agent_password")
+  credentialsIv           String?      @map("credentials_iv") @db.VarChar(32)
+  credentialsAuthTag      String?      @map("credentials_auth_tag") @db.VarChar(64)
+  identity                String?      @db.VarChar(128)
+  routerOsVersion         String?      @map("router_os_version") @db.VarChar(32)
+  boardName               String?      @map("board_name") @db.VarChar(64)
+  architecture            String?      @db.VarChar(32)
+  hotspotConfigured       Boolean      @default(false) @map("hotspot_configured")
+  hotspotInterface        String?      @map("hotspot_interface") @db.VarChar(64)
+  hotspotNetwork          String?      @map("hotspot_network") @db.VarChar(32)
+
   auditLogs       AuditLog[]
   sessions        Session[]
   vouchers        Voucher[]
@@ -142,6 +186,7 @@ model Router {
   @@index([wireguardIp])
   @@index([deletedAt])
   @@index([site])
+  @@index([lastSeenAt])
   @@map("routers")
 }
 

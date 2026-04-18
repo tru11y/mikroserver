@@ -634,6 +634,37 @@ export const api = {
       return unwrapApi(response);
     },
 
+    async finalizeOnboarding(payload: {
+      tunnelId: string;
+      name: string;
+      comment?: string;
+      agentUsername: string;
+      agentPassword: string;
+      identity?: string;
+      routerOsVersion?: string;
+      boardName?: string;
+      architecture?: string;
+      hotspotAlreadyConfigured: boolean;
+      hotspotInterface?: string;
+    }): Promise<{
+      id: string;
+      name: string;
+      status: string;
+      tunnelIp: string;
+      hotspotConfigured: boolean;
+    }> {
+      const response = await apiClient.post<
+        ApiEnvelope<{
+          id: string;
+          name: string;
+          status: string;
+          tunnelIp: string;
+          hotspotConfigured: boolean;
+        }>
+      >("/routers/finalize-onboarding", payload);
+      return unwrapApi(response);
+    },
+
     async bootstrap(id: string): Promise<{
       routerId: string; routerName: string; wgIp: string | null;
       privateKey: string | null; publicKey: string | null;
@@ -670,6 +701,31 @@ export const api = {
         `/routers/${id}/wireguard-config`,
       );
       return unwrapApi(response);
+    },
+  },
+
+  tunnels: {
+    async allocate(): Promise<{
+      tunnelId: string;
+      tunnelIp: string;
+      clientPrivateKey: string;
+      serverPublicKey: string;
+      serverEndpoint: string;
+    }> {
+      const response = await apiClient.post<
+        ApiEnvelope<{
+          tunnelId: string;
+          tunnelIp: string;
+          clientPrivateKey: string;
+          serverPublicKey: string;
+          serverEndpoint: string;
+        }>
+      >("/tunnels/allocate");
+      return unwrapApi(response);
+    },
+
+    async remove(tunnelId: string): Promise<void> {
+      await apiClient.delete(`/tunnels/${tunnelId}`);
     },
   },
 

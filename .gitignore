@@ -6,3 +6,19 @@ frontend/playwright-report/
 frontend/test-results/
 backend/.env
 *.log
+# Next.js
+.next
+out
+
+# Node
+node_modules
+
+# Env
+.env
+.env.local
+
+# Logs
+*.log
+
+# OS
+.DS_Store

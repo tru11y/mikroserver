@@ -61,9 +61,7 @@ export class MikroTikClientFactory {
     };
     const binary = new BinaryClient(plaintextParams);
     await binary.systemResource(); // probe — will throw if unreachable
-    this.logger.debug(
-      `Binary client (plaintext) connected to ${params.host}`,
-    );
+    this.logger.debug(`Binary client (plaintext) connected to ${params.host}`);
     return binary;
   }
 }

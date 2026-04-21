@@ -72,14 +72,11 @@ export class HotspotSetupTransaction {
 
       // Step 5: DHCP network
       await this.step("create DHCP network", async () => {
-        const { ".id": id } = await this.client.add(
-          "/ip/dhcp-server/network",
-          {
-            address: this.config.network,
-            gateway: this.config.gateway,
-            "dns-server": "8.8.8.8,1.1.1.1",
-          },
-        );
+        const { ".id": id } = await this.client.add("/ip/dhcp-server/network", {
+          address: this.config.network,
+          gateway: this.config.gateway,
+          "dns-server": "8.8.8.8,1.1.1.1",
+        });
         this.pushUndo(`remove DHCP network ${id}`, () =>
           this.client.remove("/ip/dhcp-server/network", id),
         );
@@ -87,16 +84,13 @@ export class HotspotSetupTransaction {
 
       // Step 6: Hotspot profile
       await this.step("create hotspot profile", async () => {
-        const { ".id": id } = await this.client.add(
-          "/ip/hotspot/profile",
-          {
-            name: "hsfl-profile",
-            "hotspot-address": this.config.gateway,
-            "dns-name": this.config.dnsName ?? "",
-            "html-directory": "hotspot",
-            "login-by": "http-chap,http-pap,mac-cookie",
-          },
-        );
+        const { ".id": id } = await this.client.add("/ip/hotspot/profile", {
+          name: "hsfl-profile",
+          "hotspot-address": this.config.gateway,
+          "dns-name": this.config.dnsName ?? "",
+          "html-directory": "hotspot",
+          "login-by": "http-chap,http-pap,mac-cookie",
+        });
         this.pushUndo(`remove profile ${id}`, () =>
           this.client.remove("/ip/hotspot/profile", id),
         );
@@ -169,10 +163,7 @@ export class HotspotSetupTransaction {
     await action();
   }
 
-  private pushUndo(
-    description: string,
-    undo: () => Promise<void>,
-  ): void {
+  private pushUndo(description: string, undo: () => Promise<void>): void {
     this.undoStack.push({ description, undo });
   }
 

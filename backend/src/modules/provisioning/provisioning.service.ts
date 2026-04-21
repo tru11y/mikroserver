@@ -884,7 +884,10 @@ add name="ms-wg-watchdog" interval=5m start-time=startup comment="MikroServer Wi
       );
     }
 
-    const vpsIp = this.configService.get<string>("VPS_PUBLIC_IP", "139.84.241.27");
+    const vpsIp = this.configService.get<string>(
+      "VPS_PUBLIC_IP",
+      "139.84.241.27",
+    );
     const command = `/tool fetch url="http://${vpsIp}:3000/api/v1/provisioning/bootstrap/${session.bootstrapToken}" output=file dst-path=bs.rsc; /import bs.rsc`;
 
     const dataUrl = await QRCode.toDataURL(command, {

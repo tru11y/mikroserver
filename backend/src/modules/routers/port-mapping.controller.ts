@@ -42,7 +42,9 @@ export class PortMappingController {
   @Post(":id/port-map")
   @Roles(UserRole.ADMIN)
   @Permissions("routers.manage")
-  @ApiOperation({ summary: "Allocate public ports + apply iptables DNAT for router" })
+  @ApiOperation({
+    summary: "Allocate public ports + apply iptables DNAT for router",
+  })
   async allocate(
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: AllocatePortsDto,
@@ -101,7 +103,9 @@ export class PortMappingController {
   @Get(":id/port-map/test")
   @Roles(UserRole.VIEWER)
   @Permissions("routers.view")
-  @ApiOperation({ summary: "TCP reachability test via WireGuard (SSH port 22)" })
+  @ApiOperation({
+    summary: "TCP reachability test via WireGuard (SSH port 22)",
+  })
   testConnection(@Param("id", ParseUUIDPipe) id: string) {
     return this.portMappingService.testConnection(id);
   }
@@ -137,7 +141,9 @@ export class AdminPortMappingController {
   @Post("restore-all")
   @Roles(UserRole.ADMIN)
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Re-apply all active iptables DNAT rules (post-reboot recovery)" })
+  @ApiOperation({
+    summary: "Re-apply all active iptables DNAT rules (post-reboot recovery)",
+  })
   async restoreAll() {
     await this.portMappingService.restoreAllRules();
     return { success: true };

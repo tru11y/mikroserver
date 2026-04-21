@@ -108,23 +108,16 @@ export class RestClient implements IMikroTikClient {
     if (axiosErr.response?.status === 401) {
       return new AuthFailedException();
     }
-    if (
-      axiosErr.response?.status === 404 &&
-      path === "/system/resource"
-    ) {
+    if (axiosErr.response?.status === 404 && path === "/system/resource") {
       return new RestNotSupportedException();
     }
-    if (
-      axiosErr.code === "ECONNABORTED" ||
-      axiosErr.code === "ETIMEDOUT"
-    ) {
+    if (axiosErr.code === "ECONNABORTED" || axiosErr.code === "ETIMEDOUT") {
       return new UnreachableException("Routeur injoignable (timeout)");
     }
-    if (
-      axiosErr.code === "ECONNREFUSED" ||
-      axiosErr.code === "ENETUNREACH"
-    ) {
-      return new UnreachableException("Routeur injoignable (connexion refusée)");
+    if (axiosErr.code === "ECONNREFUSED" || axiosErr.code === "ENETUNREACH") {
+      return new UnreachableException(
+        "Routeur injoignable (connexion refusée)",
+      );
     }
     if (axiosErr.response) {
       return new ApiException(

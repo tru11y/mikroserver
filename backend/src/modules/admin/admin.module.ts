@@ -6,8 +6,8 @@ import { AuthModule } from "../auth/auth.module";
 
 @Module({
   imports: [
-    SaasModule,   // SaasService (subscribe/cancel/getOperatorSubscription)
-    AuthModule,   // AuthPasswordService (hashPassword)
+    SaasModule, // SaasService (subscribe/cancel/getOperatorSubscription)
+    AuthModule, // AuthPasswordService (hashPassword)
   ],
   providers: [AdminService],
   controllers: [AdminController],

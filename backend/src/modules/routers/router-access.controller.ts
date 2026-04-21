@@ -37,7 +37,11 @@ export class RouterAccessController {
     @Param("id", ParseUUIDPipe) id: string,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.routerAccessService.getAccessCredentials(id, user.sub, user.role);
+    return this.routerAccessService.getAccessCredentials(
+      id,
+      user.sub,
+      user.role,
+    );
   }
 
   @Put(":id/access")
@@ -50,7 +54,12 @@ export class RouterAccessController {
     @Body() dto: UpdateAccessDto,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.routerAccessService.updateAccessCredentials(id, dto, user.sub, user.role);
+    return this.routerAccessService.updateAccessCredentials(
+      id,
+      dto,
+      user.sub,
+      user.role,
+    );
   }
 
   @Get(":id/access/test")
@@ -77,7 +86,9 @@ export class RouterAccessController {
   @All(":id/webfig/*")
   @Roles(UserRole.ADMIN)
   @Permissions("routers.manage")
-  @ApiOperation({ summary: "Proxy HTTP requests to the router WebFig interface" })
+  @ApiOperation({
+    summary: "Proxy HTTP requests to the router WebFig interface",
+  })
   async proxyWebfig(
     @Param("id", ParseUUIDPipe) id: string,
     @Req() req: FastifyRequest,
@@ -89,7 +100,8 @@ export class RouterAccessController {
     // Extract the sub-path after /webfig
     const rawUrl: string = (req.raw as { url?: string }).url ?? req.url ?? "/";
     const webfigIdx = rawUrl.indexOf("/webfig");
-    const subPath = webfigIdx >= 0 ? rawUrl.slice(webfigIdx + "/webfig".length) || "/" : "/";
+    const subPath =
+      webfigIdx >= 0 ? rawUrl.slice(webfigIdx + "/webfig".length) || "/" : "/";
 
     const options: http.RequestOptions = {
       hostname: wireguardIp,
@@ -112,7 +124,8 @@ export class RouterAccessController {
 
         // copy response headers (skip hop-by-hop)
         for (const [key, val] of Object.entries(headers)) {
-          if (["connection", "transfer-encoding", "keep-alive"].includes(key)) continue;
+          if (["connection", "transfer-encoding", "keep-alive"].includes(key))
+            continue;
           if (val !== undefined) reply.header(key, val as string);
         }
 

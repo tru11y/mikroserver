@@ -29,6 +29,12 @@ const envSchema = z
     API_PREFIX: z.string().default("api/v1"),
     APP_NAME: z.string().default("MikroServer"),
     CORS_ORIGINS: z.string().default("http://localhost:3001"),
+    SWAGGER_ENABLED: z
+      .string()
+      .optional()
+      .transform((v) => (v === undefined ? undefined : v === "true")),
+    SWAGGER_PATH: z.string().default("docs"),
+    SWAGGER_JSON_PATH: z.string().default("docs-json"),
 
     // --- Database ---
     DATABASE_URL: z.string().url(),
@@ -156,11 +162,26 @@ const envSchema = z
       .default("true")
       .transform((v) => v === "true"),
     SNAPSHOT_CRON: z.string().default("0 0 * * *"), // Daily at midnight
+    OTEL_ENABLED: z
+      .string()
+      .default("false")
+      .transform((v) => v === "true"),
+    OTEL_SERVICE_NAME: z.string().default("mikroserver-api"),
+    OTEL_EXPORTER_OTLP_ENDPOINT: optionalUrl,
+    OTEL_SAMPLE_RATIO: z.string().default("1").transform(Number),
 
     // --- Transaction ---
     TRANSACTION_EXPIRY_MINUTES: z.string().default("30").transform(Number),
   })
   .superRefine((cfg, ctx) => {
+    if (cfg.OTEL_SAMPLE_RATIO < 0 || cfg.OTEL_SAMPLE_RATIO > 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["OTEL_SAMPLE_RATIO"],
+        message: "OTEL_SAMPLE_RATIO must be between 0 and 1",
+      });
+    }
+
     const waveEnabled = Boolean(
       cfg.WAVE_API_KEY ||
       cfg.WAVE_WEBHOOK_SECRET ||

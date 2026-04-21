@@ -202,6 +202,7 @@ model RouterPortMap {
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
 
+  @@index([publicWebfigPort, publicWinboxPort, publicSshPort])
   @@map("router_port_maps")
 }
 
@@ -333,6 +334,7 @@ model Session {
 
   @@index([status])
   @@index([routerId])
+  @@index([mikrotikId])
   @@index([macAddress])
   @@index([startedAt])
   @@index([createdAt])
@@ -466,6 +468,7 @@ model subscriptions {
   @@index([plan_id])
   @@index([status])
   @@index([user_id])
+  @@index([user_id, status])
   @@index([voucher_id])
 }
 
@@ -929,6 +932,7 @@ model SpeedBoost {
 
   @@index([status])
   @@index([sessionId])
+  @@index([routerId])
   @@index([expiresAt])
   @@map("speed_boosts")
 }
@@ -948,6 +952,7 @@ model CommissionPayout {
 
   @@index([resellerId])
   @@index([status])
+  @@index([resellerId, status])
   @@map("commission_payouts")
 }
 

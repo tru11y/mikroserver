@@ -7,7 +7,9 @@ export class AllocateTunnelResponseDto {
   @ApiProperty({ example: "10.66.66.2" })
   tunnelIp!: string;
 
-  @ApiProperty({ description: "Router private key — returned ONCE, never stored" })
+  @ApiProperty({
+    description: "Router private key — returned ONCE, never stored",
+  })
   clientPrivateKey!: string;
 
   @ApiProperty()

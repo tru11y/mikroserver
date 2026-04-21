@@ -34,10 +34,7 @@ export class BinaryClient implements IMikroTikClient {
       });
       const [login] = await this.device.connect();
       this.connection = login;
-      await this.connection.login(
-        this.params.username,
-        this.params.password,
-      );
+      await this.connection.login(this.params.username, this.params.password);
     } catch (err) {
       this.connection = null;
       this.device = null;
@@ -56,10 +53,7 @@ export class BinaryClient implements IMikroTikClient {
     }
   }
 
-  private async exec<T>(
-    command: string,
-    args?: string[],
-  ): Promise<T[]> {
+  private async exec<T>(command: string, args?: string[]): Promise<T[]> {
     await this.ensureConnection();
     try {
       const chan = this.connection.openChannel();
@@ -74,16 +68,12 @@ export class BinaryClient implements IMikroTikClient {
   }
 
   async systemResource(): Promise<SystemResource> {
-    const items = await this.exec<SystemResource>(
-      "/system/resource/print",
-    );
+    const items = await this.exec<SystemResource>("/system/resource/print");
     return items[0];
   }
 
   async systemIdentity(): Promise<SystemIdentity> {
-    const items = await this.exec<SystemIdentity>(
-      "/system/identity/print",
-    );
+    const items = await this.exec<SystemIdentity>("/system/identity/print");
     return items[0];
   }
 
@@ -101,13 +91,8 @@ export class BinaryClient implements IMikroTikClient {
     path: string,
     data: Record<string, unknown>,
   ): Promise<{ ".id": string }> {
-    const args = Object.entries(data).map(
-      ([k, v]) => `=${k}=${String(v)}`,
-    );
-    const items = await this.exec<{ ret: string }>(
-      `${path}/add`,
-      args,
-    );
+    const args = Object.entries(data).map(([k, v]) => `=${k}=${String(v)}`);
+    const items = await this.exec<{ ret: string }>(`${path}/add`, args);
     return { ".id": items[0]?.ret ?? "" };
   }
 

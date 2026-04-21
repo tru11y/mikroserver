@@ -36,7 +36,10 @@ export class PlansController {
     includeArchived: boolean,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.plansService.findAll(includeArchived, { sub: user.sub, role: user.role });
+    return this.plansService.findAll(includeArchived, {
+      sub: user.sub,
+      role: user.role,
+    });
   }
 
   @Public()
@@ -71,7 +74,10 @@ export class PlansController {
     @Body() dto: UpdatePlanDto,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.plansService.update(id, dto, { sub: user.sub, role: user.role });
+    return this.plansService.update(id, dto, {
+      sub: user.sub,
+      role: user.role,
+    });
   }
 
   @Delete(":id")

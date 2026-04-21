@@ -30,17 +30,25 @@ export class PortMappingService {
   }
 
   private get rangeStart(): number {
-    return Number(this.configService.get<string>("PORT_MAP_RANGE_START") ?? 19000);
+    return Number(
+      this.configService.get<string>("PORT_MAP_RANGE_START") ?? 19000,
+    );
   }
 
   private get rangeEnd(): number {
-    return Number(this.configService.get<string>("PORT_MAP_RANGE_END") ?? 19999);
+    return Number(
+      this.configService.get<string>("PORT_MAP_RANGE_END") ?? 19999,
+    );
   }
 
   /** Find 3 consecutive unused ports in [rangeStart, rangeEnd] */
   private async allocateThreePorts(): Promise<[number, number, number]> {
     const used = await this.prisma.routerPortMap.findMany({
-      select: { publicWebfigPort: true, publicWinboxPort: true, publicSshPort: true },
+      select: {
+        publicWebfigPort: true,
+        publicWinboxPort: true,
+        publicSshPort: true,
+      },
     });
     const usedSet = new Set<number>();
     for (const pm of used) {
@@ -73,7 +81,9 @@ export class PortMappingService {
   /** Delete an iptables rule, ignoring "not found" errors (idempotent). */
   private async shDel(cmd: string): Promise<void> {
     const wrapped = "nsenter -t 1 -n -m -- " + cmd;
-    await execAsync(wrapped).catch(() => execAsync(cmd)).catch(() => null);
+    await execAsync(wrapped)
+      .catch(() => execAsync(cmd))
+      .catch(() => null);
   }
 
   // ── allocatePortsForRouter ────────────────────────────────────────────────
@@ -117,19 +127,32 @@ export class PortMappingService {
   // ── applyIptablesRules ────────────────────────────────────────────────────
 
   async applyIptablesRules(portMap: RouterPortMap): Promise<void> {
-    const { vpnIp, publicWebfigPort, publicWinboxPort, publicSshPort } = portMap;
+    const { vpnIp, publicWebfigPort, publicWinboxPort, publicSshPort } =
+      portMap;
 
     try {
       // Enable IP forwarding
       await this.sh("sysctl -w net.ipv4.ip_forward=1");
 
       // Remove existing rules first (idempotent — tolerates missing rules)
-      await this.shDel(`iptables -t nat -D PREROUTING -p tcp --dport ${publicWebfigPort} -j DNAT --to-destination ${vpnIp}:80`);
-      await this.shDel(`iptables -t nat -D POSTROUTING -p tcp -d ${vpnIp} --dport 80 -j MASQUERADE`);
-      await this.shDel(`iptables -t nat -D PREROUTING -p tcp --dport ${publicWinboxPort} -j DNAT --to-destination ${vpnIp}:8291`);
-      await this.shDel(`iptables -t nat -D POSTROUTING -p tcp -d ${vpnIp} --dport 8291 -j MASQUERADE`);
-      await this.shDel(`iptables -t nat -D PREROUTING -p tcp --dport ${publicSshPort} -j DNAT --to-destination ${vpnIp}:22`);
-      await this.shDel(`iptables -t nat -D POSTROUTING -p tcp -d ${vpnIp} --dport 22 -j MASQUERADE`);
+      await this.shDel(
+        `iptables -t nat -D PREROUTING -p tcp --dport ${publicWebfigPort} -j DNAT --to-destination ${vpnIp}:80`,
+      );
+      await this.shDel(
+        `iptables -t nat -D POSTROUTING -p tcp -d ${vpnIp} --dport 80 -j MASQUERADE`,
+      );
+      await this.shDel(
+        `iptables -t nat -D PREROUTING -p tcp --dport ${publicWinboxPort} -j DNAT --to-destination ${vpnIp}:8291`,
+      );
+      await this.shDel(
+        `iptables -t nat -D POSTROUTING -p tcp -d ${vpnIp} --dport 8291 -j MASQUERADE`,
+      );
+      await this.shDel(
+        `iptables -t nat -D PREROUTING -p tcp --dport ${publicSshPort} -j DNAT --to-destination ${vpnIp}:22`,
+      );
+      await this.shDel(
+        `iptables -t nat -D POSTROUTING -p tcp -d ${vpnIp} --dport 22 -j MASQUERADE`,
+      );
 
       // WebFig: VPS:publicWebfigPort → vpnIp:80
       await this.sh(
@@ -164,10 +187,12 @@ export class PortMappingService {
         `iptables rules applied for ${vpnIp} (webfig:${publicWebfigPort} winbox:${publicWinboxPort} ssh:${publicSshPort})`,
       );
     } catch (err) {
-      await this.prisma.routerPortMap.update({
-        where: { id: portMap.id },
-        data: { rulesActive: false },
-      }).catch(() => null);
+      await this.prisma.routerPortMap
+        .update({
+          where: { id: portMap.id },
+          data: { rulesActive: false },
+        })
+        .catch(() => null);
       throw new InternalServerErrorException(
         `Échec application règles iptables: ${(err as Error).message}`,
       );
@@ -177,7 +202,8 @@ export class PortMappingService {
   // ── removeIptablesRules ───────────────────────────────────────────────────
 
   async removeIptablesRules(portMap: RouterPortMap): Promise<void> {
-    const { vpnIp, publicWebfigPort, publicWinboxPort, publicSshPort } = portMap;
+    const { vpnIp, publicWebfigPort, publicWinboxPort, publicSshPort } =
+      portMap;
 
     const cmds = [
       `iptables -t nat -D PREROUTING -p tcp --dport ${publicWebfigPort} -j DNAT --to-destination ${vpnIp}:80`,
@@ -212,7 +238,11 @@ export class PortMappingService {
       where: { routerId },
       include: {
         router: {
-          select: { accessUsername: true, accessPassword: true, wireguardIp: true },
+          select: {
+            accessUsername: true,
+            accessPassword: true,
+            wireguardIp: true,
+          },
         },
       },
     });
@@ -224,7 +254,8 @@ export class PortMappingService {
     }
 
     const vps = this.vpsPublicIp;
-    const { publicWebfigPort, publicWinboxPort, publicSshPort, rulesActive } = portMap;
+    const { publicWebfigPort, publicWinboxPort, publicSshPort, rulesActive } =
+      portMap;
     const username = portMap.router.accessUsername;
 
     return {
@@ -256,7 +287,9 @@ export class PortMappingService {
 
   // ── testConnection ────────────────────────────────────────────────────────
 
-  async testConnection(routerId: string): Promise<{ reachable: boolean; latencyMs: number }> {
+  async testConnection(
+    routerId: string,
+  ): Promise<{ reachable: boolean; latencyMs: number }> {
     const portMap = await this.prisma.routerPortMap.findUnique({
       where: { routerId },
     });
@@ -314,7 +347,9 @@ export class PortMappingService {
       return;
     }
 
-    this.logger.log(`restoreAllRules: restoring iptables rules for ${activeMaps.length} router(s)`);
+    this.logger.log(
+      `restoreAllRules: restoring iptables rules for ${activeMaps.length} router(s)`,
+    );
 
     for (const portMap of activeMaps) {
       try {

@@ -1,0 +1,23 @@
+build:
+  maxIssues: 0
+
+complexity:
+  LongMethod:
+    threshold: 40
+  ComplexMethod:
+    threshold: 15
+  TooManyFunctions:
+    thresholdInFiles: 20
+    thresholdInClasses: 15
+
+style:
+  ForbiddenComment:
+    active: false
+  MaxLineLength:
+    maxLineLength: 140
+  WildcardImport:
+    active: false
+
+exceptions:
+  TooGenericExceptionCaught:
+    active: false

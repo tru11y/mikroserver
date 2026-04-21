@@ -19,7 +19,11 @@ import { Type } from "class-transformer";
 import { RouterStatus } from "@prisma/client";
 
 export class CreateRouterDto {
-  @ApiPropertyOptional({ example: "Abidjan-Centre-01", description: "Display name — auto-generated from identity+address if omitted (direct mode)" })
+  @ApiPropertyOptional({
+    example: "Abidjan-Centre-01",
+    description:
+      "Display name — auto-generated from identity+address if omitted (direct mode)",
+  })
   @IsOptional()
   @IsString()
   @MinLength(2)
@@ -106,12 +110,18 @@ export class CreateRouterDto {
   // Mobile app validates credentials directly against the router REST API,
   // then forwards router metadata here. Backend does NOT contact the router.
 
-  @ApiPropertyOptional({ example: "192.168.88.1", description: "LAN IP of the router (direct mode — stored in metadata)" })
+  @ApiPropertyOptional({
+    example: "192.168.88.1",
+    description: "LAN IP of the router (direct mode — stored in metadata)",
+  })
   @IsOptional()
   @IsIP("4")
   address?: string;
 
-  @ApiPropertyOptional({ default: 80, description: "REST API port (direct mode)" })
+  @ApiPropertyOptional({
+    default: 80,
+    description: "REST API port (direct mode)",
+  })
   @IsOptional()
   @IsInt()
   @Min(1)
@@ -126,26 +136,37 @@ export class CreateRouterDto {
   @MaxLength(100)
   username?: string;
 
-  @ApiPropertyOptional({ description: "Password for direct LAN access (stored encrypted)" })
+  @ApiPropertyOptional({
+    description: "Password for direct LAN access (stored encrypted)",
+  })
   @IsOptional()
   @IsString()
   @MinLength(1)
   @MaxLength(255)
   password?: string;
 
-  @ApiPropertyOptional({ example: "MikroTik", description: "Router identity from /rest/system/identity" })
+  @ApiPropertyOptional({
+    example: "MikroTik",
+    description: "Router identity from /rest/system/identity",
+  })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   identity?: string;
 
-  @ApiPropertyOptional({ example: "RB951Ui-2HnD", description: "Board name from /rest/system/resource" })
+  @ApiPropertyOptional({
+    example: "RB951Ui-2HnD",
+    description: "Board name from /rest/system/resource",
+  })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   boardName?: string;
 
-  @ApiPropertyOptional({ example: "7.20.8", description: "RouterOS version from /rest/system/resource" })
+  @ApiPropertyOptional({
+    example: "7.20.8",
+    description: "RouterOS version from /rest/system/resource",
+  })
   @IsOptional()
   @IsString()
   @MaxLength(50)
@@ -507,4 +528,20 @@ export class ListRoutersQueryDto {
   @IsString()
   @MaxLength(100)
   search?: string;
+}
+
+export class DisconnectActiveByUsernameDto {
+  @ApiProperty({ example: "ticket-ABC123" })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(100)
+  username!: string;
+}
+
+export class MigrateRoutersDto {
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  dryRun?: boolean = false;
 }

@@ -19,8 +19,10 @@ import {
   CreateHotspotIpBindingDto,
   CreateHotspotUserProfileDto,
   CreateRouterDto,
+  DisconnectActiveByUsernameDto,
   ListHotspotUsersQueryDto,
   ListRoutersQueryDto,
+  MigrateRoutersDto,
   UpdateHotspotIpBindingDto,
   UpdateHotspotUserProfileConfigDto,
   UpdateHotspotUserProfileDto,
@@ -123,7 +125,8 @@ export class RoutersController {
   @Roles(UserRole.ADMIN)
   @Permissions("routers.manage")
   @ApiOperation({
-    summary: "Get WireGuard bootstrap config for a router (provisions on first call)",
+    summary:
+      "Get WireGuard bootstrap config for a router (provisions on first call)",
   })
   getBootstrap(
     @Param("id", ParseUUIDPipe) id: string,
@@ -396,7 +399,7 @@ export class RoutersController {
   })
   disconnectActiveByUsername(
     @Param("id", ParseUUIDPipe) id: string,
-    @Body() body: { username: string },
+    @Body() body: DisconnectActiveByUsernameDto,
     @CurrentUser() user: JwtPayload,
   ) {
     return this.routersService.disconnectActiveClientByUsername(
@@ -430,7 +433,7 @@ export class RoutersController {
   migrateToRouter(
     @Param("id", ParseUUIDPipe) id: string,
     @Param("targetId", ParseUUIDPipe) targetId: string,
-    @Body() body: { dryRun?: boolean },
+    @Body() body: MigrateRoutersDto,
     @CurrentUser() user: JwtPayload,
   ) {
     return this.routersService.migrateActiveVouchers(

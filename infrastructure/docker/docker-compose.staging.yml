@@ -1,0 +1,26 @@
+# Usage:
+# docker compose -f infrastructure/docker/docker-compose.prod.yml -f infrastructure/docker/docker-compose.staging.yml up -d --build
+
+services:
+  api:
+    environment:
+      NODE_ENV: staging
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://staging-dashboard.mikroserver.ci}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}
+      OTEL_ENABLED: ${OTEL_ENABLED:-true}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-mikroserver-api-staging}
+    ports:
+      - "3100:3000"
+
+  dashboard:
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/proxy}
+    ports:
+      - "3101:3001"
+
+  nginx:
+    ports:
+      - "8080:80"
+      - "8443:443"
+      - "9102-9254:9002-9254"

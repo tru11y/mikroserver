@@ -7,7 +7,13 @@ import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { CreatePlanDto, UpdatePlanDto } from "./dto/plan.dto";
-import { Plan, PlanStatus, AuditAction, Prisma, UserRole } from "@prisma/client";
+import {
+  Plan,
+  PlanStatus,
+  AuditAction,
+  Prisma,
+  UserRole,
+} from "@prisma/client";
 
 export interface PlanActor {
   sub: string;
@@ -134,8 +140,7 @@ export class PlansService {
         .replace(/[^a-z0-9-]/g, "")
         .slice(0, 120);
 
-    const ownerId =
-      actor.role === UserRole.SUPER_ADMIN ? null : actor.sub;
+    const ownerId = actor.role === UserRole.SUPER_ADMIN ? null : actor.sub;
 
     // Composite uniqueness check: same slug can exist for different operators
     const existing = await this.prisma.plan.findFirst({
@@ -145,7 +150,10 @@ export class PlansService {
       throw new ConflictException(`Plan slug "${slug}" already exists`);
     }
 
-    const payload = this.buildPlanPayload(dto, slug) as Prisma.PlanUncheckedCreateInput;
+    const payload = this.buildPlanPayload(
+      dto,
+      slug,
+    ) as Prisma.PlanUncheckedCreateInput;
     const data: Prisma.PlanUncheckedCreateInput = { ...payload, ownerId };
     const plan = await this.prisma.plan.create({ data });
 
@@ -219,7 +227,9 @@ export class PlansService {
     const ownerScope =
       actor.role === UserRole.SUPER_ADMIN ? {} : { ownerId: actor.sub };
 
-    const plan = await this.prisma.plan.findFirst({ where: { id, ...ownerScope } });
+    const plan = await this.prisma.plan.findFirst({
+      where: { id, ...ownerScope },
+    });
     if (!plan) throw new NotFoundException(`Plan ${id} not found`);
     if (plan.status !== PlanStatus.ARCHIVED) {
       throw new ConflictException(`Plan ${id} is not archived`);

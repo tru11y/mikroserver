@@ -63,13 +63,7 @@ export class WireguardCliService implements IWireguardCliService {
   }
 
   async removePeer(publicKey: string): Promise<void> {
-    await this.wgExec([
-      "set",
-      this.wgInterface,
-      "peer",
-      publicKey,
-      "remove",
-    ]);
+    await this.wgExec(["set", this.wgInterface, "peer", publicKey, "remove"]);
     this.logger.log(`Peer removed: ${publicKey.slice(0, 8)}…`);
   }
 
@@ -89,9 +83,7 @@ export class WireguardCliService implements IWireguardCliService {
         publicKey: pubKey,
         allowedIp: allowedIps.split(",")[0]?.trim() ?? "",
         lastHandshake:
-          handshakeEpoch > 0
-            ? new Date(handshakeEpoch * 1000)
-            : null,
+          handshakeEpoch > 0 ? new Date(handshakeEpoch * 1000) : null,
       });
     }
     return peers;
@@ -99,11 +91,7 @@ export class WireguardCliService implements IWireguardCliService {
 
   async getServerPublicKey(): Promise<string> {
     if (this.cachedServerPubKey) return this.cachedServerPubKey;
-    const stdout = await this.wgExec([
-      "show",
-      this.wgInterface,
-      "public-key",
-    ]);
+    const stdout = await this.wgExec(["show", this.wgInterface, "public-key"]);
     this.cachedServerPubKey = stdout.trim();
     return this.cachedServerPubKey;
   }

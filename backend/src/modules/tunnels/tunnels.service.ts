@@ -116,9 +116,7 @@ export class TunnelsService {
       const peers = await this.wgCli.listPeers();
       if (peers.length === 0) return;
 
-      const peerMap = new Map(
-        peers.map((p) => [p.publicKey, p.lastHandshake]),
-      );
+      const peerMap = new Map(peers.map((p) => [p.publicKey, p.lastHandshake]));
 
       const tunnels = await this.prisma.tunnel.findMany({
         where: {

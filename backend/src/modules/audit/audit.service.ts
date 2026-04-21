@@ -164,7 +164,10 @@ export class AuditService {
     };
   }
 
-  private buildWhere(query: ListAuditLogsQueryDto, actor?: AuditActor): Prisma.AuditLogWhereInput {
+  private buildWhere(
+    query: ListAuditLogsQueryDto,
+    actor?: AuditActor,
+  ): Prisma.AuditLogWhereInput {
     const where: Prisma.AuditLogWhereInput = {};
 
     // Tenant isolation: non-SUPER_ADMIN only sees their own logs

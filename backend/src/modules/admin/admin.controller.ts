@@ -129,7 +129,8 @@ export class AdminController {
 
   @Post("operators/:id/subscription/renew")
   @ApiOperation({
-    summary: "Renouveler l'abonnement d'un opérateur (prolonger la date de fin)",
+    summary:
+      "Renouveler l'abonnement d'un opérateur (prolonger la date de fin)",
     description:
       "Étend la date de fin de l'abonnement actuel. " +
       "Si months n'est pas fourni, applique 1 mois (mensuel) ou 12 mois (annuel).",

@@ -16,6 +16,12 @@ import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { JwtPayload } from "../auth/interfaces/jwt-payload.interface";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { UserRole } from "@prisma/client";
+import {
+  GenerateInvoiceDto,
+  ListInvoicesQueryDto,
+  RevenueByPeriodQueryDto,
+  RevenueRangeQueryDto,
+} from "./dto/accounting.dto";
 
 @ApiTags("accounting")
 @Controller({ path: "accounting", version: "1" })
@@ -28,13 +34,12 @@ export class AccountingController {
   @ApiOperation({ summary: "List invoices for current user" })
   findInvoices(
     @CurrentUser() user: JwtPayload,
-    @Query("page") page?: number,
-    @Query("limit") limit?: number,
+    @Query() query: ListInvoicesQueryDto,
   ) {
     return this.accountingService.findInvoices(
       user.sub,
-      page ? Number(page) : 1,
-      limit ? Number(limit) : 20,
+      query.page ?? 1,
+      query.limit ?? 20,
     );
   }
 
@@ -76,7 +81,7 @@ export class AccountingController {
   @ApiOperation({ summary: "Generate monthly invoice for current user" })
   generateInvoice(
     @CurrentUser() user: JwtPayload,
-    @Body() body: { periodStart: string; periodEnd: string },
+    @Body() body: GenerateInvoiceDto,
   ) {
     return this.accountingService.generateInvoice(
       user.sub,
@@ -90,12 +95,11 @@ export class AccountingController {
   @ApiOperation({ summary: "Revenue breakdown per router" })
   getRevenueByRouter(
     @CurrentUser() user: JwtPayload,
-    @Query("from") from?: string,
-    @Query("to") to?: string,
+    @Query() query: RevenueRangeQueryDto,
   ) {
-    const dateTo = to ? new Date(to) : new Date();
-    const dateFrom = from
-      ? new Date(from)
+    const dateTo = query.to ? new Date(query.to) : new Date();
+    const dateFrom = query.from
+      ? new Date(query.from)
       : new Date(dateTo.getFullYear(), dateTo.getMonth() - 1, dateTo.getDate());
     return this.accountingService.getRevenueByRouter(
       user.sub,
@@ -110,12 +114,12 @@ export class AccountingController {
   @ApiOperation({ summary: "Monthly revenue for last N months" })
   getRevenueByPeriod(
     @CurrentUser() user: JwtPayload,
-    @Query("months") months?: number,
+    @Query() query: RevenueByPeriodQueryDto,
   ) {
     return this.accountingService.getRevenueByPeriod(
       user.sub,
       user.role,
-      months ? Number(months) : 12,
+      query.months ?? 12,
     );
   }
 }

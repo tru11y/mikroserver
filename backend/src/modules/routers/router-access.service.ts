@@ -1,56 +1,27 @@
 import {
   Injectable,
+  InternalServerErrorException,
   Logger,
   NotFoundException,
   ForbiddenException,
+  OnModuleInit,
 } from "@nestjs/common";
-import {
-  createCipheriv,
-  createDecipheriv,
-  randomBytes,
-  scryptSync,
-} from "crypto";
 import * as net from "net";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../prisma/prisma.service";
 import { UpdateAccessDto } from "./dto/router-access.dto";
 import { UserRole } from "@prisma/client";
-
-const ALGO = "aes-256-gcm";
-
-// ─── Encryption helpers ─────────────────────────────────────────────────────
-
-function deriveKey(rawKey: string): Buffer {
-  // scrypt: deterministic, 32-byte key derived from env var
-  return scryptSync(rawKey, "mikroserver-router-access-salt", 32);
-}
-
-function encrypt(plaintext: string, key: Buffer): string {
-  const iv = randomBytes(12); // 96-bit IV for GCM
-  const cipher = createCipheriv(ALGO, key, iv);
-  const ct = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return [iv, tag, ct].map((b) => b.toString("base64")).join(":");
-}
-
-function decrypt(stored: string, key: Buffer): string {
-  const parts = stored.split(":");
-  if (parts.length !== 3) throw new Error("Invalid encrypted format");
-  const [ivB64, tagB64, ctB64] = parts;
-  const iv = Buffer.from(ivB64, "base64");
-  const tag = Buffer.from(tagB64, "base64");
-  const ct = Buffer.from(ctB64, "base64");
-  const decipher = createDecipheriv(ALGO, key, iv);
-  decipher.setAuthTag(tag);
-  return Buffer.concat([decipher.update(ct), decipher.final()]).toString(
-    "utf8",
-  );
-}
+import {
+  decryptRouterAccessPasswordCompat,
+  deriveRouterAccessKey,
+  encryptRouterAccessPassword,
+  isRouterAccessPasswordEncrypted,
+} from "./router-access.crypto";
 
 // ─── Service ────────────────────────────────────────────────────────────────
 
 @Injectable()
-export class RouterAccessService {
+export class RouterAccessService implements OnModuleInit {
   private readonly logger = new Logger(RouterAccessService.name);
   private readonly encKey: Buffer;
 
@@ -60,7 +31,55 @@ export class RouterAccessService {
   ) {
     const raw = this.configService.get<string>("ENCRYPTION_KEY");
     if (!raw) throw new Error("ENCRYPTION_KEY env var is not set");
-    this.encKey = deriveKey(raw);
+    this.encKey = deriveRouterAccessKey(raw);
+  }
+
+  async onModuleInit(): Promise<void> {
+    try {
+      await this.reEncryptLegacyPlaintextPasswords();
+    } catch (error) {
+      this.logger.error(
+        `Failed to migrate legacy router access passwords: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  private async reEncryptLegacyPlaintextPasswords(): Promise<void> {
+    const routers = await this.prisma.router.findMany({
+      where: {
+        accessPassword: { not: null },
+        deletedAt: null,
+      },
+      select: { id: true, accessPassword: true },
+    });
+
+    const legacy = routers.filter(
+      (router) =>
+        typeof router.accessPassword === "string" &&
+        !isRouterAccessPasswordEncrypted(router.accessPassword),
+    );
+
+    if (legacy.length === 0) {
+      return;
+    }
+
+    await this.prisma.$transaction(
+      legacy.map((router) =>
+        this.prisma.router.update({
+          where: { id: router.id },
+          data: {
+            accessPassword: encryptRouterAccessPassword(
+              router.accessPassword!,
+              this.encKey,
+            ),
+          },
+        }),
+      ),
+    );
+
+    this.logger.warn(
+      `[Security] Migrated ${legacy.length} router access password(s) from plaintext to AES-256-GCM`,
+    );
   }
 
   // ── ownership guard ──────────────────────────────────────────────────────
@@ -72,14 +91,23 @@ export class RouterAccessService {
   ) {
     const router = await this.prisma.router.findUnique({
       where: { id: routerId, deletedAt: null },
-      select: { id: true, ownerId: true, wireguardIp: true, winboxPort: true, webfigPort: true, sshPort: true, accessUsername: true, accessPassword: true, name: true },
+      select: {
+        id: true,
+        ownerId: true,
+        wireguardIp: true,
+        winboxPort: true,
+        webfigPort: true,
+        sshPort: true,
+        accessUsername: true,
+        accessPassword: true,
+        name: true,
+      },
     });
     if (!router) throw new NotFoundException("Routeur introuvable");
-    if (
-      role !== UserRole.SUPER_ADMIN &&
-      router.ownerId !== userId
-    ) {
-      throw new ForbiddenException("Accès refusé : vous n'êtes pas propriétaire de ce routeur");
+    if (role !== UserRole.SUPER_ADMIN && router.ownerId !== userId) {
+      throw new ForbiddenException(
+        "Accès refusé : vous n'êtes pas propriétaire de ce routeur",
+      );
     }
     return router;
   }
@@ -88,9 +116,40 @@ export class RouterAccessService {
 
   async getAccessCredentials(routerId: string, userId: string, role: UserRole) {
     const r = await this.requireOwnership(routerId, userId, role);
-    const passwordDecrypted = r.accessPassword
-      ? decrypt(r.accessPassword, this.encKey)
-      : null;
+
+    let passwordDecrypted: string | null = null;
+    if (r.accessPassword) {
+      try {
+        const decrypted = decryptRouterAccessPasswordCompat(
+          r.accessPassword,
+          this.encKey,
+        );
+        passwordDecrypted = decrypted.password;
+
+        if (decrypted.wasLegacyPlaintext) {
+          await this.prisma.router.update({
+            where: { id: r.id },
+            data: {
+              accessPassword: encryptRouterAccessPassword(
+                decrypted.password,
+                this.encKey,
+              ),
+            },
+          });
+
+          this.logger.warn(
+            `[Security] Re-encrypted legacy plaintext access password for router ${r.id}`,
+          );
+        }
+      } catch (error) {
+        this.logger.error(
+          `Unable to decrypt access password for router ${r.id}: ${(error as Error).message}`,
+        );
+        throw new InternalServerErrorException(
+          "Mot de passe d'accès routeur invalide",
+        );
+      }
+    }
 
     const vpnIp = r.wireguardIp ?? "—";
 
@@ -135,9 +194,14 @@ export class RouterAccessService {
     if (dto.winboxPort !== undefined) data.winboxPort = dto.winboxPort;
     if (dto.webfigPort !== undefined) data.webfigPort = dto.webfigPort;
     if (dto.sshPort !== undefined) data.sshPort = dto.sshPort;
-    if (dto.accessUsername !== undefined) data.accessUsername = dto.accessUsername;
+    if (dto.accessUsername !== undefined) {
+      data.accessUsername = dto.accessUsername;
+    }
     if (dto.accessPassword !== undefined) {
-      data.accessPassword = encrypt(dto.accessPassword, this.encKey);
+      data.accessPassword = encryptRouterAccessPassword(
+        dto.accessPassword,
+        this.encKey,
+      );
     }
 
     await this.prisma.router.update({
@@ -192,7 +256,9 @@ export class RouterAccessService {
       select: { wireguardIp: true, webfigPort: true },
     });
     if (!router) throw new NotFoundException("Routeur introuvable");
-    if (!router.wireguardIp) throw new NotFoundException("IP VPN non configurée");
+    if (!router.wireguardIp) {
+      throw new NotFoundException("IP VPN non configurée");
+    }
     return { wireguardIp: router.wireguardIp, webfigPort: router.webfigPort };
   }
 }

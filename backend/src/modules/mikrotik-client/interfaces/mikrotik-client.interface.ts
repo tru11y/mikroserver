@@ -1,8 +1,8 @@
 export interface SystemResource {
-  "uptime": string;
-  "version": string;
+  uptime: string;
+  version: string;
   "build-time": string;
-  "cpu": string;
+  cpu: string;
   "cpu-count": string;
   "cpu-load": string;
   "free-memory": string;
@@ -11,7 +11,7 @@ export interface SystemResource {
   "total-hdd-space": string;
   "architecture-name": string;
   "board-name": string;
-  "platform": string;
+  platform: string;
   [key: string]: string;
 }
 
@@ -35,15 +35,8 @@ export interface IMikroTikClient {
     path: string,
     filters?: Record<string, string>,
   ): Promise<T[]>;
-  add(
-    path: string,
-    data: Record<string, unknown>,
-  ): Promise<{ ".id": string }>;
-  set(
-    path: string,
-    id: string,
-    data: Record<string, unknown>,
-  ): Promise<void>;
+  add(path: string, data: Record<string, unknown>): Promise<{ ".id": string }>;
+  set(path: string, id: string, data: Record<string, unknown>): Promise<void>;
   remove(path: string, id: string): Promise<void>;
   close(): Promise<void>;
   readonly transport: "rest" | "binary";

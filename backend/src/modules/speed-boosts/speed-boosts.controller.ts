@@ -16,7 +16,13 @@ import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { JwtPayload } from "../auth/interfaces/jwt-payload.interface";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { Public } from "../auth/decorators/public.decorator";
-import { UserRole, BoostStatus } from "@prisma/client";
+import { UserRole } from "@prisma/client";
+import {
+  CreateBoostTierDto,
+  ListBoostsQueryDto,
+  PurchaseBoostDto,
+  UpdateBoostTierDto,
+} from "./dto/speed-boosts.dto";
 
 @ApiTags("speed-boosts")
 @Controller({ path: "speed-boosts", version: "1" })
@@ -36,15 +42,7 @@ export class SpeedBoostsController {
   @Post("purchase")
   @Public()
   @ApiOperation({ summary: "Purchase a speed boost (from captive portal)" })
-  purchase(
-    @Body()
-    body: {
-      voucherCode: string;
-      tierId: string;
-      customerPhone: string;
-      customerName?: string;
-    },
-  ) {
+  purchase(@Body() body: PurchaseBoostDto) {
     return this.speedBoostsService.purchaseBoost(body);
   }
 
@@ -53,18 +51,12 @@ export class SpeedBoostsController {
   @Get()
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: "List boosts" })
-  list(
-    @CurrentUser() user: JwtPayload,
-    @Query("sessionId") sessionId?: string,
-    @Query("status") status?: BoostStatus,
-    @Query("page") page?: number,
-    @Query("limit") limit?: number,
-  ) {
+  list(@CurrentUser() user: JwtPayload, @Query() query: ListBoostsQueryDto) {
     return this.speedBoostsService.listBoosts({
-      sessionId,
-      status,
-      page: page ? Number(page) : 1,
-      limit: limit ? Number(limit) : 25,
+      sessionId: query.sessionId,
+      status: query.status,
+      page: query.page,
+      limit: query.limit,
       requestingUserRole: user.role,
       requestingUserId: user.sub,
     });
@@ -73,16 +65,7 @@ export class SpeedBoostsController {
   @Post("tiers")
   @Roles(UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: "Create boost tier" })
-  createTier(
-    @Body()
-    body: {
-      name: string;
-      downloadKbps: number;
-      uploadKbps: number;
-      durationMinutes: number;
-      priceXof: number;
-    },
-  ) {
+  createTier(@Body() body: CreateBoostTierDto) {
     return this.speedBoostsService.createTier(body);
   }
 
@@ -91,15 +74,7 @@ export class SpeedBoostsController {
   @ApiOperation({ summary: "Update boost tier" })
   updateTier(
     @Param("id", ParseUUIDPipe) id: string,
-    @Body()
-    body: {
-      name?: string;
-      downloadKbps?: number;
-      uploadKbps?: number;
-      durationMinutes?: number;
-      priceXof?: number;
-      isActive?: boolean;
-    },
+    @Body() body: UpdateBoostTierDto,
   ) {
     return this.speedBoostsService.updateTier(id, body);
   }

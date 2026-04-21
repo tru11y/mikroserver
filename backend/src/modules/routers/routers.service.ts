@@ -49,6 +49,10 @@ import {
   getVpsPublicKey,
   isPeerConnected,
 } from "../provisioning/wireguard.utils";
+import {
+  deriveRouterAccessKey,
+  encryptRouterAccessPassword,
+} from "./router-access.crypto";
 import { executeRouterOperationResult } from "./router-routeros.transport";
 import { runCommand, runParsedCommand } from "./router-api.commands";
 import type { MikroTikModule } from "./router-api.types";
@@ -77,6 +81,7 @@ type BulkActionErrorItem = {
 @Injectable()
 export class RoutersService {
   private readonly logger = new Logger(RoutersService.name);
+  private routerAccessKey: Buffer | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -85,6 +90,20 @@ export class RoutersService {
     private readonly configService: ConfigService,
     private readonly credentialsService: CredentialsService,
   ) {}
+
+  private getRouterAccessKey(): Buffer {
+    if (this.routerAccessKey) {
+      return this.routerAccessKey;
+    }
+
+    const raw = this.configService.get<string>("ENCRYPTION_KEY");
+    if (!raw) {
+      throw new Error("ENCRYPTION_KEY env var is not set");
+    }
+
+    this.routerAccessKey = deriveRouterAccessKey(raw);
+    return this.routerAccessKey;
+  }
 
   // ---------------------------------------------------------------------------
   // Periodic background health check — every 5 minutes
@@ -240,7 +259,17 @@ export class RoutersService {
     dto: CreateRouterDto,
     adminId: string,
     requestingUserRole?: string,
-  ): Promise<RouterSafeView & { wgProvision: { privateKey: string; wgIp: string; vpsPublicKey: string; vpsEndpoint: string; listenPort: number } | null }> {
+  ): Promise<
+    RouterSafeView & {
+      wgProvision: {
+        privateKey: string;
+        wgIp: string;
+        vpsPublicKey: string;
+        vpsEndpoint: string;
+        listenPort: number;
+      } | null;
+    }
+  > {
     // ── Direct mode: mobile validated credentials locally, no WG tunnel needed ─
     const isDirectMode = !!dto.address;
 
@@ -346,9 +375,13 @@ export class RoutersService {
     const address = dto.address!;
     const username = dto.username ?? dto.apiUsername ?? "admin";
     const password = dto.password ?? dto.apiPassword ?? "";
-    const port     = dto.port ?? 80;
+    const encryptedAccessPassword = encryptRouterAccessPassword(
+      password,
+      this.getRouterAccessKey(),
+    );
+    const port = dto.port ?? 80;
     const identity = dto.identity ?? "MikroTik";
-    const comment  = dto.comment ?? dto.description;
+    const comment = dto.comment ?? dto.description;
 
     // Auto-generate a unique display name
     const baseName = dto.name?.trim() || `${identity} (${address})`;
@@ -363,11 +396,11 @@ export class RoutersService {
         description: comment,
         location: dto.location,
         wireguardIp: null,
-        apiPort: 8728,              // binary API port (unused in direct mode, kept for schema)
+        apiPort: 8728, // binary API port (unused in direct mode, kept for schema)
         apiUsername: username,
-        apiPasswordHash: password,  // stored plain (same as legacy mode, used for RouterOS API)
+        apiPasswordHash: password, // stored plain (same as legacy mode, used for RouterOS API)
         accessUsername: username,
-        accessPassword: password,
+        accessPassword: encryptedAccessPassword,
         webfigPort: port,
         hotspotProfile: dto.hotspotProfile ?? "default",
         hotspotServer: dto.hotspotServer ?? "hotspot1",
@@ -402,7 +435,9 @@ export class RoutersService {
    * If `baseName` already exists (even soft-deleted), append a short random suffix.
    */
   private async resolveUniqueName(baseName: string): Promise<string> {
-    const existing = await this.prisma.router.findFirst({ where: { name: baseName } });
+    const existing = await this.prisma.router.findFirst({
+      where: { name: baseName },
+    });
     if (!existing) return baseName;
     const suffix = randomBytes(2).toString("hex");
     return `${baseName.slice(0, 95)} #${suffix}`;
@@ -413,7 +448,11 @@ export class RoutersService {
    * Returns config that the mobile app will push to the router via RouterOS REST API.
    */
   private async generateWgProvision(routerId: string): Promise<{
-    privateKey: string; wgIp: string; vpsPublicKey: string; vpsEndpoint: string; listenPort: number;
+    privateKey: string;
+    wgIp: string;
+    vpsPublicKey: string;
+    vpsEndpoint: string;
+    listenPort: number;
   }> {
     const wgIp = await this.assignNextWgIp();
     const { privateKey, publicKey } = await generateWireGuardKeyPair();
@@ -428,7 +467,15 @@ export class RoutersService {
       where: { id: routerId },
       data: {
         metadata: {
-          wg: { wgIp, privateKey, publicKey, vpsPublicKey, endpoint: vpsEndpoint, listenPort: WG_LISTEN_PORT, provisionedAt: new Date().toISOString() },
+          wg: {
+            wgIp,
+            privateKey,
+            publicKey,
+            vpsPublicKey,
+            endpoint: vpsEndpoint,
+            listenPort: WG_LISTEN_PORT,
+            provisionedAt: new Date().toISOString(),
+          },
         },
       },
     });
@@ -436,20 +483,36 @@ export class RoutersService {
     // Poll for tunnel in background (mobile will push config → tunnel should connect)
     void this.pollForTunnel(routerId, publicKey, wgIp).catch(() => {});
 
-    return { privateKey, wgIp, vpsPublicKey, vpsEndpoint, listenPort: WG_LISTEN_PORT };
+    return {
+      privateKey,
+      wgIp,
+      vpsPublicKey,
+      vpsEndpoint,
+      listenPort: WG_LISTEN_PORT,
+    };
   }
 
-  private async pollForTunnel(routerId: string, publicKey: string, wgIp: string): Promise<void> {
-    for (let i = 0; i < 36; i++) { // 3 minutes
+  private async pollForTunnel(
+    routerId: string,
+    publicKey: string,
+    wgIp: string,
+  ): Promise<void> {
+    for (let i = 0; i < 36; i++) {
+      // 3 minutes
       await new Promise<void>((r) => setTimeout(r, 5000));
       if (await isPeerConnected(publicKey)) {
-        await this.prisma.router.update({ where: { id: routerId }, data: { wireguardIp: wgIp } });
+        await this.prisma.router.update({
+          where: { id: routerId },
+          data: { wireguardIp: wgIp },
+        });
         this.logger.log(`[WG] Tunnel established → ${wgIp}`);
         void this.routerApiService.checkRouterHealth(routerId).catch(() => {});
         return;
       }
     }
-    this.logger.warn(`[WG] Tunnel not established within 3min for router ${routerId}`);
+    this.logger.warn(
+      `[WG] Tunnel not established within 3min for router ${routerId}`,
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -815,9 +878,7 @@ export class RoutersService {
               disabled?: string;
               port?: string;
               address?: string;
-            }>(conn, MikroNode.parseItems, "/ip/service/print", [
-              "?name=www",
-            ]);
+            }>(conn, MikroNode.parseItems, "/ip/service/print", ["?name=www"]);
             const www = services[0];
             const needsServiceUpdate =
               !www ||
@@ -1461,8 +1522,12 @@ export class RoutersService {
     const router = await this.prisma.router.findUnique({
       where: { id: routerId },
       select: {
-        id: true, name: true, metadata: true,
-        apiPort: true, apiUsername: true, apiPasswordHash: true,
+        id: true,
+        name: true,
+        metadata: true,
+        apiPort: true,
+        apiUsername: true,
+        apiPasswordHash: true,
       },
     });
     if (!router) return;
@@ -1533,7 +1598,7 @@ export class RoutersService {
       } catch (err) {
         this.logger.warn(
           `[WG] RouterOS API push failed for "${router.name}" (${localIp}): ${String(err)}` +
-          ` — keys generated, tunnel will connect when router is reachable`,
+            ` — keys generated, tunnel will connect when router is reachable`,
         );
       }
     } else {
@@ -1634,7 +1699,10 @@ export class RoutersService {
   }
 
   /** Returns WireGuard bootstrap config for a router. Provisions on first call. */
-  async getBootstrap(id: string, adminId: string): Promise<Record<string, unknown>> {
+  async getBootstrap(
+    id: string,
+    adminId: string,
+  ): Promise<Record<string, unknown>> {
     const router = await this.prisma.router.findFirst({
       where: { id, deletedAt: null },
       select: { id: true, name: true, metadata: true, wireguardIp: true },
@@ -1659,7 +1727,8 @@ export class RoutersService {
 
     const wg = (meta.wg ?? {}) as Record<string, unknown>;
 
-    const tunnelReady = router.wireguardIp?.startsWith(`${WG_SUBNET}.`) ?? false;
+    const tunnelReady =
+      router.wireguardIp?.startsWith(`${WG_SUBNET}.`) ?? false;
 
     // Generate the MikroTik RouterOS CLI command
     const mikrotikCmd = localIp

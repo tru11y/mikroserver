@@ -306,8 +306,7 @@ export class AdminService {
       );
     }
 
-    const tempPassword =
-      dto.tempPassword ?? this.generateTempPassword();
+    const tempPassword = dto.tempPassword ?? this.generateTempPassword();
     const passwordHash = await this.passwordService.hashPassword(tempPassword);
 
     const user = await this.prisma.user.create({
@@ -540,8 +539,7 @@ export class AdminService {
   }
 
   private generateTempPassword(): string {
-    const chars =
-      "ABCDEFGHJKMNPQRSTWXYZabcdefghjkmnpqrstwxyz23456789!@#$";
+    const chars = "ABCDEFGHJKMNPQRSTWXYZabcdefghjkmnpqrstwxyz23456789!@#$";
     let password = "";
     for (let i = 0; i < 12; i++) {
       password += chars[Math.floor(Math.random() * chars.length)];

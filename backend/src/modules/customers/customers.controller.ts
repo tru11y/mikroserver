@@ -16,6 +16,12 @@ import { Roles } from "../auth/decorators/roles.decorator";
 import { UserRole } from "@prisma/client";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { JwtPayload } from "../auth/interfaces/jwt-payload.interface";
+import {
+  CustomerStatsQueryDto,
+  ListCustomersQueryDto,
+  SetCustomerBlockedDto,
+  UpdateCustomerProfileDto,
+} from "./dto/customers.dto";
 
 @ApiTags("customers")
 @Controller({ path: "customers", version: "1" })
@@ -28,16 +34,13 @@ export class CustomersController {
   @ApiOperation({ summary: "List customer profiles" })
   findAll(
     @CurrentUser() user: JwtPayload,
-    @Query("routerId") routerId?: string,
-    @Query("page") page?: number,
-    @Query("limit") limit?: number,
-    @Query("search") search?: string,
+    @Query() query: ListCustomersQueryDto,
   ) {
     return this.customersService.findAll(
-      routerId,
-      page ? Number(page) : 1,
-      limit ? Number(limit) : 25,
-      search,
+      query.routerId,
+      query.page,
+      query.limit,
+      query.search,
       user.sub,
       user.role,
     );
@@ -48,9 +51,9 @@ export class CustomersController {
   @ApiOperation({ summary: "Get customer aggregate stats" })
   getStats(
     @CurrentUser() user: JwtPayload,
-    @Query("routerId") routerId?: string,
+    @Query() query: CustomerStatsQueryDto,
   ) {
-    return this.customersService.getStats(routerId, user.sub, user.role);
+    return this.customersService.getStats(query.routerId, user.sub, user.role);
   }
 
   @Get(":id")
@@ -65,13 +68,7 @@ export class CustomersController {
   @ApiOperation({ summary: "Update customer profile" })
   update(
     @Param("id", ParseUUIDPipe) id: string,
-    @Body()
-    body: {
-      firstName?: string;
-      lastName?: string;
-      phone?: string;
-      notes?: string;
-    },
+    @Body() body: UpdateCustomerProfileDto,
   ) {
     return this.customersService.update(id, body);
   }
@@ -81,7 +78,7 @@ export class CustomersController {
   @ApiOperation({ summary: "Block/unblock customer" })
   block(
     @Param("id", ParseUUIDPipe) id: string,
-    @Body() body: { isBlocked: boolean },
+    @Body() body: SetCustomerBlockedDto,
   ) {
     return this.customersService.block(id, body.isBlocked);
   }

@@ -47,6 +47,9 @@ export class AuditController {
     @Query() query: ListAuditLogsQueryDto,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.auditService.findLogs(query, { sub: user.sub, role: user.role });
+    return this.auditService.findLogs(query, {
+      sub: user.sub,
+      role: user.role,
+    });
   }
 }

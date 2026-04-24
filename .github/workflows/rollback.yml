@@ -40,7 +40,7 @@ jobs:
 
     steps:
       - name: Rollback via SSH
-        uses: appleboy/ssh-action@v1.2.0
+        uses: appleboy/ssh-action@v1.2.5
         env:
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           GHCR_USER: ${{ github.repository_owner }}

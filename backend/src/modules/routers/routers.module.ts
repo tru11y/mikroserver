@@ -1,4 +1,4 @@
-import { Module, OnModuleInit, Logger } from "@nestjs/common";
+import { Module, OnModuleInit, Logger, forwardRef } from "@nestjs/common";
 import { RoutersService } from "./routers.service";
 import { RoutersController } from "./routers.controller";
 import { RouterApiService } from "./router-api.service";
@@ -10,18 +10,28 @@ import {
   AdminPortMappingController,
 } from "./port-mapping.controller";
 import { CredentialsService } from "./credentials.service";
+import { WgIpPoolService } from "./wg-ip-pool.service";
+import { RouterSafeOnboardingService } from "./router-safe-onboarding.service";
 import { AuditModule } from "../audit/audit.module";
 import { SaasModule } from "../saas/saas.module";
 import { NotificationsModule } from "../notifications/notifications.module";
+import { QueueModule } from "../queue/queue.module";
 
 @Module({
-  imports: [AuditModule, SaasModule, NotificationsModule],
+  imports: [
+    AuditModule,
+    SaasModule,
+    NotificationsModule,
+    forwardRef(() => QueueModule),
+  ],
   providers: [
     RoutersService,
     RouterApiService,
     RouterAccessService,
     PortMappingService,
     CredentialsService,
+    WgIpPoolService,
+    RouterSafeOnboardingService,
   ],
   controllers: [
     RoutersController,
@@ -34,6 +44,8 @@ import { NotificationsModule } from "../notifications/notifications.module";
     RouterApiService,
     PortMappingService,
     CredentialsService,
+    WgIpPoolService,
+    RouterSafeOnboardingService,
   ],
 })
 export class RoutersModule implements OnModuleInit {

@@ -1,0 +1,93 @@
+# =============================================================================
+# Rollback — Mikroserver
+#
+# Manual-only workflow. Reverts api + dashboard to a specific image tag.
+# Safe to run at any time — never touches postgres, redis, nginx, or wg0.
+#
+# Usage:
+#   GitHub UI → Actions → Rollback → Run workflow → enter SHA tag (e.g. a1b2c3d)
+#   Or: gh workflow run rollback.yml -f image_tag=a1b2c3d
+#
+# Migration note: this does NOT run down migrations. Prisma migrations are
+# additive. If the rollback tag predates a schema change, assess manually.
+# =============================================================================
+
+name: Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Tag to roll back to (7-char SHA, e.g. a1b2c3d)"
+        required: true
+      reason:
+        description: "Reason for rollback (for audit log)"
+        required: false
+        default: "manual rollback"
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    name: Rollback Production → ${{ inputs.image_tag }}
+    runs-on: ubuntu-latest
+    environment: production
+
+    concurrency:
+      group: deploy-production   # same group as CD — prevents conflicts
+      cancel-in-progress: false
+
+    steps:
+      - name: Rollback via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          GHCR_USER: ${{ github.repository_owner }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          REASON: ${{ inputs.reason }}
+          ACTOR: ${{ github.actor }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          envs: GHCR_TOKEN,GHCR_USER,IMAGE_TAG,REASON,ACTOR
+          command_timeout: 5m
+          script: |
+            set -euo pipefail
+
+            COMPOSE="docker compose -f $HOME/mikroserver/infrastructure/docker/docker-compose.prod.yml"
+            DEPLOY_DIR="$HOME/mikroserver"
+
+            echo "==> ROLLBACK initiated by $ACTOR"
+            echo "==> Target tag: $IMAGE_TAG"
+            echo "==> Reason: $REASON"
+
+            cd "$DEPLOY_DIR"
+            CURRENT_TAG=$(cat .image_tag 2>/dev/null || echo "unknown")
+            echo "==> Current tag: $CURRENT_TAG"
+
+            # Pull target image
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            IMAGE_TAG="$IMAGE_TAG" $COMPOSE pull api dashboard
+
+            # Restart app containers only
+            IMAGE_TAG="$IMAGE_TAG" $COMPOSE up -d --no-deps api dashboard
+
+            # Health check
+            for i in $(seq 1 12); do
+              sleep 5
+              HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/api/v1/health/ready 2>/dev/null || echo "000")
+              if [ "$HTTP_STATUS" = "200" ]; then
+                echo "$IMAGE_TAG" > .image_tag
+                echo "==> Rollback successful: now on $IMAGE_TAG (was $CURRENT_TAG)"
+                docker logout ghcr.io
+                exit 0
+              fi
+              echo "  Attempt $i/12 — HTTP $HTTP_STATUS"
+            done
+
+            echo "==> ROLLBACK HEALTH CHECK FAILED — manual intervention required"
+            docker logout ghcr.io
+            exit 1

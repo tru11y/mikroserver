@@ -107,6 +107,11 @@ services:
   # NestJS API
   # ---------------------------------------------------------------------------
   api:
+    # CI/CD: image is pre-built and pushed to GHCR by the CI pipeline.
+    # IMAGE_TAG is set by the deploy script (7-char git SHA).
+    # Local dev: `docker compose build api` still works — image: tag is used
+    # as the local image name when building.
+    image: ghcr.io/${GITHUB_REPOSITORY:-tru11y/mikroserver}/api:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile
@@ -206,6 +211,7 @@ services:
   # Next.js Dashboard
   # ---------------------------------------------------------------------------
   dashboard:
+    image: ghcr.io/${GITHUB_REPOSITORY:-tru11y/mikroserver}/dashboard:${IMAGE_TAG:-latest}
     build:
       context: ../../frontend
       dockerfile: Dockerfile
@@ -290,6 +296,7 @@ services:
   # Database migrations (runs once then exits)
   # ---------------------------------------------------------------------------
   db-migrate:
+    image: ghcr.io/${GITHUB_REPOSITORY:-tru11y/mikroserver}/migrations:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile

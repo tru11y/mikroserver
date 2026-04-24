@@ -3,6 +3,7 @@ import { Queue } from "bullmq";
 import { InjectQueue } from "./decorators/inject-queue.decorator";
 import { QUEUE_NAMES, JOB_NAMES } from "./queue.constants";
 import { ConfigService } from "@nestjs/config";
+import type { RouterProvisionJobData } from "./workers/router-provisioning.worker";
 
 export interface VoucherDeliveryJobData {
   voucherId: string;
@@ -13,6 +14,8 @@ export interface WebhookProcessJobData {
   webhookEventId: string;
   provider: string;
 }
+
+export type { RouterProvisionJobData };
 
 export interface BoostRevertJobData {
   boostId: string;
@@ -47,6 +50,9 @@ export class QueueService {
 
     @InjectQueue(QUEUE_NAMES.SPEED_BOOST)
     private readonly speedBoostQueue: Queue,
+
+    @InjectQueue(QUEUE_NAMES.ROUTER_PROVISION)
+    private readonly routerProvisionQueue: Queue,
 
     private readonly configService: ConfigService,
   ) {
@@ -86,6 +92,21 @@ export class QueueService {
 
     this.logger.log(
       `Enqueued webhook processing for event ${data.webhookEventId}`,
+    );
+  }
+
+  async enqueueRouterProvision(data: RouterProvisionJobData): Promise<void> {
+    await this.routerProvisionQueue.add(JOB_NAMES.PROVISION_ROUTER, data, {
+      // One active job per router — BullMQ silently ignores if jobId exists
+      jobId: `provision-${data.routerId}`,
+      // Single attempt: failure = rollback.  No blind retry of failed tunnel polls.
+      attempts: 1,
+      removeOnComplete: { count: 500 },
+      removeOnFail: { count: 200 },
+    });
+    this.logger.log(
+      `[Provision] Enqueued ${data.safeOnboard ? "safe-onboard" : "poll-only"} job ` +
+        `for router ${data.routerId} (wgIp=${data.wgIp})`,
     );
   }
 

@@ -1,6 +1,9 @@
 import { generateKeyPairSync } from "crypto";
 import { execAsync } from "./exec.utils";
 
+/** WireGuard handshake is considered stale after this many seconds. */
+export const HANDSHAKE_VALID_SECONDS = 180;
+
 export interface WireGuardKeyPair {
   privateKey: string;
   publicKey: string;
@@ -42,20 +45,28 @@ export async function generateWireGuardKeyPair(): Promise<WireGuardKeyPair> {
 
 /**
  * Add a WireGuard peer to the VPS wg0 interface.
- * Uses nsenter to run in the host network namespace from inside Docker.
+ * Persists the updated peer list to /etc/wireguard/wg0.conf after success
+ * so peers survive a VPS reboot or wg-quick restart.
+ * Persistence failure is non-fatal — the dynamic peer is still live.
  */
 export async function addWireGuardPeer(
   publicKey: string,
   allowedIp: string,
 ): Promise<void> {
   await wgExec(`wg set wg0 peer "${publicKey}" allowed-ips "${allowedIp}/32"`);
+  await persistPeersToDisk().catch(() => {
+    // Non-fatal: live peer is active. Peer will be lost on next wg-quick restart
+    // but the provisioning cron will detect and re-add it.
+  });
 }
 
 /**
  * Remove a WireGuard peer from the VPS wg0 interface.
+ * Persists the updated peer list to wg0.conf after removal.
  */
 export async function removeWireGuardPeer(publicKey: string): Promise<void> {
   await wgExec(`wg set wg0 peer "${publicKey}" remove`);
+  await persistPeersToDisk().catch(() => {});
 }
 
 /**
@@ -69,17 +80,55 @@ export async function getVpsPublicKey(): Promise<string> {
  * Check if a WireGuard peer is connected (has recent handshake).
  */
 export async function isPeerConnected(publicKey: string): Promise<boolean> {
+  const age = await getPeerHandshakeAge(publicKey);
+  return age !== null && age < HANDSHAKE_VALID_SECONDS;
+}
+
+/**
+ * Return the age of a peer's last handshake in seconds, or null if the peer
+ * is not found / has never completed a handshake (timestamp=0).
+ *
+ * Parses `wg show wg0 latest-handshakes` output:
+ *   <base64-pubkey>\t<unix-timestamp>
+ * A timestamp of 0 means WireGuard has never seen a handshake from this peer.
+ */
+export async function getPeerHandshakeAge(
+  publicKey: string,
+): Promise<number | null> {
   try {
     const stdout = await wgExec("wg show wg0 latest-handshakes");
     for (const line of stdout.trim().split("\n")) {
       const [key, timestamp] = line.trim().split("\t");
-      if (key === publicKey) {
-        const handshakeAge = Date.now() / 1000 - Number(timestamp);
-        return handshakeAge < 180;
-      }
+      if (key !== publicKey) continue;
+      const ts = Number(timestamp);
+      if (!ts) return null; // timestamp=0 → never handshaked
+      const age = Date.now() / 1000 - ts;
+      return Math.round(age);
     }
-    return false;
+    return null; // peer not found in wg show output
   } catch {
-    return false;
+    return null;
   }
+}
+
+/**
+ * Persist current live peer state to /etc/wireguard/wg0.conf so that peers
+ * survive `wg-quick down/up` or a VPS reboot.
+ *
+ * Uses `wg showconf wg0` which dumps the CURRENT kernel state (including all
+ * dynamically-added peers) in wg-quick format.  Writing it atomically via a
+ * temp file prevents a partial write from corrupting the config.
+ *
+ * Called after every addWireGuardPeer / removeWireGuardPeer.
+ * Failure is non-fatal: dynamic peers still work until next reboot.
+ */
+export async function persistPeersToDisk(): Promise<void> {
+  const tmpPath = "/etc/wireguard/wg0.conf.tmp";
+  const finalPath = "/etc/wireguard/wg0.conf";
+  const lockPath = "/etc/wireguard/wg0.conf.lock";
+  // flock prevents concurrent writers from interleaving their showconf snapshots.
+  // mv is POSIX-atomic on same filesystem — readers never see a partial file.
+  await wgExec(
+    `flock -x ${lockPath} sh -c 'wg showconf wg0 > ${tmpPath} && mv -f ${tmpPath} ${finalPath}'`,
+  );
 }

@@ -40,8 +40,13 @@ jobs:
         with:
           fetch-depth: 0          # full history required for gitleaks
 
+      - name: Install gitleaks
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz \
+            | tar -xz -C /usr/local/bin gitleaks
+
       - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        run: gitleaks detect --source . --config .gitleaks.toml --log-opts="origin/main..HEAD" --redact --exit-code 1
 
   # ---------------------------------------------------------------------------
   # JOB 2 — Backend: lint, type-check, unit tests

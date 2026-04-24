@@ -6,7 +6,7 @@
 # Stage 4: production — minimal runtime image
 # =============================================================================
 
-FROM node:20-alpine AS base
+FROM node:25-alpine AS base
 WORKDIR /app
 RUN apk add --no-cache openssl libc6-compat
 COPY package*.json ./
@@ -31,7 +31,7 @@ COPY prisma ./prisma
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 
 # ---- Production ----
-FROM node:20-alpine AS production
+FROM node:25-alpine AS production
 WORKDIR /app
 
 # Security: non-root user

@@ -1,0 +1,101 @@
+version: "3.8"
+
+services:
+  # ── API ─────────────────────────────────────────────────────────────────────
+  api:
+    build: .
+    container_name: mikroserver-api
+    restart: unless-stopped
+    privileged: true
+    pid: host
+    # network_mode: host is NOT used — we use pid:host + nsenter for WG access
+    # while keeping container networking isolated. Justified in DECISIONS.md.
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=jdbc:postgresql://postgres:5432/mikroserver
+      - DATABASE_USER=mikroserver
+      - DATABASE_PASSWORD=${DB_PASSWORD}
+      - REDIS_URL=redis://redis:6379
+      - JWT_PRIVATE_KEY_PEM=/run/secrets/jwt_private_key
+      - JWT_PUBLIC_KEY_PEM=/run/secrets/jwt_public_key
+      - JWT_ISSUER=mikroserver
+      - JWT_AUDIENCE=mikroserver-api
+      - WAVE_WEBHOOK_SECRET=${WAVE_WEBHOOK_SECRET}
+      - WAVE_API_BASE_URL=https://api.wave.com/v1
+      - WG_INTERFACE=wg0
+      - WG_SERVER_ADDRESS=10.66.66.1
+      - WG_SUBNET=10.66.66.0/24
+      - WG_SERVER_PORT=51820
+      - WG_SERVER_ENDPOINT=${VPS_PUBLIC_IP}:51820
+      - WG_SERVER_PUBLIC_KEY=${WG_SERVER_PUBLIC_KEY}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
+      - ENVIRONMENT=production
+      - PORT=8080
+    volumes:
+      - jwt-keys:/run/secrets:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: mikroserver-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mikroserver
+      POSTGRES_USER: mikroserver
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mikroserver"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ───────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: mikroserver-redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redisdata:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Nginx ───────────────────────────────────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: mikroserver-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  redisdata:
+  jwt-keys:

@@ -17,6 +17,11 @@ import { JwtPayload } from "../auth/interfaces/jwt-payload.interface";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { Public } from "../auth/decorators/public.decorator";
 import { UserRole } from "@prisma/client";
+import {
+  FinalizeProvisioningDto,
+  PrepareProvisioningDto,
+  StartProvisioningDto,
+} from "./dto/provisioning.dto";
 
 @ApiTags("provisioning")
 @Controller({ path: "provisioning", version: "1" })
@@ -27,18 +32,7 @@ export class ProvisioningController {
   @Post()
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: "Initiate router provisioning (phone-home flow)" })
-  start(
-    @CurrentUser() user: JwtPayload,
-    @Body()
-    body: {
-      routerName: string;
-      location?: string;
-      apiUsername: string;
-      apiPassword: string;
-      publicIp?: string;
-      apiPort?: number;
-    },
-  ) {
+  start(@CurrentUser() user: JwtPayload, @Body() body: StartProvisioningDto) {
     return this.provisioningService.start(user.sub, {
       routerName: body.routerName,
       location: body.location,
@@ -56,15 +50,7 @@ export class ProvisioningController {
   })
   prepare(
     @CurrentUser() user: JwtPayload,
-    @Body()
-    body: {
-      routerName: string;
-      location?: string;
-      apiUsername?: string;
-      apiPassword?: string;
-      publicIp?: string;
-      apiPort?: number;
-    },
+    @Body() body: PrepareProvisioningDto,
   ) {
     return this.provisioningService.prepare(
       user.sub,
@@ -86,7 +72,7 @@ export class ProvisioningController {
   finalize(
     @Param("id", ParseUUIDPipe) id: string,
     @CurrentUser() user: JwtPayload,
-    @Body() body: { routerIdentity: string; hotspotName: string },
+    @Body() body: FinalizeProvisioningDto,
   ) {
     return this.provisioningService.finalize(
       id,
@@ -103,7 +89,10 @@ export class ProvisioningController {
     @Param("id", ParseUUIDPipe) id: string,
     @CurrentUser() user: JwtPayload,
   ) {
-    const qrDataUrl = await this.provisioningService.getBootstrapQr(id, user.sub);
+    const qrDataUrl = await this.provisioningService.getBootstrapQr(
+      id,
+      user.sub,
+    );
     return { data: { qrDataUrl } };
   }
 

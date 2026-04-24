@@ -1,0 +1,8 @@
+{
+  "backend/src/**/*.{ts,tsx}": [
+    "npm --prefix backend exec eslint --"
+  ],
+  "frontend/src/**/*.{ts,tsx}": [
+    "npm --prefix frontend exec eslint --"
+  ]
+}

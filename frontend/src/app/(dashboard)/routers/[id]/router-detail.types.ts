@@ -122,7 +122,33 @@ export interface PlanSummary {
 
 export type IpBindingType = 'regular' | 'blocked' | 'bypassed';
 
-export type RouterDetailSection = 'live' | 'profiles' | 'bindings' | 'users' | 'migration' | 'history' | 'terminal';
+export type RouterDetailSection = 'live' | 'profiles' | 'bindings' | 'users' | 'migration' | 'history' | 'terminal' | 'access';
+
+export interface RouterAccessCredentials {
+  routerId: string;
+  routerName: string;
+  vpnIp: string;
+  winbox: {
+    address: string;
+    port: number;
+    username: string;
+    password: string | null;
+    deepLink: string;
+  };
+  webfig: {
+    url: string;
+    port: number;
+    username: string;
+    password: string | null;
+  };
+  ssh: {
+    command: string;
+    host: string;
+    port: number;
+    username: string;
+    password: string | null;
+  };
+}
 
 export interface RouterMigrationPreview {
   code: string;

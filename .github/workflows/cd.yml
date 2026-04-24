@@ -1,0 +1,153 @@
+# =============================================================================
+# CD — Mikroserver Production Deployment
+#
+# Triggers:
+#   - Automatically when CI completes successfully on main
+#   - Manually via workflow_dispatch (with optional image tag override)
+#
+# WireGuard SAFETY GUARANTEE:
+#   This workflow NEVER touches wg0, wg-quick, /etc/wireguard, or any host
+#   network interface. It only restarts application containers (api, dashboard).
+#   postgres, redis, nginx are left untouched unless already unhealthy.
+#   The wg0 tunnel is a host systemd service — Docker Compose has no access to it.
+#
+# Zero-downtime strategy:
+#   1. Pull pre-built images from GHCR (no build on VPS)
+#   2. Run db-migrate as a one-shot container
+#   3. docker compose up --no-deps api dashboard (Docker health-checks gate readiness)
+#   4. Verify /api/v1/health/ready returns status:ok within 60s
+#   5. On failure: auto-restore previous IMAGE_TAG and restart
+# =============================================================================
+
+name: CD
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (7-char SHA or 'latest')"
+        required: false
+        default: "latest"
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+
+    # Block if triggered by a failed CI run
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    environment: production    # GitHub Environment — enables required reviewers + secrets scoping
+
+    # Serialise deployments: never run two at once (prevents race on .image_tag file)
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Resolve the image tag to deploy:
+      # - workflow_dispatch: use the input (default "latest")
+      # - workflow_run: use the 7-char SHA of the commit that passed CI
+      - name: Resolve image tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ inputs.image_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=$(echo '${{ github.event.workflow_run.head_sha }}' | cut -c1-7)" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          # Injected as env vars — never appear in the script text that gets logged
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          GHCR_USER: ${{ github.repository_owner }}
+          IMAGE_TAG: ${{ steps.tag.outputs.tag }}
+          REPO: ${{ github.repository }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          envs: GHCR_TOKEN,GHCR_USER,IMAGE_TAG,REPO
+          # Timeout: 10 min — covers pull + migrate + start + health check
+          command_timeout: 10m
+          script: |
+            set -euo pipefail
+
+            COMPOSE="docker compose -f $HOME/mikroserver/infrastructure/docker/docker-compose.prod.yml"
+            DEPLOY_DIR="$HOME/mikroserver"
+
+            echo "==> Deploying image tag: $IMAGE_TAG"
+
+            # ----------------------------------------------------------------
+            # 1. Login to GHCR (credentials never logged — passed via env)
+            # ----------------------------------------------------------------
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+
+            # ----------------------------------------------------------------
+            # 2. Save current tag as rollback point
+            # ----------------------------------------------------------------
+            cd "$DEPLOY_DIR"
+            PREV_TAG=$(cat .image_tag 2>/dev/null || echo "latest")
+            echo "Rollback point: $PREV_TAG"
+
+            # ----------------------------------------------------------------
+            # 3. Pull new images (no build — images built in CI)
+            # ----------------------------------------------------------------
+            IMAGE_TAG="$IMAGE_TAG" $COMPOSE pull api dashboard db-migrate
+
+            # ----------------------------------------------------------------
+            # 4. Run database migrations (one-shot, exits 0 or fails loudly)
+            #    --no-deps: postgres must already be running (it is, always)
+            # ----------------------------------------------------------------
+            IMAGE_TAG="$IMAGE_TAG" $COMPOSE run --rm --no-deps db-migrate
+
+            # ----------------------------------------------------------------
+            # 5. Restart ONLY application containers
+            #    --no-deps: does NOT restart postgres, redis, nginx, certbot
+            #    The WireGuard tunnel (wg0) is a host service — untouched
+            # ----------------------------------------------------------------
+            IMAGE_TAG="$IMAGE_TAG" $COMPOSE up -d --no-deps --remove-orphans api dashboard
+
+            # ----------------------------------------------------------------
+            # 6. Health check — up to 60s (12 × 5s)
+            #    /health/live  → fast liveness (just checks process is alive)
+            #    /health/ready → full readiness (DB + Redis)
+            #    We check /ready to confirm the app reached its dependencies.
+            # ----------------------------------------------------------------
+            echo "Waiting for readiness..."
+            for i in $(seq 1 12); do
+              sleep 5
+              HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/api/v1/health/ready 2>/dev/null || echo "000")
+              if [ "$HTTP_STATUS" = "200" ]; then
+                echo "$IMAGE_TAG" > .image_tag
+                echo "==> Deploy successful: $IMAGE_TAG (was $PREV_TAG)"
+                docker logout ghcr.io
+                exit 0
+              fi
+              echo "  Attempt $i/12 — HTTP $HTTP_STATUS"
+            done
+
+            # ----------------------------------------------------------------
+            # 7. Rollback on failure
+            #    Pull previous image and restart — no migration rollback needed
+            #    (Prisma migrations are additive; no down migration runs here)
+            # ----------------------------------------------------------------
+            echo "==> HEALTH CHECK FAILED — rolling back to $PREV_TAG"
+            IMAGE_TAG="$PREV_TAG" $COMPOSE up -d --no-deps api dashboard
+            echo "$PREV_TAG" > .image_tag
+            docker logout ghcr.io
+            exit 1

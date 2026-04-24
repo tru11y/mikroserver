@@ -19,13 +19,16 @@ import {
   CreateHotspotIpBindingDto,
   CreateHotspotUserProfileDto,
   CreateRouterDto,
+  DisconnectActiveByUsernameDto,
   ListHotspotUsersQueryDto,
   ListRoutersQueryDto,
+  MigrateRoutersDto,
   UpdateHotspotIpBindingDto,
   UpdateHotspotUserProfileConfigDto,
   UpdateHotspotUserProfileDto,
   UpdateRouterDto,
 } from "./dto/router.dto";
+import { FinalizeOnboardingDto } from "./dto/finalize-onboarding.dto";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { JwtPayload } from "../auth/interfaces/jwt-payload.interface";
 import { Roles } from "../auth/decorators/roles.decorator";
@@ -81,6 +84,19 @@ export class RoutersController {
     return this.routersService.create(dto, user.sub, user.role);
   }
 
+  @Post("finalize-onboarding")
+  @Roles(UserRole.ADMIN)
+  @Permissions("routers.manage")
+  @TierLimit("routers")
+  @UseGuards(SaasTierGuard)
+  @ApiOperation({ summary: "Finalize zero-touch onboarding from mobile app" })
+  finalizeOnboarding(
+    @Body() dto: FinalizeOnboardingDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.routersService.finalizeOnboarding(user.sub, dto);
+  }
+
   @Patch(":id")
   @Roles(UserRole.ADMIN)
   @Permissions("routers.manage")
@@ -109,7 +125,8 @@ export class RoutersController {
   @Roles(UserRole.ADMIN)
   @Permissions("routers.manage")
   @ApiOperation({
-    summary: "Get WireGuard bootstrap config for a router (provisions on first call)",
+    summary:
+      "Get WireGuard bootstrap config for a router (provisions on first call)",
   })
   getBootstrap(
     @Param("id", ParseUUIDPipe) id: string,
@@ -148,6 +165,20 @@ export class RoutersController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.routersService.bulkAction(dto, user.sub);
+  }
+
+  @Public()
+  @Post(":id/webfig-session")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      "Get WebFig proxy URL for remote browser access (TCP stream via VPS port 9000+N)",
+  })
+  webfigSession(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload | undefined,
+  ) {
+    return this.routersService.getWebfigSession(id, user?.sub, user?.role);
   }
 
   @Get(":id/live-stats")
@@ -368,7 +399,7 @@ export class RoutersController {
   })
   disconnectActiveByUsername(
     @Param("id", ParseUUIDPipe) id: string,
-    @Body() body: { username: string },
+    @Body() body: DisconnectActiveByUsernameDto,
     @CurrentUser() user: JwtPayload,
   ) {
     return this.routersService.disconnectActiveClientByUsername(
@@ -402,7 +433,7 @@ export class RoutersController {
   migrateToRouter(
     @Param("id", ParseUUIDPipe) id: string,
     @Param("targetId", ParseUUIDPipe) targetId: string,
-    @Body() body: { dryRun?: boolean },
+    @Body() body: MigrateRoutersDto,
     @CurrentUser() user: JwtPayload,
   ) {
     return this.routersService.migrateActiveVouchers(

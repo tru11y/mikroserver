@@ -39,7 +39,10 @@ export class SshGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const routerId = url.searchParams.get("routerId");
 
     if (!token || !routerId) {
-      this.send(ws, "\r\n\x1b[31mErreur : token et routerId requis.\x1b[0m\r\n");
+      this.send(
+        ws,
+        "\r\n\x1b[31mErreur : token et routerId requis.\x1b[0m\r\n",
+      );
       ws.close(4001, "Missing token or routerId");
       return;
     }
@@ -52,7 +55,10 @@ export class SshGateway implements OnGatewayConnection, OnGatewayDisconnect {
       });
       userId = payload.sub;
     } catch {
-      this.send(ws, "\r\n\x1b[31mErreur : token invalide ou expiré.\x1b[0m\r\n");
+      this.send(
+        ws,
+        "\r\n\x1b[31mErreur : token invalide ou expiré.\x1b[0m\r\n",
+      );
       ws.close(4003, "Invalid token");
       return;
     }
@@ -87,7 +93,10 @@ export class SshGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
-    this.send(ws, `\r\n\x1b[36mConnexion SSH vers ${router.wireguardIp}...\x1b[0m\r\n`);
+    this.send(
+      ws,
+      `\r\n\x1b[36mConnexion SSH vers ${router.wireguardIp}...\x1b[0m\r\n`,
+    );
 
     const ssh = new SshClient();
 
@@ -119,7 +128,9 @@ export class SshGateway implements OnGatewayConnection, OnGatewayDisconnect {
         // WebSocket → SSH
         ws.on("message", (data: RawData) => {
           if (stream.writable) {
-            const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer);
+            const buf = Buffer.isBuffer(data)
+              ? data
+              : Buffer.from(data as ArrayBuffer);
             // Handle terminal resize message: JSON {"type":"resize","cols":N,"rows":N}
             try {
               const msg = JSON.parse(buf.toString());
@@ -127,7 +138,9 @@ export class SshGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 stream.setWindow(msg.rows, msg.cols, 0, 0);
                 return;
               }
-            } catch { /* not JSON, treat as raw input */ }
+            } catch {
+              /* not JSON, treat as raw input */
+            }
             stream.write(buf);
           }
         });
@@ -153,7 +166,11 @@ export class SshGateway implements OnGatewayConnection, OnGatewayDisconnect {
   handleDisconnect(ws: WebSocket) {
     const session = this.sessions.get(ws);
     if (session) {
-      try { session.ssh.end(); } catch { /* ignore */ }
+      try {
+        session.ssh.end();
+      } catch {
+        /* ignore */
+      }
       this.sessions.delete(ws);
     }
   }

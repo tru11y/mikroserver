@@ -9,49 +9,159 @@ import {
   View,
 } from "react-native";
 
-type PageProps = PropsWithChildren<{
-  scroll?: boolean;
-  padded?: boolean;
-}>;
+// ─── Design tokens ───────────────────────────────────────────────────────────
 
-export function Page({ children, scroll = true, padded = true }: PageProps) {
+const C = {
+  bgPage:         "#060e1c",
+  bgCard:         "#0d1829",
+  bgInput:        "#060e1c",
+  bgMuted:        "#111f35",
+  border:         "#1e2f4a",
+  primary:        "#6366f1",
+  primaryLight:   "#818cf8",
+  primarySoft:    "#a5b4fc",
+  text:           "#f0f5ff",
+  textSub:        "#c4d3ef",
+  textMuted:      "#6b849f",
+  success:        "#4ade80",
+  successBg:      "#071f10",
+  successBorder:  "#174d2a",
+  danger:         "#f87171",
+  dangerBg:       "#1f0710",
+  dangerBorder:   "#4d1728",
+  warning:        "#fb923c",
+  warningBg:      "#1f1007",
+  warningBorder:  "#4d2c17",
+} as const;
+
+// ─── Layout ──────────────────────────────────────────────────────────────────
+
+export function Page({
+  children,
+  scroll = true,
+  padded = true,
+}: PropsWithChildren<{ scroll?: boolean; padded?: boolean }>) {
   if (!scroll) {
-    return <View style={[styles.page, padded && styles.pagePadding]}>{children}</View>;
+    return <View style={[S.page, padded && S.pagePad]}>{children}</View>;
   }
-
   return (
     <ScrollView
-      style={styles.page}
-      contentContainerStyle={[styles.pageContent, padded && styles.pagePadding]}
+      style={S.page}
+      contentContainerStyle={[S.pageContent, padded && S.pagePad]}
       keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
     >
       {children}
     </ScrollView>
   );
 }
 
-export function SectionCard({ children }: PropsWithChildren) {
-  return <View style={styles.card}>{children}</View>;
+export function Card({
+  children,
+  style,
+}: PropsWithChildren<{ style?: object }>) {
+  return <View style={[S.card, style]}>{children}</View>;
 }
 
-export function SectionTitle({ title, subtitle }: { title: string; subtitle?: string }) {
+// Backward-compat aliases
+export const SectionCard = Card;
+
+// ─── Typography ──────────────────────────────────────────────────────────────
+
+export function ScreenTitle({
+  title,
+  subtitle,
+}: {
+  title: string;
+  subtitle?: string;
+}) {
   return (
-    <View style={styles.sectionTitle}>
-      <Text style={styles.sectionTitleText}>{title}</Text>
-      {subtitle ? <Text style={styles.sectionSubtitle}>{subtitle}</Text> : null}
+    <View style={S.screenTitle}>
+      <Text style={S.screenTitleText}>{title}</Text>
+      {subtitle ? <Text style={S.screenSubtitle}>{subtitle}</Text> : null}
     </View>
   );
 }
 
-type InputFieldProps = {
+export const SectionTitle = ScreenTitle;
+
+export function CardTitle({ children }: PropsWithChildren) {
+  return <Text style={S.cardTitle}>{children}</Text>;
+}
+
+export function Label({ children }: PropsWithChildren) {
+  return <Text style={S.sectionLabel}>{children}</Text>;
+}
+
+// ─── KPI grid ────────────────────────────────────────────────────────────────
+
+export function KpiGrid({ children }: PropsWithChildren) {
+  return <View style={S.kpiGrid}>{children}</View>;
+}
+
+export function KpiCard({
+  label,
+  value,
+  sub,
+  accent = false,
+}: {
   label: string;
-  value: string;
-  onChangeText: (value: string) => void;
-  placeholder?: string;
-  secureTextEntry?: boolean;
-  multiline?: boolean;
-  keyboardType?: "default" | "email-address" | "numeric" | "phone-pad" | "url";
+  value: string | number;
+  sub?: string;
+  accent?: boolean;
+}) {
+  return (
+    <View style={[S.kpiCard, accent && S.kpiCardAccent]}>
+      <Text style={S.kpiLabel}>{label}</Text>
+      <Text style={[S.kpiValue, accent && S.kpiValueAccent]}>{value}</Text>
+      {sub ? <Text style={S.kpiSub}>{sub}</Text> : null}
+    </View>
+  );
+}
+
+// ─── Status badge ─────────────────────────────────────────────────────────────
+
+const BADGE_MAP: Record<string, { bg: string; border: string; text: string }> = {
+  ONLINE:      { bg: "#071f10", border: "#174d2a", text: "#4ade80" },
+  OFFLINE:     { bg: "#111f35", border: "#1e2f4a", text: "#6b849f" },
+  DEGRADED:    { bg: "#1f1007", border: "#4d2c17", text: "#fb923c" },
+  MAINTENANCE: { bg: "#120d20", border: "#2e1f4d", text: "#a78bfa" },
+  COMPLETED:   { bg: "#071f10", border: "#174d2a", text: "#4ade80" },
+  PENDING:     { bg: "#0a0d20", border: "#1f244d", text: "#818cf8" },
+  PROCESSING:  { bg: "#1f1007", border: "#4d2c17", text: "#fb923c" },
+  FAILED:      { bg: "#1f0710", border: "#4d1728", text: "#f87171" },
+  ACTIVE:      { bg: "#071f10", border: "#174d2a", text: "#4ade80" },
+  GENERATED:   { bg: "#0a0d20", border: "#1f244d", text: "#818cf8" },
+  DELIVERED:   { bg: "#071f10", border: "#174d2a", text: "#4ade80" },
+  EXPIRED:     { bg: "#111f35", border: "#1e2f4a", text: "#6b849f" },
+  REVOKED:     { bg: "#1f0710", border: "#4d1728", text: "#f87171" },
+  DELIVERY_FAILED: { bg: "#1f0710", border: "#4d1728", text: "#f87171" },
 };
+
+export function StatusBadge({ status }: { status: string }) {
+  const cfg = BADGE_MAP[status] ?? { bg: "#111f35", border: "#1e2f4a", text: "#6b849f" };
+  return (
+    <View style={[S.badge, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
+      <Text style={[S.badgeText, { color: cfg.text }]}>{status}</Text>
+    </View>
+  );
+}
+
+// ─── Form helpers ────────────────────────────────────────────────────────────
+
+export function FormSection({
+  title,
+  subtitle,
+  children,
+}: PropsWithChildren<{ title?: string; subtitle?: string }>) {
+  return (
+    <View style={S.formSection}>
+      {title ? <Label>{title}</Label> : null}
+      {subtitle ? <Text style={S.formSectionSub}>{subtitle}</Text> : null}
+      <Card>{children}</Card>
+    </View>
+  );
+}
 
 export function InputField({
   label,
@@ -61,85 +171,142 @@ export function InputField({
   secureTextEntry,
   multiline,
   keyboardType = "default",
-}: InputFieldProps) {
+  editable = true,
+  hint,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (v: string) => void;
+  placeholder?: string;
+  secureTextEntry?: boolean;
+  multiline?: boolean;
+  keyboardType?: "default" | "email-address" | "numeric" | "phone-pad" | "url";
+  editable?: boolean;
+  hint?: string;
+}) {
   return (
-    <View style={styles.field}>
-      <Text style={styles.fieldLabel}>{label}</Text>
+    <View style={S.field}>
+      <Text style={S.fieldLabel}>{label}</Text>
       <TextInput
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor="#8a96ad"
+        placeholderTextColor={C.textMuted}
         secureTextEntry={secureTextEntry}
         multiline={multiline}
         keyboardType={keyboardType}
+        editable={editable}
         autoCapitalize="none"
         autoCorrect={false}
-        style={[styles.input, multiline && styles.inputMultiline]}
+        style={[
+          S.input,
+          multiline && S.inputMulti,
+          !editable && S.inputReadonly,
+        ]}
       />
+      {hint ? <Text style={S.fieldHint}>{hint}</Text> : null}
     </View>
   );
 }
 
-type ButtonProps = {
+// ─── Buttons ─────────────────────────────────────────────────────────────────
+
+type ButtonKind = "primary" | "secondary" | "danger" | "ghost";
+
+export function ActionButton({
+  label,
+  onPress,
+  disabled,
+  kind = "primary",
+  loading = false,
+  flex,
+}: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
-  kind?: "primary" | "secondary" | "danger";
-};
-
-export function ActionButton({ label, onPress, disabled, kind = "primary" }: ButtonProps) {
+  kind?: ButtonKind;
+  loading?: boolean;
+  flex?: boolean;
+}) {
   return (
     <Pressable
       onPress={onPress}
-      disabled={disabled}
-      style={[
-        styles.button,
-        kind === "primary" && styles.buttonPrimary,
-        kind === "secondary" && styles.buttonSecondary,
-        kind === "danger" && styles.buttonDanger,
-        disabled && styles.buttonDisabled,
+      disabled={disabled || loading}
+      style={({ pressed }) => [
+        S.btn,
+        kind === "primary"   && S.btnPrimary,
+        kind === "secondary" && S.btnSecondary,
+        kind === "danger"    && S.btnDanger,
+        kind === "ghost"     && S.btnGhost,
+        (disabled || loading) && S.btnDisabled,
+        flex && { flex: 1 },
+        pressed && { opacity: 0.8 },
       ]}
     >
-      <Text
-        style={[
-          styles.buttonText,
-          kind === "primary" && styles.buttonPrimaryText,
-          kind === "secondary" && styles.buttonSecondaryText,
-          kind === "danger" && styles.buttonDangerText,
-        ]}
-      >
-        {label}
-      </Text>
+      {loading ? (
+        <ActivityIndicator
+          size="small"
+          color={kind === "primary" ? "#fff" : C.primarySoft}
+        />
+      ) : (
+        <Text
+          style={[
+            S.btnText,
+            kind !== "primary" && S.btnTextAlt,
+            kind === "danger"  && S.btnTextDanger,
+            kind === "ghost"   && S.btnTextGhost,
+          ]}
+        >
+          {label}
+        </Text>
+      )}
     </Pressable>
   );
 }
 
+// ─── Feedback ────────────────────────────────────────────────────────────────
+
 export function LoadingView({ label = "Chargement..." }: { label?: string }) {
   return (
-    <View style={styles.centeredBlock}>
-      <ActivityIndicator size="large" color="#8bc8ff" />
-      <Text style={styles.mutedText}>{label}</Text>
+    <View style={S.center}>
+      <ActivityIndicator size="large" color={C.primary} />
+      <Text style={S.mutedText}>{label}</Text>
     </View>
   );
 }
 
-export function EmptyState({ title, subtitle }: { title: string; subtitle?: string }) {
+export function EmptyState({
+  title,
+  subtitle,
+}: {
+  title: string;
+  subtitle?: string;
+}) {
   return (
-    <View style={styles.emptyBlock}>
-      <Text style={styles.emptyTitle}>{title}</Text>
-      {subtitle ? <Text style={styles.emptySubtitle}>{subtitle}</Text> : null}
+    <View style={S.empty}>
+      <Text style={S.emptyTitle}>{title}</Text>
+      {subtitle ? <Text style={S.emptySubtitle}>{subtitle}</Text> : null}
     </View>
   );
 }
 
 export function ErrorBanner({ message }: { message: string }) {
   return (
-    <View style={styles.errorBanner}>
-      <Text style={styles.errorText}>{message}</Text>
+    <View style={S.errorBanner}>
+      <Text style={S.errorText}>{message}</Text>
     </View>
   );
 }
+
+export function SuccessBanner({ message }: { message: string }) {
+  return (
+    <View style={S.successBanner}>
+      <Text style={S.successText}>{message}</Text>
+    </View>
+  );
+}
+
+// ─── Data display ────────────────────────────────────────────────────────────
 
 export function KeyValue({
   label,
@@ -149,160 +316,157 @@ export function KeyValue({
   value: string | number;
 }) {
   return (
-    <View style={styles.keyValue}>
-      <Text style={styles.keyValueLabel}>{label}</Text>
-      <Text style={styles.keyValueValue}>{value}</Text>
+    <View style={S.kv}>
+      <Text style={S.kvLabel}>{label}</Text>
+      <Text style={S.kvValue}>{value}</Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  page: {
-    flex: 1,
-    backgroundColor: "#0b1018",
-  },
-  pageContent: {
-    paddingBottom: 24,
+export function Row({
+  children,
+  style,
+}: PropsWithChildren<{ style?: object }>) {
+  return <View style={[S.row, style]}>{children}</View>;
+}
+
+export function Divider() {
+  return <View style={S.divider} />;
+}
+
+// ─── Styles ──────────────────────────────────────────────────────────────────
+
+const S = StyleSheet.create({
+  // Layout
+  page:             { flex: 1, backgroundColor: C.bgPage },
+  pageContent:      { paddingBottom: 36, gap: 14 },
+  pagePad:          { paddingHorizontal: 16, paddingTop: 16 },
+  card:             {
+    backgroundColor: C.bgCard,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 14,
+    padding: 14,
     gap: 12,
   },
-  pagePadding: {
-    paddingHorizontal: 14,
-    paddingTop: 12,
-  },
-  card: {
-    backgroundColor: "#111827",
-    borderWidth: 1,
-    borderColor: "#243248",
-    borderRadius: 12,
-    padding: 12,
-    gap: 10,
-  },
-  sectionTitle: {
-    gap: 3,
-  },
-  sectionTitleText: {
-    color: "#ecf3ff",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  sectionSubtitle: {
-    color: "#a4b2ca",
-    fontSize: 13,
-  },
-  field: {
-    gap: 5,
-  },
-  fieldLabel: {
-    color: "#d6e4fc",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  input: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#2f4668",
-    backgroundColor: "#0a1422",
-    color: "#f2f7ff",
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    fontSize: 14,
-  },
-  inputMultiline: {
-    minHeight: 76,
-    textAlignVertical: "top",
-  },
-  button: {
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  buttonPrimary: {
-    backgroundColor: "#c8f7e1",
-  },
-  buttonSecondary: {
-    backgroundColor: "#1c2b45",
-    borderWidth: 1,
-    borderColor: "#2f4668",
-  },
-  buttonDanger: {
-    backgroundColor: "#441f2a",
-    borderWidth: 1,
-    borderColor: "#813448",
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  buttonText: {
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  buttonPrimaryText: {
-    color: "#082617",
-  },
-  buttonSecondaryText: {
-    color: "#d8e7ff",
-  },
-  buttonDangerText: {
-    color: "#ffc7d5",
-  },
-  centeredBlock: {
-    minHeight: 220,
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 10,
-  },
-  mutedText: {
-    color: "#a9b8d2",
-    fontSize: 13,
-  },
-  emptyBlock: {
-    backgroundColor: "#111827",
-    borderWidth: 1,
-    borderColor: "#243248",
-    borderRadius: 12,
-    padding: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
-  },
-  emptyTitle: {
-    color: "#ecf3ff",
-    fontSize: 15,
-    fontWeight: "700",
-    textAlign: "center",
-  },
-  emptySubtitle: {
-    color: "#a4b2ca",
-    fontSize: 13,
-    textAlign: "center",
-  },
-  errorBanner: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#7d3346",
-    backgroundColor: "#3c1f29",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  errorText: {
-    color: "#ffc9d4",
-    fontSize: 13,
-  },
-  keyValue: {
-    gap: 2,
-  },
-  keyValueLabel: {
-    color: "#90a3c0",
-    fontSize: 11,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  keyValueValue: {
-    color: "#e6f0ff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-});
 
+  // Typography
+  screenTitle:      { gap: 3, paddingBottom: 2 },
+  screenTitleText:  { color: C.text, fontSize: 22, fontWeight: "700", letterSpacing: -0.4 },
+  screenSubtitle:   { color: C.textMuted, fontSize: 13 },
+  cardTitle:        { color: C.text, fontSize: 14, fontWeight: "700" },
+  sectionLabel:     {
+    color: C.textMuted,
+    fontSize: 11,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    paddingHorizontal: 4,
+  },
+
+  // KPI
+  kpiGrid:          { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  kpiCard:          {
+    flex: 1,
+    minWidth: "45%",
+    backgroundColor: C.bgCard,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 14,
+    padding: 14,
+    gap: 4,
+  },
+  kpiCardAccent:    { borderColor: "#2e3260", backgroundColor: "#090c24" },
+  kpiLabel:         { color: C.textMuted, fontSize: 10, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.6 },
+  kpiValue:         { color: C.text, fontSize: 24, fontWeight: "700", letterSpacing: -0.5 },
+  kpiValueAccent:   { color: C.primarySoft },
+  kpiSub:           { color: C.textMuted, fontSize: 11 },
+
+  // Badge
+  badge:            {
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    alignSelf: "flex-start",
+  },
+  badgeText:        { fontSize: 9, fontWeight: "700", letterSpacing: 0.4, textTransform: "uppercase" },
+
+  // Form
+  formSection:      { gap: 6 },
+  formSectionSub:   { color: C.textMuted, fontSize: 11, marginTop: -2 },
+  field:            { gap: 4 },
+  fieldLabel:       { color: C.textSub, fontSize: 12, fontWeight: "600" },
+  fieldHint:        { color: C.textMuted, fontSize: 11, marginTop: 1 },
+  input:            {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.bgInput,
+    color: C.text,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 14,
+  },
+  inputMulti:       { minHeight: 80, textAlignVertical: "top" },
+  inputReadonly:    { opacity: 0.55 },
+
+  // Buttons
+  btn:              {
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 46,
+  },
+  btnPrimary:       { backgroundColor: C.primary },
+  btnSecondary:     { backgroundColor: C.bgMuted, borderWidth: 1, borderColor: C.border },
+  btnDanger:        { backgroundColor: C.dangerBg, borderWidth: 1, borderColor: C.dangerBorder },
+  btnGhost:         { backgroundColor: "transparent" },
+  btnDisabled:      { opacity: 0.4 },
+  btnText:          { color: "#fff", fontSize: 14, fontWeight: "700" },
+  btnTextAlt:       { color: C.textSub },
+  btnTextDanger:    { color: C.danger },
+  btnTextGhost:     { color: C.primarySoft },
+
+  // Feedback
+  center:           { minHeight: 260, justifyContent: "center", alignItems: "center", gap: 12 },
+  mutedText:        { color: C.textMuted, fontSize: 13 },
+  empty:            {
+    backgroundColor: C.bgCard,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 14,
+    padding: 32,
+    alignItems: "center",
+    gap: 6,
+  },
+  emptyTitle:       { color: C.text, fontSize: 15, fontWeight: "700", textAlign: "center" },
+  emptySubtitle:    { color: C.textMuted, fontSize: 13, textAlign: "center" },
+  errorBanner:      {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.dangerBorder,
+    backgroundColor: C.dangerBg,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  errorText:        { color: C.danger, fontSize: 13 },
+  successBanner:    {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.successBorder,
+    backgroundColor: C.successBg,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  successText:      { color: C.success, fontSize: 13 },
+
+  // Data
+  kv:               { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 1 },
+  kvLabel:          { color: C.textMuted, fontSize: 12 },
+  kvValue:          { color: C.text, fontSize: 13, fontWeight: "600" },
+  row:              { flexDirection: "row", gap: 8 },
+  divider:          { height: 1, backgroundColor: C.border },
+});

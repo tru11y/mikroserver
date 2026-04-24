@@ -41,7 +41,9 @@ model User {
   subscriptions_subscriptions_user_idTousers                 subscriptions[] @relation("subscriptions_user_idTousers")
   subscriptions_users_current_subscription_idTosubscriptions subscriptions?  @relation("users_current_subscription_idTosubscriptions", fields: [current_subscription_id], references: [id])
   vouchers                                                   Voucher[]       @relation("UserVouchers")
+  tunnelsOwned     Tunnel[]     @relation("TunnelOwner")
   routersOwned     Router[]     @relation("RouterOwner")
+  ownedPlans       Plan[]       @relation("PlanOwner")
   notifications    Notification[]
   pushSubscriptions PushSubscription[]
   operatorSubscription OperatorSubscription?
@@ -101,6 +103,33 @@ model PasswordResetToken {
   @@map("password_reset_tokens")
 }
 
+model Tunnel {
+  id              String       @id @default(uuid()) @db.Uuid
+  ownerId         String       @map("owner_id") @db.Uuid
+  owner           User         @relation("TunnelOwner", fields: [ownerId], references: [id])
+
+  tunnelIp        String       @unique @map("tunnel_ip") @db.VarChar(45)
+  clientPublicKey String       @unique @map("client_public_key") @db.VarChar(64)
+  serverPublicKey String       @map("server_public_key") @db.VarChar(64)
+
+  status          TunnelStatus @default(PENDING)
+  lastHandshakeAt DateTime?    @map("last_handshake_at")
+  router          Router?
+
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+  deletedAt       DateTime?    @map("deleted_at")
+
+  @@index([ownerId, status])
+  @@map("tunnels")
+}
+
+enum TunnelStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+}
+
 model Router {
   id              String       @id @default(uuid()) @db.Uuid
   name            String       @unique @db.VarChar(100)
@@ -123,6 +152,27 @@ model Router {
   deletedAt       DateTime?    @map("deleted_at")
   ownerId          String?      @map("owner_id") @db.Uuid
   publicIp         String?      @map("public_ip") @db.VarChar(45)
+  winboxPort       Int          @default(8291) @map("winbox_port")
+  webfigPort       Int          @default(80) @map("webfig_port")
+  sshPort          Int          @default(22) @map("ssh_port")
+  accessUsername   String       @default("admin") @map("access_username") @db.VarChar(100)
+  accessPassword   String?      @map("access_password") @db.VarChar(512)
+
+  // ── Zero-touch onboarding fields ──────────────────────────────────────────
+  tunnelId                String?      @unique @map("tunnel_id") @db.Uuid
+  tunnel                  Tunnel?      @relation(fields: [tunnelId], references: [id])
+  agentUsername            String       @default("hsfl-agent") @map("agent_username") @db.VarChar(64)
+  encryptedAgentPassword  String?      @map("encrypted_agent_password")
+  credentialsIv           String?      @map("credentials_iv") @db.VarChar(32)
+  credentialsAuthTag      String?      @map("credentials_auth_tag") @db.VarChar(64)
+  identity                String?      @db.VarChar(128)
+  routerOsVersion         String?      @map("router_os_version") @db.VarChar(32)
+  boardName               String?      @map("board_name") @db.VarChar(64)
+  architecture            String?      @db.VarChar(32)
+  hotspotConfigured       Boolean      @default(false) @map("hotspot_configured")
+  hotspotInterface        String?      @map("hotspot_interface") @db.VarChar(64)
+  hotspotNetwork          String?      @map("hotspot_network") @db.VarChar(32)
+
   auditLogs       AuditLog[]
   sessions        Session[]
   vouchers        Voucher[]
@@ -130,18 +180,36 @@ model Router {
   notifications    Notification[]
   provisioningSessions ProvisioningSession[]
   customerProfiles CustomerProfile[]
+  portMap          RouterPortMap?
 
   @@index([status])
   @@index([wireguardIp])
   @@index([deletedAt])
   @@index([site])
+  @@index([lastSeenAt])
   @@map("routers")
+}
+
+model RouterPortMap {
+  id               String   @id @default(cuid())
+  routerId         String   @unique @map("router_id") @db.Uuid
+  router           Router   @relation(fields: [routerId], references: [id])
+  publicWebfigPort Int      @unique @map("public_webfig_port")
+  publicWinboxPort Int      @unique @map("public_winbox_port")
+  publicSshPort    Int      @unique @map("public_ssh_port")
+  vpnIp            String   @map("vpn_ip") @db.VarChar(45)
+  rulesActive      Boolean  @default(false) @map("rules_active")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@index([publicWebfigPort, publicWinboxPort, publicSshPort])
+  @@map("router_port_maps")
 }
 
 model Plan {
   id              String          @id @default(uuid()) @db.Uuid
   name            String          @db.VarChar(100)
-  slug            String          @unique @db.VarChar(120)
+  slug            String          @db.VarChar(120)
   description     String?         @db.VarChar(500)
   durationMinutes Int             @map("duration_minutes")
   priceXof        Int             @map("price_xof")
@@ -156,12 +224,16 @@ model Plan {
   createdAt       DateTime        @default(now()) @map("created_at")
   updatedAt       DateTime        @updatedAt @map("updated_at")
   deletedAt       DateTime?       @map("deleted_at")
+  /// Propriétaire (opérateur). NULL = plan global SUPER_ADMIN (non utilisé en prod multi-tenant).
+  ownerId         String?         @map("owner_id") @db.Uuid
+  owner           User?           @relation("PlanOwner", fields: [ownerId], references: [id])
   subscriptions   subscriptions[]
   transactions    Transaction[]
   vouchers        Voucher[]
 
+  @@unique([slug, ownerId])
   @@index([status])
-  @@index([slug])
+  @@index([ownerId])
   @@index([deletedAt])
   @@map("plans")
 }
@@ -262,6 +334,7 @@ model Session {
 
   @@index([status])
   @@index([routerId])
+  @@index([mikrotikId])
   @@index([macAddress])
   @@index([startedAt])
   @@index([createdAt])
@@ -395,6 +468,7 @@ model subscriptions {
   @@index([plan_id])
   @@index([status])
   @@index([user_id])
+  @@index([user_id, status])
   @@index([voucher_id])
 }
 
@@ -858,6 +932,7 @@ model SpeedBoost {
 
   @@index([status])
   @@index([sessionId])
+  @@index([routerId])
   @@index([expiresAt])
   @@map("speed_boosts")
 }
@@ -877,6 +952,7 @@ model CommissionPayout {
 
   @@index([resellerId])
   @@index([status])
+  @@index([resellerId, status])
   @@map("commission_payouts")
 }
 

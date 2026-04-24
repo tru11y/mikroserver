@@ -8,6 +8,8 @@ import {
 import { AuditAction, UserRole } from "@prisma/client";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { Permissions } from "../auth/decorators/permissions.decorator";
+import { CurrentUser } from "../../common/decorators/current-user.decorator";
+import { JwtPayload } from "../auth/interfaces/jwt-payload.interface";
 import { AuditService } from "./audit.service";
 import { ListAuditLogsQueryDto } from "./dto/audit.dto";
 
@@ -41,7 +43,13 @@ export class AuditController {
     type: String,
     example: "2026-03-16",
   })
-  listLogs(@Query() query: ListAuditLogsQueryDto) {
-    return this.auditService.findLogs(query);
+  listLogs(
+    @Query() query: ListAuditLogsQueryDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.auditService.findLogs(query, {
+      sub: user.sub,
+      role: user.role,
+    });
   }
 }

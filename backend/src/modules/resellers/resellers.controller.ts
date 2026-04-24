@@ -18,6 +18,18 @@ import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { JwtPayload } from "../auth/interfaces/jwt-payload.interface";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { UserRole, PayoutStatus } from "@prisma/client";
+import {
+  AddCreditDto,
+  ApprovePayoutDto,
+  CommissionTimeSeriesQueryDto,
+  CreateResellerDto,
+  GenerateResellerVouchersDto,
+  ListAllPayoutsQueryDto,
+  ListResellersQueryDto,
+  RejectPayoutDto,
+  RequestPayoutDto,
+  UpdateResellerDto,
+} from "./dto/resellers.dto";
 
 @ApiTags("resellers")
 @Controller({ path: "resellers", version: "1" })
@@ -37,7 +49,7 @@ export class ResellersController {
   @ApiOperation({ summary: "Generate vouchers using reseller credit" })
   generateVouchers(
     @CurrentUser() user: JwtPayload,
-    @Body() body: { planId: string; quantity: number },
+    @Body() body: GenerateResellerVouchersDto,
   ) {
     if (!body.planId) throw new BadRequestException("planId requis.");
     return this.resellersService.resellerGenerateVouchers(
@@ -52,14 +64,9 @@ export class ResellersController {
   @ApiOperation({ summary: "List resellers" })
   findAll(
     @CurrentUser() user: JwtPayload,
-    @Query("page") page?: number,
-    @Query("limit") limit?: number,
+    @Query() query: ListResellersQueryDto,
   ) {
-    return this.resellersService.findAll(
-      user.sub,
-      page ? Number(page) : 1,
-      limit ? Number(limit) : 25,
-    );
+    return this.resellersService.findAll(user.sub, query.page, query.limit);
   }
 
   @Get("stats")
@@ -79,16 +86,7 @@ export class ResellersController {
   @Post()
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: "Create reseller config" })
-  create(
-    @CurrentUser() user: JwtPayload,
-    @Body()
-    body: {
-      userId: string;
-      commissionRate?: number;
-      allowedRouters?: string[];
-      maxVouchersDay?: number;
-    },
-  ) {
+  create(@CurrentUser() user: JwtPayload, @Body() body: CreateResellerDto) {
     return this.resellersService.create(user.sub, body);
   }
 
@@ -97,13 +95,7 @@ export class ResellersController {
   @ApiOperation({ summary: "Update reseller config" })
   update(
     @Param("id", ParseUUIDPipe) id: string,
-    @Body()
-    body: {
-      commissionRate?: number;
-      allowedRouters?: string[];
-      maxVouchersDay?: number;
-      isActive?: boolean;
-    },
+    @Body() body: UpdateResellerDto,
   ) {
     return this.resellersService.update(id, body);
   }
@@ -113,7 +105,7 @@ export class ResellersController {
   @ApiOperation({ summary: "Add credit to reseller" })
   addCredit(
     @Param("id", ParseUUIDPipe) id: string,
-    @Body() body: { amountXof: number },
+    @Body() body: AddCreditDto,
   ) {
     return this.resellersService.addCredit(id, body.amountXof);
   }
@@ -133,13 +125,12 @@ export class ResellersController {
   @ApiOperation({ summary: "Commission time-series for reseller" })
   getMyCommissions(
     @CurrentUser() user: JwtPayload,
-    @Query("period") period?: "daily" | "weekly" | "monthly",
-    @Query("days") days?: number,
+    @Query() query: CommissionTimeSeriesQueryDto,
   ) {
     return this.resellersService.getCommissionTimeSeries(
       user.sub,
-      period ?? "daily",
-      days ? Number(days) : 30,
+      query.period,
+      query.days,
     );
   }
 
@@ -148,7 +139,7 @@ export class ResellersController {
   @ApiOperation({ summary: "Request a commission payout" })
   requestPayout(
     @CurrentUser() user: JwtPayload,
-    @Body() body: { amountXof: number },
+    @Body() body: RequestPayoutDto,
   ) {
     if (!body.amountXof) throw new BadRequestException("amountXof requis.");
     return this.resellersService.requestPayout(user.sub, body.amountXof);
@@ -159,28 +150,23 @@ export class ResellersController {
   @ApiOperation({ summary: "List own payout history" })
   getMyPayouts(
     @CurrentUser() user: JwtPayload,
-    @Query("page") page?: number,
-    @Query("limit") limit?: number,
+    @Query() query: ListResellersQueryDto,
   ) {
     return this.resellersService.getPayoutHistory(
       user.sub,
-      page ? Number(page) : 1,
-      limit ? Number(limit) : 25,
+      query.page,
+      query.limit,
     );
   }
 
   @Get("payouts")
   @Roles(UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: "List all payout requests (super admin)" })
-  listPayouts(
-    @Query("status") status?: PayoutStatus,
-    @Query("page") page?: number,
-    @Query("limit") limit?: number,
-  ) {
+  listPayouts(@Query() query: ListAllPayoutsQueryDto) {
     return this.resellersService.listAllPayouts(
-      status,
-      page ? Number(page) : 1,
-      limit ? Number(limit) : 25,
+      query.status,
+      query.page,
+      query.limit,
     );
   }
 
@@ -189,7 +175,7 @@ export class ResellersController {
   @ApiOperation({ summary: "Approve payout + record Wave reference" })
   approvePayout(
     @Param("id", ParseUUIDPipe) id: string,
-    @Body() body: { waveReference?: string; notes?: string },
+    @Body() body: ApprovePayoutDto,
   ) {
     return this.resellersService.processPayout(
       id,
@@ -204,7 +190,7 @@ export class ResellersController {
   @ApiOperation({ summary: "Reject payout (credits refunded)" })
   rejectPayout(
     @Param("id", ParseUUIDPipe) id: string,
-    @Body() body: { notes?: string },
+    @Body() body: RejectPayoutDto,
   ) {
     return this.resellersService.processPayout(
       id,

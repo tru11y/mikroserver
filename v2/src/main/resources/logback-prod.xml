@@ -1,0 +1,22 @@
+<configuration>
+    <statusListener class="ch.qos.logback.core.status.NopStatusListener" />
+
+    <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <includeMdcKeyName>correlationId</includeMdcKeyName>
+            <includeMdcKeyName>operatorId</includeMdcKeyName>
+            <includeMdcKeyName>userId</includeMdcKeyName>
+            <timeZone>UTC</timeZone>
+        </encoder>
+    </appender>
+
+    <logger name="io.ktor" level="WARN" />
+    <logger name="org.jetbrains.exposed" level="WARN" />
+    <logger name="io.lettuce" level="WARN" />
+    <logger name="io.netty" level="WARN" />
+    <logger name="com.mikroserver" level="INFO" />
+
+    <root level="WARN">
+        <appender-ref ref="JSON" />
+    </root>
+</configuration>

@@ -1,7 +1,37 @@
+import * as net from "net";
 import type { Prisma } from "@prisma/client";
 import { RouterStatus } from "@prisma/client";
 import type { MikroTikModule, RouterHealthResult } from "./router-api.types";
 import { mergeRouterMetadata } from "./router-api.types";
+
+const TCP_PROBE_TIMEOUT_MS = 3000;
+
+/**
+ * TCP-only reachability probe — no auth attempt.
+ * Returns false if the host:port is unreachable within the timeout.
+ * This prevents spurious RouterOS login-failure entries in the router's log
+ * when the VPN tunnel is down or the API port is not yet reachable.
+ */
+function tcpProbe(host: string, port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = net.createConnection({ host, port, family: 4 });
+    const timer = setTimeout(() => {
+      socket.destroy();
+      resolve(false);
+    }, TCP_PROBE_TIMEOUT_MS);
+
+    socket.once("connect", () => {
+      clearTimeout(timer);
+      socket.destroy();
+      resolve(true);
+    });
+
+    socket.once("error", () => {
+      clearTimeout(timer);
+      resolve(false);
+    });
+  });
+}
 
 // Number of consecutive health check failures before a router is marked OFFLINE.
 // This prevents a single transient network blip from triggering an OFFLINE alert.
@@ -42,6 +72,48 @@ export async function checkRouterHealthStatus(
   router: RouterHealthTarget,
   deps: RouterHealthDeps,
 ): Promise<RouterHealthResult> {
+  // ── TCP pre-check (3s) ────────────────────────────────────────────────────
+  // Test TCP reachability before attempting RouterOS auth.
+  // If the tunnel is down this returns fast without generating a login-failure
+  // entry in the MikroTik router's log (which happens on auth attempt).
+  const apiReachable = await tcpProbe(router.wireguardIp, router.apiPort);
+
+  if (!apiReachable) {
+    const errMsg = `API port ${router.apiPort} unreachable on ${router.wireguardIp} (TCP probe timed out)`;
+
+    const currentMeta =
+      router.metadata &&
+      typeof router.metadata === "object" &&
+      !Array.isArray(router.metadata)
+        ? (router.metadata as Record<string, unknown>)
+        : {};
+
+    const consecutiveHealthFailures =
+      typeof currentMeta.consecutiveHealthFailures === "number"
+        ? currentMeta.consecutiveHealthFailures + 1
+        : 1;
+
+    const newStatus =
+      consecutiveHealthFailures >= OFFLINE_FAILURE_THRESHOLD
+        ? RouterStatus.OFFLINE
+        : router.status;
+
+    await deps.prisma.router.update({
+      where: { id: router.id },
+      data: {
+        status: newStatus,
+        metadata: mergeRouterMetadata(router.metadata, {
+          lastHealthCheckAt: new Date().toISOString(),
+          lastHealthCheckError: errMsg,
+          consecutiveHealthFailures,
+          apiReachable: false,
+        }),
+      },
+    });
+
+    return { online: false, newStatus, error: errMsg };
+  }
+
   try {
     await deps.runIdentityCheck({
       mikroNode: deps.mikroNode,

@@ -157,4 +157,23 @@ export const routersApi = {
       { dryRun },
       withRouterHeavyTimeout,
     ),
+  getAccess: (id: string) => apiClient.get(`/routers/${id}/access`),
+  updateAccess: (
+    id: string,
+    data: {
+      winboxPort?: number;
+      webfigPort?: number;
+      sshPort?: number;
+      accessUsername?: string;
+      accessPassword?: string;
+    },
+  ) => apiClient.put(`/routers/${id}/access`, data),
+  testAccess: (id: string) => apiClient.get(`/routers/${id}/access/test`),
+  portMap: (id: string) => apiClient.get(`/routers/${id}/port-map`),
+  allocatePortMap: (id: string, vpnIp?: string) =>
+    apiClient.post(`/routers/${id}/port-map`, vpnIp ? { vpnIp } : {}),
+  deletePortMap: (id: string) => apiClient.delete(`/routers/${id}/port-map`),
+  testPortMap: (id: string) => apiClient.get(`/routers/${id}/port-map/test`),
+  applyPortMapRules: (id: string) =>
+    apiClient.post(`/routers/${id}/port-map/apply-rules`),
 };

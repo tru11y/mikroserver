@@ -1,264 +1,198 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Modal, ScrollView, Text, View } from "react-native";
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import {
-  api,
-  extractErrorMessage,
-  type CreateUserPayload,
-  type UserItem,
+  api, extractErrorMessage,
+  type CreateUserPayload, type UserItem,
 } from "@/src/lib/api";
 import { formatDateTime, formatShortDate } from "@/src/lib/format";
 import { useAuthGuard } from "@/src/hooks/use-auth-guard";
 import {
   ActionButton,
+  Card,
   EmptyState,
   ErrorBanner,
+  FormSection,
   InputField,
   LoadingView,
   Page,
-  SectionCard,
   SectionTitle,
+  StatusBadge,
 } from "@/src/components/ui";
 
-type FormState = {
-  email: string;
-  firstName: string;
-  lastName: string;
-  password: string;
-  phone: string;
-};
-
-const EMPTY_FORM: FormState = {
-  email: "",
-  firstName: "",
-  lastName: "",
-  password: "",
-  phone: "",
-};
+type FormState = { email: string; firstName: string; lastName: string; password: string; phone: string };
+const EMPTY: FormState = { email: "", firstName: "", lastName: "", password: "", phone: "" };
 
 export default function ResellersScreen() {
   const guard = useAuthGuard();
-  const qc = useQueryClient();
+  const qc    = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [form,      setForm]      = useState<FormState>(EMPTY);
   const [formError, setFormError] = useState<string | null>(null);
+
+  const patch = (p: Partial<FormState>) => setForm((f) => ({ ...f, ...p }));
 
   const usersQuery = useQuery({
     queryKey: ["users", "resellers"],
-    queryFn: () => api.users.resellers(),
+    queryFn:  () => api.users.resellers(),
     refetchInterval: 30_000,
   });
 
-  const createMutation = useMutation({
-    mutationFn: (payload: CreateUserPayload) => api.users.create(payload),
+  const createMut = useMutation({
+    mutationFn: (p: CreateUserPayload) => api.users.create(p),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["users", "resellers"] });
-      setShowCreate(false);
-      setForm(EMPTY_FORM);
-      setFormError(null);
+      setShowCreate(false); setForm(EMPTY); setFormError(null);
     },
-    onError: (error) => setFormError(extractErrorMessage(error)),
+    onError: (e) => setFormError(extractErrorMessage(e)),
   });
 
-  const statusMutation = useMutation({
-    mutationFn: async (payload: { id: string; action: "suspend" | "activate" }) => {
-      if (payload.action === "suspend") {
-        return api.users.suspend(payload.id);
-      }
-      return api.users.activate(payload.id);
-    },
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["users", "resellers"] });
-    },
+  const statusMut = useMutation({
+    mutationFn: (p: { id: string; action: "suspend" | "activate" }) =>
+      p.action === "suspend" ? api.users.suspend(p.id) : api.users.activate(p.id),
+    onSuccess: async () => qc.invalidateQueries({ queryKey: ["users", "resellers"] }),
   });
 
-  const removeMutation = useMutation({
+  const removeMut = useMutation({
     mutationFn: (id: string) => api.users.remove(id),
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["users", "resellers"] });
-    },
+    onSuccess: async () => qc.invalidateQueries({ queryKey: ["users", "resellers"] }),
   });
 
   const users = usersQuery.data ?? [];
-  const stats = useMemo(() => {
-    const active = users.filter((user) => user.status === "ACTIVE").length;
-    const suspended = users.filter((user) => user.status === "SUSPENDED").length;
-    return { total: users.length, active, suspended };
-  }, [users]);
+  const stats = useMemo(() => ({
+    total: users.length,
+    active: users.filter((u) => u.status === "ACTIVE").length,
+    suspended: users.filter((u) => u.status === "SUSPENDED").length,
+  }), [users]);
 
   async function createReseller() {
     if (!form.email || !form.firstName || !form.lastName || !form.password) {
-      setFormError("Tous les champs obligatoires doivent être remplis.");
-      return;
+      setFormError("Tous les champs obligatoires doivent être remplis."); return;
     }
-
     if (form.password.length < 12) {
-      setFormError("Le mot de passe doit contenir au moins 12 caractères.");
-      return;
+      setFormError("Le mot de passe doit contenir au moins 12 caractères."); return;
     }
-
-    await createMutation.mutateAsync({
-      email: form.email.trim(),
-      firstName: form.firstName.trim(),
-      lastName: form.lastName.trim(),
-      password: form.password,
-      role: "RESELLER",
-      phone: form.phone.trim() || undefined,
+    await createMut.mutateAsync({
+      email: form.email.trim(), firstName: form.firstName.trim(),
+      lastName: form.lastName.trim(), password: form.password,
+      role: "RESELLER", phone: form.phone.trim() || undefined,
     });
   }
 
   function confirmRemove(user: UserItem) {
-    Alert.alert(
-      "Supprimer le revendeur",
-      `${user.firstName} ${user.lastName} sera supprimé.`,
-      [
-        { text: "Annuler", style: "cancel" },
-        {
-          text: "Supprimer",
-          style: "destructive",
-          onPress: () => removeMutation.mutate(user.id),
-        },
-      ],
-    );
+    Alert.alert("Supprimer le revendeur", `${user.firstName} ${user.lastName} sera supprimé.`, [
+      { text: "Annuler", style: "cancel" },
+      { text: "Supprimer", style: "destructive", onPress: () => removeMut.mutate(user.id) },
+    ]);
   }
 
   if (!guard.isReady || guard.isBlocked) {
-    return (
-      <Page scroll={false}>
-        <LoadingView label="Chargement des revendeurs..." />
-      </Page>
-    );
+    return <Page scroll={false}><LoadingView label="Chargement des revendeurs..." /></Page>;
   }
-
   if (usersQuery.isLoading) {
-    return (
-      <Page scroll={false}>
-        <LoadingView label="Chargement des revendeurs..." />
-      </Page>
-    );
+    return <Page scroll={false}><LoadingView label="Chargement des revendeurs..." /></Page>;
   }
-
   if (usersQuery.error) {
-    return (
-      <Page>
-        <ErrorBanner message="Impossible de charger les revendeurs." />
-      </Page>
-    );
+    return <Page><ErrorBanner message="Impossible de charger les revendeurs." /></Page>;
   }
 
   return (
-    <Page>
-      <SectionTitle
-        title="Revendeurs"
-        subtitle={`${stats.total} comptes · ${stats.active} actifs · ${stats.suspended} suspendus`}
-      />
+    <>
+      <Page>
+        <Card>
+          <View style={S.summaryRow}>
+            <View>
+              <Text style={S.summaryCount}>{stats.total} revendeurs</Text>
+              <Text style={S.summaryMeta}>{stats.active} actifs · {stats.suspended} suspendus</Text>
+            </View>
+            <ActionButton label="Ajouter" onPress={() => setShowCreate(true)} />
+          </View>
+        </Card>
 
-      <SectionCard>
-        <ActionButton label="Nouveau revendeur" onPress={() => setShowCreate(true)} />
-      </SectionCard>
-
-      {users.length === 0 ? (
-        <EmptyState title="Aucun revendeur" subtitle="Crée le premier compte revendeur." />
-      ) : (
-        <SectionCard>
-          {users.map((user) => (
-            <View
-              key={user.id}
-              style={{
-                borderWidth: 1,
-                borderColor: "#2a3f5e",
-                borderRadius: 10,
-                padding: 10,
-                marginBottom: 8,
-                gap: 4,
-              }}
-            >
-              <Text style={{ color: "#eef5ff", fontWeight: "700", fontSize: 14 }}>
-                {user.firstName} {user.lastName}
-              </Text>
-              <Text style={{ color: "#bed0ec", fontSize: 13 }}>{user.email}</Text>
-              <Text style={{ color: "#97adcf", fontSize: 12 }}>
-                {user.phone || "Sans téléphone"} · {user.status}
-              </Text>
-              <Text style={{ color: "#8197bc", fontSize: 12 }}>
-                Dernière connexion: {formatDateTime(user.lastLoginAt)} · Créé le{" "}
-                {formatShortDate(user.createdAt)}
-              </Text>
+        {users.length === 0 ? (
+          <EmptyState title="Aucun revendeur" subtitle="Crée le premier compte revendeur." />
+        ) : (
+          users.map((user) => (
+            <View key={user.id} style={S.userCard}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={S.userName}>{user.firstName} {user.lastName}</Text>
+                  <Text style={S.userEmail}>{user.email}</Text>
+                  <Text style={S.userMeta}>
+                    {user.phone || "Sans tél."} · Depuis {formatShortDate(user.createdAt)}
+                  </Text>
+                  <Text style={S.userMeta}>
+                    Connexion: {formatDateTime(user.lastLoginAt)}
+                  </Text>
+                </View>
+                <StatusBadge status={user.status} />
+              </View>
               <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
-                {user.status === "ACTIVE" ? (
-                  <ActionButton
-                    kind="secondary"
-                    label="Suspendre"
-                    onPress={() => statusMutation.mutate({ id: user.id, action: "suspend" })}
-                    disabled={statusMutation.isPending}
-                  />
-                ) : (
-                  <ActionButton
-                    kind="secondary"
-                    label="Réactiver"
-                    onPress={() => statusMutation.mutate({ id: user.id, action: "activate" })}
-                    disabled={statusMutation.isPending}
-                  />
-                )}
                 <ActionButton
-                  kind="danger"
-                  label="Supprimer"
-                  onPress={() => confirmRemove(user)}
-                  disabled={removeMutation.isPending}
+                  flex kind="ghost"
+                  label={user.status === "ACTIVE" ? "Suspendre" : "Réactiver"}
+                  onPress={() => statusMut.mutate({ id: user.id, action: user.status === "ACTIVE" ? "suspend" : "activate" })}
+                  disabled={statusMut.isPending}
                 />
+                <ActionButton flex kind="danger" label="Supprimer"
+                  onPress={() => confirmRemove(user)} disabled={removeMut.isPending} />
               </View>
             </View>
-          ))}
-        </SectionCard>
-      )}
+          ))
+        )}
+      </Page>
 
       <Modal visible={showCreate} animationType="slide" onRequestClose={() => setShowCreate(false)}>
         <ScrollView
-          style={{ flex: 1, backgroundColor: "#0b1018" }}
-          contentContainerStyle={{ padding: 14, gap: 10, paddingBottom: 24 }}
+          style={S.modal}
+          contentContainerStyle={S.modalContent}
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <SectionTitle title="Créer un revendeur" />
-          <SectionCard>
-            {formError ? <ErrorBanner message={formError} /> : null}
-            <InputField
-              label="Prénom"
-              value={form.firstName}
-              onChangeText={(value) => setForm((f) => ({ ...f, firstName: value }))}
-            />
-            <InputField
-              label="Nom"
-              value={form.lastName}
-              onChangeText={(value) => setForm((f) => ({ ...f, lastName: value }))}
-            />
-            <InputField
-              label="Email"
-              value={form.email}
-              onChangeText={(value) => setForm((f) => ({ ...f, email: value }))}
-              keyboardType="email-address"
-            />
-            <InputField
-              label="Téléphone"
-              value={form.phone}
-              onChangeText={(value) => setForm((f) => ({ ...f, phone: value }))}
-              keyboardType="phone-pad"
-            />
-            <InputField
-              label="Mot de passe"
-              value={form.password}
-              onChangeText={(value) => setForm((f) => ({ ...f, password: value }))}
-              secureTextEntry
-            />
-            <ActionButton
-              label={createMutation.isPending ? "Création..." : "Créer le compte"}
-              onPress={() => void createReseller()}
-              disabled={createMutation.isPending}
-            />
-            <ActionButton kind="secondary" label="Fermer" onPress={() => setShowCreate(false)} />
-          </SectionCard>
+          <View style={S.modalHeader}>
+            <Text style={S.modalTitle}>Créer un revendeur</Text>
+            <Pressable onPress={() => setShowCreate(false)} style={S.closeBtn} hitSlop={10}>
+              <Text style={S.closeBtnText}>✕</Text>
+            </Pressable>
+          </View>
+          {formError ? <ErrorBanner message={formError} /> : null}
+
+          <FormSection title="Identité">
+            <InputField label="Prénom *" value={form.firstName} onChangeText={(v) => patch({ firstName: v })} />
+            <InputField label="Nom *"    value={form.lastName}  onChangeText={(v) => patch({ lastName: v })} />
+            <InputField label="Email *"  value={form.email}     onChangeText={(v) => patch({ email: v })} keyboardType="email-address" />
+            <InputField label="Téléphone" value={form.phone}    onChangeText={(v) => patch({ phone: v })} keyboardType="phone-pad" />
+          </FormSection>
+
+          <FormSection title="Accès">
+            <InputField label="Mot de passe * (min. 12 car.)" value={form.password}
+              onChangeText={(v) => patch({ password: v })} secureTextEntry />
+          </FormSection>
+
+          <ActionButton
+            label={createMut.isPending ? "Création..." : "Créer le compte"}
+            onPress={() => void createReseller()}
+            disabled={createMut.isPending} loading={createMut.isPending}
+          />
+          <ActionButton kind="ghost" label="Annuler" onPress={() => setShowCreate(false)} />
         </ScrollView>
       </Modal>
-    </Page>
+    </>
   );
 }
 
+const S = StyleSheet.create({
+  summaryRow:   { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  summaryCount: { color: "#f0f5ff", fontSize: 17, fontWeight: "700" },
+  summaryMeta:  { color: "#6b849f", fontSize: 12 },
+  userCard:     { backgroundColor: "#0d1829", borderWidth: 1, borderColor: "#1e2f4a", borderRadius: 14, padding: 14, gap: 6 },
+  userName:     { color: "#f0f5ff", fontWeight: "700", fontSize: 15 },
+  userEmail:    { color: "#c4d3ef", fontSize: 13 },
+  userMeta:     { color: "#6b849f", fontSize: 12 },
+  modal:        { flex: 1, backgroundColor: "#060e1c" },
+  modalContent: { padding: 16, paddingBottom: 40, gap: 14 },
+  modalHeader:  { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  modalTitle:   { color: "#f0f5ff", fontSize: 18, fontWeight: "700", flex: 1 },
+  closeBtn:     { padding: 4 },
+  closeBtnText: { color: "#6b849f", fontSize: 20 },
+});

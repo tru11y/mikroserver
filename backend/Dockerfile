@@ -38,7 +38,7 @@ WORKDIR /app
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nestjs -u 1001 -G nodejs
 
-RUN apk add --no-cache openssl curl
+RUN apk add --no-cache openssl curl wireguard-tools util-linux
 
 # Copy production node_modules
 COPY --from=build /tmp/prod_modules ./node_modules
@@ -46,10 +46,6 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=build /app/prisma ./prisma
 COPY package*.json ./
-
-# Set ownership
-RUN chown -R nestjs:nodejs /app
-USER nestjs
 
 EXPOSE 3000
 

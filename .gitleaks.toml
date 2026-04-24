@@ -1,0 +1,15 @@
+title = "Mikroserver gitleaks config"
+
+[allowlist]
+  description = "Test fixtures, example env files, and placeholder credentials"
+  paths = [
+    '''backend/test/testcontainers\.environment\.ts''',
+    '''\.env\.example$''',
+    '''environments/.*\.env\.example$''',
+    '''v2/.*''',
+  ]
+  regexes = [
+    '''aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa''',
+    '''bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb''',
+    '''0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef''',
+  ]

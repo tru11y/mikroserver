@@ -18,6 +18,11 @@ import { Observable } from "rxjs";
 import { NotificationsService } from "./notifications.service";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { JwtPayload } from "../auth/interfaces/jwt-payload.interface";
+import {
+  ListNotificationsQueryDto,
+  PushSubscribeDto,
+  PushUnsubscribeDto,
+} from "./dto/notifications.dto";
 
 @ApiTags("notifications")
 @Controller({ path: "notifications", version: "1" })
@@ -37,15 +42,13 @@ export class NotificationsController {
   @ApiOperation({ summary: "List notifications" })
   findAll(
     @CurrentUser() user: JwtPayload,
-    @Query("page") page?: number,
-    @Query("limit") limit?: number,
-    @Query("unreadOnly") unreadOnly?: string,
+    @Query() query: ListNotificationsQueryDto,
   ) {
     return this.notificationsService.findAll(
       user.sub,
-      page ? Number(page) : 1,
-      limit ? Number(limit) : 20,
-      unreadOnly === "true",
+      query.page,
+      query.limit,
+      Boolean(query.unreadOnly),
     );
   }
 
@@ -73,16 +76,7 @@ export class NotificationsController {
 
   @Post("push/subscribe")
   @ApiOperation({ summary: "Register Web Push subscription" })
-  subscribe(
-    @CurrentUser() user: JwtPayload,
-    @Body()
-    body: {
-      endpoint: string;
-      p256dh: string;
-      auth: string;
-      userAgent?: string;
-    },
-  ) {
+  subscribe(@CurrentUser() user: JwtPayload, @Body() body: PushSubscribeDto) {
     return this.notificationsService.registerPushSubscription(
       user.sub,
       body.endpoint,
@@ -97,7 +91,7 @@ export class NotificationsController {
   @ApiOperation({ summary: "Remove Web Push subscription" })
   unsubscribe(
     @CurrentUser() user: JwtPayload,
-    @Body() body: { endpoint: string },
+    @Body() body: PushUnsubscribeDto,
   ) {
     return this.notificationsService.removePushSubscription(
       user.sub,

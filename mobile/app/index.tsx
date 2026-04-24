@@ -13,7 +13,7 @@ export default function EntryScreen() {
     }
 
     if (auth.isAuthenticated) {
-      router.replace("/home");
+      router.replace("/(tabs)");
       return;
     }
 

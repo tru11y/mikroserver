@@ -18,6 +18,7 @@ import {
   RouterSyncSummary,
 } from "./router-api.service";
 import { AuditService } from "../audit/audit.service";
+import { CredentialsService } from "./credentials.service";
 import {
   BulkRouterActionDto,
   CreateHotspotIpBindingDto,
@@ -31,6 +32,10 @@ import {
   UpdateRouterDto,
 } from "./dto/router.dto";
 import {
+  FinalizeOnboardingDto,
+  RouterOnboardingResponseDto,
+} from "./dto/finalize-onboarding.dto";
+import {
   Router,
   AuditAction,
   RouterStatus,
@@ -42,11 +47,21 @@ import {
   generateWireGuardKeyPair,
   addWireGuardPeer,
   getVpsPublicKey,
-  isPeerConnected,
+  removeWireGuardPeer,
 } from "../provisioning/wireguard.utils";
+import { WgIpPoolService } from "./wg-ip-pool.service";
+import { QueueService } from "../queue/queue.service";
+import {
+  deriveRouterAccessKey,
+  encryptRouterAccessPassword,
+} from "./router-access.crypto";
+import { executeRouterOperationResult } from "./router-routeros.transport";
+import { runCommand, runParsedCommand } from "./router-api.commands";
+import type { MikroTikModule } from "./router-api.types";
+// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+const MikroNode = require("mikrotik") as MikroTikModule;
 
 const WG_SUBNET = "10.66.66";
-const WG_SERVER_IP = "10.66.66.1";
 const WG_LISTEN_PORT = 51820;
 
 // site and tags are now first-class columns on Router — no longer in metadata.
@@ -67,13 +82,32 @@ type BulkActionErrorItem = {
 @Injectable()
 export class RoutersService {
   private readonly logger = new Logger(RoutersService.name);
+  private routerAccessKey: Buffer | null = null;
+  private isRecoveringProvisionJobs = false;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly routerApiService: RouterApiService,
     private readonly auditService: AuditService,
     private readonly configService: ConfigService,
+    private readonly credentialsService: CredentialsService,
+    private readonly wgIpPool: WgIpPoolService,
+    private readonly queueService: QueueService,
   ) {}
+
+  private getRouterAccessKey(): Buffer {
+    if (this.routerAccessKey) {
+      return this.routerAccessKey;
+    }
+
+    const raw = this.configService.get<string>("ENCRYPTION_KEY");
+    if (!raw) {
+      throw new Error("ENCRYPTION_KEY env var is not set");
+    }
+
+    this.routerAccessKey = deriveRouterAccessKey(raw);
+    return this.routerAccessKey;
+  }
 
   // ---------------------------------------------------------------------------
   // Periodic background health check — every 5 minutes
@@ -229,7 +263,25 @@ export class RoutersService {
     dto: CreateRouterDto,
     adminId: string,
     requestingUserRole?: string,
-  ): Promise<RouterSafeView> {
+  ): Promise<
+    RouterSafeView & {
+      wgProvision: {
+        privateKey: string;
+        wgIp: string;
+        vpsPublicKey: string;
+        vpsEndpoint: string;
+        listenPort: number;
+      } | null;
+    }
+  > {
+    // ── Direct mode: mobile validated credentials locally, no WG tunnel needed ─
+    const isDirectMode = !!dto.address;
+
+    if (isDirectMode) {
+      return this.createDirect(dto, adminId, requestingUserRole);
+    }
+
+    // ── Legacy WireGuard tunnel mode ────────────────────────────────────────────
     // Check for existing router with same name (including deleted ones)
     // Note: wireguardIp from form is the local IP stored in metadata; DB wireguardIp is assigned by WG provisioning
     const existing = await this.prisma.router.findFirst({
@@ -246,13 +298,13 @@ export class RoutersService {
       const restored = await this.prisma.router.update({
         where: { id: existing.id },
         data: {
-          name: dto.name,
+          name: dto.name!,
           description: dto.description,
           location: dto.location,
           wireguardIp: null, // will be set by WG provisioning
           apiPort: dto.apiPort ?? 8728,
-          apiUsername: dto.apiUsername,
-          apiPasswordHash: dto.apiPassword,
+          apiUsername: dto.apiUsername ?? "admin",
+          apiPasswordHash: dto.apiPassword ?? "",
           hotspotProfile: dto.hotspotProfile ?? "default",
           hotspotServer: dto.hotspotServer ?? "hotspot1",
           site: dto.site?.trim() || null,
@@ -271,12 +323,10 @@ export class RoutersService {
         description: `Router "${restored.name}" restored${localIp ? ` (local IP: ${localIp})` : ""}`,
       });
 
-      // Trigger async WG provisioning (non-blocking)
-      void this.provisionWireGuard(restored.id).catch((err: unknown) => {
-        this.logger.warn(`[WG] Provisioning failed for ${restored.id}: ${String(err)}`);
-      });
-
-      return this.findOne(restored.id);
+      // Generate WG config for mobile to push directly to router
+      const wgProvision = await this.generateWgProvision(restored.id);
+      const view = await this.findOne(restored.id);
+      return { ...view, wgProvision };
     }
 
     // ADMIN users automatically own the router they create
@@ -287,13 +337,13 @@ export class RoutersService {
 
     const router = await this.prisma.router.create({
       data: {
-        name: dto.name,
+        name: dto.name!,
         description: dto.description,
         location: dto.location,
         wireguardIp: null, // will be set once WireGuard tunnel establishes
         apiPort: dto.apiPort ?? 8728,
-        apiUsername: dto.apiUsername,
-        apiPasswordHash: dto.apiPassword,
+        apiUsername: dto.apiUsername ?? "admin",
+        apiPasswordHash: dto.apiPassword ?? "",
         hotspotProfile: dto.hotspotProfile ?? "default",
         hotspotServer: dto.hotspotServer ?? "hotspot1",
         site: dto.site?.trim() || null,
@@ -311,12 +361,281 @@ export class RoutersService {
       description: `Router "${router.name}" added${localIp ? ` (local IP: ${localIp})` : ""}`,
     });
 
-    // Trigger async WG provisioning (non-blocking — don't await)
-    void this.provisionWireGuard(router.id).catch((err: unknown) => {
-      this.logger.warn(`[WG] Provisioning failed for ${router.id}: ${String(err)}`);
+    // Generate WG config synchronously — mobile will push it to the router directly
+    const wgProvision = await this.generateWgProvision(router.id);
+    const view = await this.findOne(router.id);
+    return { ...view, wgProvision };
+  }
+
+  /**
+   * Direct mode: mobile validated credentials on the LAN, sends router metadata.
+   * Backend persists only — no WireGuard provisioning, no outbound router connection.
+   */
+  private async createDirect(
+    dto: CreateRouterDto,
+    adminId: string,
+    requestingUserRole?: string,
+  ): Promise<RouterSafeView & { wgProvision: null }> {
+    const address = dto.address!;
+    const username = dto.username ?? dto.apiUsername ?? "admin";
+    const password = dto.password ?? dto.apiPassword ?? "";
+    const encryptedAccessPassword = encryptRouterAccessPassword(
+      password,
+      this.getRouterAccessKey(),
+    );
+    const port = dto.port ?? 80;
+    const identity = dto.identity ?? "MikroTik";
+    const comment = dto.comment ?? dto.description;
+
+    // Auto-generate a unique display name
+    const baseName = dto.name?.trim() || `${identity} (${address})`;
+    const name = await this.resolveUniqueName(baseName);
+
+    const resolvedOwnerId =
+      dto.ownerId ?? (requestingUserRole === "ADMIN" ? adminId : undefined);
+
+    const router = await this.prisma.router.create({
+      data: {
+        name,
+        description: comment,
+        location: dto.location,
+        wireguardIp: null,
+        apiPort: 8728, // binary API port (unused in direct mode, kept for schema)
+        apiUsername: username,
+        apiPasswordHash: password, // stored plain (same as legacy mode, used for RouterOS API)
+        accessUsername: username,
+        accessPassword: encryptedAccessPassword,
+        webfigPort: port,
+        hotspotProfile: dto.hotspotProfile ?? "default",
+        hotspotServer: dto.hotspotServer ?? "hotspot1",
+        site: dto.site?.trim() || null,
+        tags: this.normalizeTags(dto.tags),
+        metadata: {
+          lanIp: address,
+          lanPort: port,
+          identity,
+          boardName: dto.boardName,
+          rosVersion: dto.rosVersion,
+          directMode: true,
+        },
+        ...(resolvedOwnerId ? { ownerId: resolvedOwnerId } : {}),
+      },
     });
 
-    return this.findOne(router.id);
+    await this.auditService.log({
+      userId: adminId,
+      action: AuditAction.CREATE,
+      entityType: "Router",
+      entityId: router.id,
+      description: `Router "${router.name}" added via direct LAN provisioning (${address}:${port})`,
+    });
+
+    const view = await this.findOne(router.id);
+    return { ...view, wgProvision: null };
+  }
+
+  /**
+   * Ensure name is unique in the routers table.
+   * If `baseName` already exists (even soft-deleted), append a short random suffix.
+   */
+  private async resolveUniqueName(baseName: string): Promise<string> {
+    const existing = await this.prisma.router.findFirst({
+      where: { name: baseName },
+    });
+    if (!existing) return baseName;
+    const suffix = randomBytes(2).toString("hex");
+    return `${baseName.slice(0, 95)} #${suffix}`;
+  }
+
+  /**
+   * Generate WireGuard keys, atomically reserve an IP, add VPS peer, save to DB.
+   * Enqueues a BullMQ job to poll for tunnel handshake (durable — survives restarts).
+   *
+   * Returns config for the mobile app to push to the router via RouterOS REST API.
+   *
+   * RACE CONDITION FIX:
+   *   WgIpPoolService.allocate() holds a PostgreSQL advisory lock while it
+   *   picks and reserves the IP in the same transaction.  Concurrent callers
+   *   queue up and see the reservation before they pick their own IP.
+   *
+   * DURABILITY FIX:
+   *   The old `void pollForTunnel()` approach was lost on process restart.
+   *   BullMQ persists the job in Redis — any healthy worker replica will
+   *   continue polling, and on job failure the WG peer is cleaned up.
+   */
+  private async generateWgProvision(routerId: string): Promise<{
+    privateKey: string;
+    wgIp: string;
+    vpsPublicKey: string;
+    vpsEndpoint: string;
+    listenPort: number;
+  }> {
+    // Pre-step: capture localIp/lanIp BEFORE allocate() runs.
+    // allocate() performs a Prisma JSON update which — even after its own
+    // read-merge-write fix — runs inside a transaction boundary. Reading here
+    // gives us the cleanest snapshot and makes hasLocalIp independent of any
+    // future change to WgIpPoolService internals.
+    const preAllocateRouter = await this.prisma.router.findUnique({
+      where: { id: routerId },
+      select: { metadata: true },
+    });
+    const preMeta = (preAllocateRouter?.metadata ?? {}) as Record<
+      string,
+      unknown
+    >;
+    const hasLocalIp = !!(preMeta.localIp || preMeta.lanIp);
+
+    // Step A: atomically reserve the next free IP (PostgreSQL advisory lock)
+    const wgIp = await this.wgIpPool.allocate(routerId);
+
+    const { privateKey, publicKey } = await generateWireGuardKeyPair();
+    const vpsPublicKey = await getVpsPublicKey();
+    const vpsEndpoint =
+      this.configService.get<string>("WG_SERVER_ENDPOINT") ??
+      `${this.configService.get<string>("HOST") ?? "139.84.241.27"}:${WG_LISTEN_PORT}`;
+
+    // Step B: add peer to VPS wg0 (before we save keys, so rollback is safe)
+    await addWireGuardPeer(publicKey, wgIp);
+
+    // Step C: read current metadata, merge WG config (preserves localIp/lanIp from create)
+    const existingRouter = await this.prisma.router.findUnique({
+      where: { id: routerId },
+      select: { metadata: true },
+    });
+    const existingMeta = (existingRouter?.metadata ?? {}) as Record<
+      string,
+      unknown
+    >;
+
+    await this.prisma.router.update({
+      where: { id: routerId },
+      data: {
+        metadata: {
+          ...existingMeta,
+          wg: {
+            wgIp,
+            privateKey,
+            publicKey,
+            vpsPublicKey,
+            endpoint: vpsEndpoint,
+            listenPort: WG_LISTEN_PORT,
+            provisionedAt: new Date().toISOString(),
+          },
+        },
+      },
+    });
+
+    // Step D: enqueue durable provisioning job (survives process restart)
+    // safeOnboard=true  → production router: full 5-phase audit + push + validate
+    // safeOnboard=false → mobile-provisioned: poll-only (user already pushed config)
+    await this.queueService.enqueueRouterProvision({
+      routerId,
+      routerPublicKey: publicKey,
+      wgIp,
+      safeOnboard: hasLocalIp,
+    });
+
+    return {
+      privateKey,
+      wgIp,
+      vpsPublicKey,
+      vpsEndpoint,
+      listenPort: WG_LISTEN_PORT,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Zero-touch onboarding finalization
+  // Called by mobile app after it configured the router via LAN.
+  // ---------------------------------------------------------------------------
+
+  async finalizeOnboarding(
+    ownerId: string,
+    dto: FinalizeOnboardingDto,
+  ): Promise<RouterOnboardingResponseDto> {
+    // 1. Verify tunnel belongs to owner and is unassigned
+    const tunnel = await this.prisma.tunnel.findUnique({
+      where: { id: dto.tunnelId },
+      include: { router: true },
+    });
+    if (!tunnel || tunnel.ownerId !== ownerId || tunnel.deletedAt) {
+      throw new NotFoundException("Tunnel introuvable");
+    }
+    if (tunnel.router) {
+      throw new ConflictException("Ce tunnel est déjà associé à un routeur");
+    }
+
+    // 2. Encrypt agent password (AES-256-GCM)
+    const encrypted = this.credentialsService.encrypt(dto.agentPassword);
+
+    // 3. Create Router row
+    const router = await this.prisma.router.create({
+      data: {
+        ownerId,
+        tunnelId: dto.tunnelId,
+        name: dto.name,
+        description: dto.comment,
+        apiUsername: dto.agentUsername,
+        apiPasswordHash: "", // Legacy field — not used for zero-touch routers
+        agentUsername: dto.agentUsername,
+        encryptedAgentPassword: encrypted.ciphertext,
+        credentialsIv: encrypted.iv,
+        credentialsAuthTag: encrypted.authTag,
+        identity: dto.identity,
+        routerOsVersion: dto.routerOsVersion,
+        boardName: dto.boardName,
+        architecture: dto.architecture,
+        hotspotConfigured: dto.hotspotAlreadyConfigured,
+        hotspotInterface: dto.hotspotInterface,
+        wireguardIp: tunnel.tunnelIp,
+        status:
+          tunnel.status === "ACTIVE"
+            ? RouterStatus.ONLINE
+            : RouterStatus.OFFLINE,
+        lastSeenAt: tunnel.lastHandshakeAt,
+      },
+    });
+
+    await this.auditService.log({
+      userId: ownerId,
+      action: AuditAction.ROUTER_CONNECTED,
+      entityType: "Router",
+      entityId: router.id,
+      description: `Router "${router.name}" onboarded via zero-touch (tunnel ${tunnel.tunnelIp})`,
+    });
+
+    return {
+      id: router.id,
+      name: router.name,
+      status: router.status,
+      tunnelIp: tunnel.tunnelIp,
+      identity: dto.identity,
+      routerOsVersion: dto.routerOsVersion,
+      boardName: dto.boardName,
+      hotspotConfigured: dto.hotspotAlreadyConfigured,
+    };
+  }
+
+  /**
+   * Decrypt agent credentials for a router (used by mikrotik-client to connect via tunnel).
+   */
+  getAgentCredentials(router: {
+    encryptedAgentPassword: string | null;
+    credentialsIv: string | null;
+    credentialsAuthTag: string | null;
+  }): string | null {
+    if (
+      !router.encryptedAgentPassword ||
+      !router.credentialsIv ||
+      !router.credentialsAuthTag
+    ) {
+      return null;
+    }
+    return this.credentialsService.decrypt({
+      ciphertext: router.encryptedAgentPassword,
+      iv: router.credentialsIv,
+      authTag: router.credentialsAuthTag,
+    });
   }
 
   async update(
@@ -487,18 +806,43 @@ export class RoutersService {
   }
 
   async remove(id: string, adminId: string): Promise<void> {
-    await this.findOne(id);
+    // Read before soft-delete so we can clean up WG peer + IP
+    const router = await this.prisma.router.findUnique({
+      where: { id, deletedAt: null },
+      select: { name: true, wireguardIp: true, metadata: true },
+    });
+    if (!router) throw new NotFoundException(`Router ${id} not found`);
+
+    // Soft-delete first — prevents new operations from using this router
     await this.prisma.router.update({
       where: { id },
       data: { deletedAt: new Date() },
     });
     this.routerApiService.evictCircuitBreaker(id);
+
+    // Clean up WireGuard resources — non-blocking, errors must not abort the delete
+    const meta = (router.metadata ?? {}) as Record<string, unknown>;
+    const wg = meta.wg as Record<string, string> | undefined;
+    if (wg?.publicKey) {
+      removeWireGuardPeer(wg.publicKey).catch((err) => {
+        this.logger.warn(
+          `[WG] Failed to remove peer for deleted router "${router.name}": ${String(err)}`,
+        );
+      });
+    }
+    if (router.wireguardIp || wg?.wgIp) {
+      // Release the IP slot so future routers can claim it.
+      // WgIpPoolService.release() clears the metadata reservation; since the
+      // router is already soft-deleted, the pool scan won't see it anymore.
+      this.wgIpPool.release(id).catch(() => {});
+    }
+
     await this.auditService.log({
       userId: adminId,
       action: AuditAction.DELETE,
       entityType: "Router",
       entityId: id,
-      description: `Router ${id} deleted`,
+      description: `Router "${router.name}" deleted — WG peer cleanup requested`,
     });
   }
 
@@ -513,6 +857,137 @@ export class RoutersService {
 
   async getLiveStats(id: string): Promise<RouterLiveStats> {
     return this.routerApiService.getLiveStats(id);
+  }
+
+  async getWebfigSession(
+    id: string,
+    requestingUserId?: string,
+    requestingUserRole?: string,
+  ): Promise<{ proxyUrl: string; port: number }> {
+    const router = await this.findOne(id, requestingUserId, requestingUserRole);
+    if (!router.wireguardIp) {
+      throw new Error("Router has no WireGuard IP assigned");
+    }
+    const lastOctet = parseInt(router.wireguardIp.split(".")[3], 10);
+    if (isNaN(lastOctet) || lastOctet < 2 || lastOctet > 254) {
+      throw new Error(
+        `WebFig proxy not available for WireGuard IP ${router.wireguardIp}`,
+      );
+    }
+    void this.ensureWebfigEnabled(id).catch((err: unknown) => {
+      this.logger.warn(`[WebFig] Pre-check failed for ${id}: ${String(err)}`);
+    });
+    const vpsIp = this.configService.get<string>(
+      "VPS_PUBLIC_IP",
+      "139.84.241.27",
+    );
+    const port = 9000 + lastOctet;
+    return { proxyUrl: `http://${vpsIp}:${port}`, port };
+  }
+
+  /**
+   * Idempotent: enables the www service on port 80 restricted to the WireGuard
+   * subnet and ensures the input-chain firewall accept rule exists.
+   * Retries once on transient failures. Never throws — caller decides how to handle.
+   */
+  private async ensureWebfigEnabled(routerId: string): Promise<void> {
+    const router = await this.prisma.router.findUnique({
+      where: { id: routerId, deletedAt: null },
+      select: {
+        wireguardIp: true,
+        apiPort: true,
+        apiUsername: true,
+        apiPasswordHash: true,
+      },
+    });
+    if (!router?.wireguardIp) return;
+
+    const maxAttempts = 2;
+    let lastErr: unknown;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await executeRouterOperationResult({
+          mikroNode: MikroNode,
+          wireguardIp: router.wireguardIp,
+          apiPort: router.apiPort,
+          username: router.apiUsername,
+          password: router.apiPasswordHash,
+          timeoutMs: 12000,
+          operation: async (conn) => {
+            // Auto-detect WireGuard interface name (prefer wg-mks, fallback to first)
+            const wgIfaces = await runParsedCommand<{ name?: string }>(
+              conn,
+              MikroNode.parseItems,
+              "/interface/wireguard/print",
+            );
+            const wgIface =
+              wgIfaces.find((i) => i.name === "wg-mks")?.name ??
+              wgIfaces[0]?.name ??
+              "wg-mks";
+
+            // Check www service state
+            const services = await runParsedCommand<{
+              name?: string;
+              disabled?: string;
+              port?: string;
+              address?: string;
+            }>(conn, MikroNode.parseItems, "/ip/service/print", ["?name=www"]);
+            const www = services[0];
+            const needsServiceUpdate =
+              !www ||
+              www.disabled !== "false" ||
+              www.port !== "80" ||
+              www.address !== "10.66.66.0/24";
+
+            if (needsServiceUpdate) {
+              await runCommand(conn, [
+                "/ip/service/set",
+                "=name=www",
+                "=disabled=no",
+                "=port=80",
+                "=address=10.66.66.0/24",
+              ]);
+              this.logger.log(
+                `[WebFig] www service configured on router ${routerId}`,
+              );
+            }
+
+            // Check for existing firewall accept rule
+            const rules = await runParsedCommand<{
+              ".id"?: string;
+              comment?: string;
+            }>(conn, MikroNode.parseItems, "/ip/firewall/filter/print", [
+              "?comment=auto-webfig",
+            ]);
+
+            if (rules.length === 0) {
+              await runCommand(conn, [
+                "/ip/firewall/filter/add",
+                "=chain=input",
+                "=action=accept",
+                "=protocol=tcp",
+                "=dst-port=80",
+                `=in-interface=${wgIface}`,
+                "=comment=auto-webfig",
+                "=place-before=0",
+              ]);
+              this.logger.log(
+                `[WebFig] Firewall rule added on router ${routerId} (iface=${wgIface})`,
+              );
+            }
+          },
+        });
+        return; // success
+      } catch (err) {
+        lastErr = err;
+        if (attempt < maxAttempts) {
+          await new Promise<void>((r) => setTimeout(r, 2000));
+        }
+      }
+    }
+
+    throw lastErr;
   }
 
   async getBandwidthStats(id: string): Promise<RouterBandwidthStats> {
@@ -1072,26 +1547,13 @@ export class RoutersService {
   // ---------------------------------------------------------------------------
   // WireGuard auto-provisioning
   // ---------------------------------------------------------------------------
-
-  /** Assign the next available IP in 10.66.66.x pool */
-  private async assignNextWgIp(): Promise<string> {
-    const used = await this.prisma.router.findMany({
-      where: { deletedAt: null, wireguardIp: { not: null } },
-      select: { wireguardIp: true },
-    });
-    const usedIps = new Set(used.map((r) => r.wireguardIp));
-    for (let i = 2; i <= 254; i++) {
-      const candidate = `${WG_SUBNET}.${i}`;
-      if (!usedIps.has(candidate) && candidate !== WG_SERVER_IP) {
-        return candidate;
-      }
-    }
-    throw new Error("Subnet WireGuard plein (10.66.66.2–254 épuisé).");
-  }
+  // assignNextWgIp() removed — replaced by WgIpPoolService.allocate() which
+  // holds a PostgreSQL advisory lock to prevent the IP race condition.
 
   /**
-   * Provision WireGuard for a router: assign WG IP, generate keypair, add VPS peer.
-   * Stores config in metadata.wg. Non-blocking — called fire-and-forget.
+   * Provision WireGuard for a router that has no WG config yet.
+   * Delegates to generateWgProvision() (atomic IP + BullMQ job).
+   * Idempotent — safe to call multiple times.
    */
   private async provisionWireGuard(routerId: string): Promise<void> {
     const router = await this.prisma.router.findUnique({
@@ -1101,46 +1563,30 @@ export class RoutersService {
     if (!router) return;
 
     const meta = (router.metadata ?? {}) as Record<string, unknown>;
+    const wg = meta.wg as Record<string, unknown> | undefined;
 
-    // Idempotent: skip if already provisioned
-    if (meta.wg && (meta.wg as Record<string, unknown>).wgIp) {
-      this.logger.debug(`[WG] Router ${routerId} already provisioned`);
+    // Already provisioned — ensure the BullMQ job exists (recovery path)
+    if (wg?.wgIp && wg?.publicKey) {
+      await this.queueService
+        .enqueueRouterProvision({
+          routerId,
+          routerPublicKey: String(wg.publicKey),
+          wgIp: String(wg.wgIp),
+          safeOnboard: !!(meta.localIp || meta.lanIp),
+        })
+        .catch(() => {}); // jobId dedup makes this a no-op if job exists
       return;
     }
 
-    const wgIp = await this.assignNextWgIp();
-    const { privateKey, publicKey } = await generateWireGuardKeyPair();
-    const vpsPublicKey = await getVpsPublicKey();
-
-    await addWireGuardPeer(publicKey, wgIp);
-
-    const vpsEndpoint =
-      this.configService.get<string>("WG_SERVER_ENDPOINT") ??
-      `${this.configService.get<string>("HOST") ?? "139.84.241.27"}:${WG_LISTEN_PORT}`;
-
-    await this.prisma.router.update({
-      where: { id: routerId },
-      data: {
-        metadata: {
-          ...meta,
-          wg: {
-            wgIp,
-            privateKey,
-            publicKey,
-            vpsPublicKey,
-            endpoint: vpsEndpoint,
-            listenPort: WG_LISTEN_PORT,
-            provisionedAt: new Date().toISOString(),
-          },
-        },
-      },
-    });
-
-    this.logger.log(`[WG] Provisioned ${router.name} → ${wgIp} (peer added)`);
+    // Not yet provisioned — run the full flow
+    await this.generateWgProvision(routerId);
   }
 
   /** Returns WireGuard bootstrap config for a router. Provisions on first call. */
-  async getBootstrap(id: string, adminId: string): Promise<Record<string, unknown>> {
+  async getBootstrap(
+    id: string,
+    adminId: string,
+  ): Promise<Record<string, unknown>> {
     const router = await this.prisma.router.findFirst({
       where: { id, deletedAt: null },
       select: { id: true, name: true, metadata: true, wireguardIp: true },
@@ -1165,7 +1611,8 @@ export class RoutersService {
 
     const wg = (meta.wg ?? {}) as Record<string, unknown>;
 
-    const tunnelReady = router.wireguardIp?.startsWith(`${WG_SUBNET}.`) ?? false;
+    const tunnelReady =
+      router.wireguardIp?.startsWith(`${WG_SUBNET}.`) ?? false;
 
     // Generate the MikroTik RouterOS CLI command
     const mikrotikCmd = localIp
@@ -1193,15 +1640,26 @@ export class RoutersService {
   }
 
   /**
-   * Background scan every 30 seconds: detect routers whose WireGuard tunnel
-   * has established and update wireguardIp so the RouterOS API can reach them.
+   * Recovery scan every 60 seconds: find routers that have WG metadata but no
+   * active provisioning job (e.g. after a process crash mid-provision).
+   * Enqueues a new job for each orphan — idempotent via jobId dedup.
    */
-  @Cron("*/30 * * * * *")
-  async scanPendingWgTunnels(): Promise<void> {
+  @Cron("0 * * * * *") // Every 60 seconds
+  async recoverOrphanedProvisionJobs(): Promise<void> {
+    if (this.isRecoveringProvisionJobs) return;
+    this.isRecoveringProvisionJobs = true;
+    try {
+      await this.doRecoverOrphanedProvisionJobs();
+    } finally {
+      this.isRecoveringProvisionJobs = false;
+    }
+  }
+
+  private async doRecoverOrphanedProvisionJobs(): Promise<void> {
     const pending = await this.prisma.router.findMany({
       where: {
         deletedAt: null,
-        wireguardIp: null, // not yet tunneled
+        wireguardIp: null,
       },
       select: { id: true, name: true, metadata: true },
     });
@@ -1211,21 +1669,20 @@ export class RoutersService {
       const wg = meta.wg as Record<string, unknown> | undefined;
       if (!wg?.publicKey || !wg.wgIp) continue;
 
-      const connected = await isPeerConnected(String(wg.publicKey));
-      if (!connected) continue;
-
-      const wgIp = String(wg.wgIp);
-      await this.prisma.router.update({
-        where: { id: router.id },
-        data: { wireguardIp: wgIp },
-      });
-
-      this.logger.log(
-        `[WG] Tunnel established for "${router.name}" → wireguardIp set to ${wgIp}`,
-      );
-
-      // Trigger health check now that tunnel is up
-      void this.routerApiService.checkRouterHealth(router.id).catch(() => {});
+      // enqueueRouterProvision uses jobId=`provision-{routerId}` — BullMQ
+      // silently drops duplicate jobs, so this is safe to call repeatedly.
+      await this.queueService
+        .enqueueRouterProvision({
+          routerId: router.id,
+          routerPublicKey: String(wg.publicKey),
+          wgIp: String(wg.wgIp),
+          safeOnboard: !!(meta.localIp || meta.lanIp),
+        })
+        .catch((err) => {
+          this.logger.warn(
+            `[WG] Recovery re-enqueue failed for "${router.name}": ${String(err)}`,
+          );
+        });
     }
   }
 

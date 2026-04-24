@@ -21,6 +21,12 @@ import { Permissions } from "../auth/decorators/permissions.decorator";
 import { UserRole } from "@prisma/client";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { JwtPayload } from "../auth/interfaces/jwt-payload.interface";
+import {
+  ActiveSessionsQueryDto,
+  SessionHistoryQueryDto,
+  SessionsByMacQueryDto,
+  TerminateSessionDto,
+} from "./dto/sessions.dto";
 
 @ApiTags("sessions")
 @Controller({ path: "sessions", version: "1" })
@@ -36,22 +42,16 @@ export class SessionsController {
   })
   getHistory(
     @CurrentUser() user: JwtPayload,
-    @Query("routerId") routerId?: string,
-    @Query("macAddress") macAddress?: string,
-    @Query("status") status?: string,
-    @Query("from") from?: string,
-    @Query("to") to?: string,
-    @Query("page") page?: string,
-    @Query("limit") limit?: string,
+    @Query() query: SessionHistoryQueryDto,
   ) {
     return this.sessionsService.findHistory({
-      routerId,
-      macAddress,
-      status,
-      from: from ? new Date(from) : undefined,
-      to: to ? new Date(to) : undefined,
-      page: page ? Number(page) : 1,
-      limit: limit ? Number(limit) : 50,
+      routerId: query.routerId,
+      macAddress: query.macAddress,
+      status: query.status,
+      from: query.from ? new Date(query.from) : undefined,
+      to: query.to ? new Date(query.to) : undefined,
+      page: query.page,
+      limit: query.limit,
       requestingUserId: user.sub,
       requestingUserRole: user.role,
     });
@@ -63,9 +63,9 @@ export class SessionsController {
   @ApiOperation({ summary: "Get active hotspot sessions (tenant-scoped)" })
   getActive(
     @CurrentUser() user: JwtPayload,
-    @Query("routerId") routerId?: string,
+    @Query() query: ActiveSessionsQueryDto,
   ) {
-    return this.sessionsService.findActive(routerId, {
+    return this.sessionsService.findActive(query.routerId, {
       sub: user.sub,
       role: user.role,
     });
@@ -75,11 +75,8 @@ export class SessionsController {
   @Roles(UserRole.VIEWER)
   @Permissions("sessions.view")
   @ApiOperation({ summary: "Get active DB sessions by MAC address" })
-  getByMac(
-    @Query("macAddress") macAddress: string,
-    @Query("routerId") routerId?: string,
-  ) {
-    return this.sessionsService.findByMac(macAddress, routerId);
+  getByMac(@Query() query: SessionsByMacQueryDto) {
+    return this.sessionsService.findByMac(query.macAddress, query.routerId);
   }
 
   @Post("terminate")
@@ -95,7 +92,7 @@ export class SessionsController {
       required: ["routerId", "mikrotikId"],
     },
   })
-  terminate(@Body() body: { routerId: string; mikrotikId: string }) {
+  terminate(@Body() body: TerminateSessionDto) {
     return this.sessionsService.terminate(body.routerId, body.mikrotikId);
   }
 

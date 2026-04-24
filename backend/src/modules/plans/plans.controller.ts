@@ -34,8 +34,12 @@ export class PlansController {
   findAll(
     @Query("includeArchived", new DefaultValuePipe(false), ParseBoolPipe)
     includeArchived: boolean,
+    @CurrentUser() user: JwtPayload,
   ) {
-    return this.plansService.findAll(includeArchived);
+    return this.plansService.findAll(includeArchived, {
+      sub: user.sub,
+      role: user.role,
+    });
   }
 
   @Public()
@@ -48,15 +52,18 @@ export class PlansController {
   @Get(":id")
   @Roles(UserRole.VIEWER)
   @Permissions("plans.view")
-  findOne(@Param("id", ParseUUIDPipe) id: string) {
-    return this.plansService.findOne(id);
+  findOne(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.plansService.findOne(id, { sub: user.sub, role: user.role });
   }
 
   @Post()
   @Roles(UserRole.VIEWER)
   @Permissions("plans.manage")
   create(@Body() dto: CreatePlanDto, @CurrentUser() user: JwtPayload) {
-    return this.plansService.create(dto, user.sub);
+    return this.plansService.create(dto, { sub: user.sub, role: user.role });
   }
 
   @Patch(":id")
@@ -67,7 +74,10 @@ export class PlansController {
     @Body() dto: UpdatePlanDto,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.plansService.update(id, dto, user.sub);
+    return this.plansService.update(id, dto, {
+      sub: user.sub,
+      role: user.role,
+    });
   }
 
   @Delete(":id")
@@ -77,7 +87,7 @@ export class PlansController {
     @Param("id", ParseUUIDPipe) id: string,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.plansService.archive(id, user.sub);
+    return this.plansService.archive(id, { sub: user.sub, role: user.role });
   }
 
   @Patch(":id/restore")
@@ -88,6 +98,6 @@ export class PlansController {
     @Param("id", ParseUUIDPipe) id: string,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.plansService.restore(id, user.sub);
+    return this.plansService.restore(id, { sub: user.sub, role: user.role });
   }
 }

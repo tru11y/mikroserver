@@ -16,6 +16,7 @@ import { loadAndValidateConfig } from "./config/configuration";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { RequestIdInterceptor } from "./common/interceptors/request-id.interceptor";
 import { TransformInterceptor } from "./common/interceptors/transform.interceptor";
+import { initializeOpenTelemetry } from "./common/observability/otel";
 
 // Fastify's JSON serializer does not support BigInt natively.
 // Patch globally so all BigInt values serialize as strings (safe for JS clients via Number()).
@@ -26,6 +27,12 @@ import { TransformInterceptor } from "./common/interceptors/transform.intercepto
 async function bootstrap(): Promise<void> {
   // Validate environment variables BEFORE anything else
   const config = loadAndValidateConfig();
+  await initializeOpenTelemetry({
+    enabled: config.OTEL_ENABLED,
+    serviceName: config.OTEL_SERVICE_NAME,
+    otlpEndpoint: config.OTEL_EXPORTER_OTLP_ENDPOINT,
+    sampleRatio: config.OTEL_SAMPLE_RATIO,
+  });
 
   let app: NestFastifyApplication;
   try {
@@ -144,11 +151,16 @@ async function bootstrap(): Promise<void> {
     new TransformInterceptor(),
   );
 
-  // Swagger (only in non-production)
-  if (config.NODE_ENV !== "production") {
+  // Swagger/OpenAPI docs
+  const swaggerEnabled =
+    config.SWAGGER_ENABLED ?? config.NODE_ENV !== "production";
+  if (swaggerEnabled) {
+    const swaggerPath = config.SWAGGER_PATH.replace(/^\/+/, "");
+    const swaggerJsonPath = config.SWAGGER_JSON_PATH.replace(/^\/+/, "");
+
     const swaggerConfig = new DocumentBuilder()
       .setTitle("MikroServer API")
-      .setDescription("WiFi Monetization Platform - Internal API")
+      .setDescription("WiFi Monetization Platform API")
       .setVersion("1.0")
       .addBearerAuth()
       .addTag("auth", "Authentication endpoints")
@@ -162,12 +174,13 @@ async function bootstrap(): Promise<void> {
       .build();
 
     const document = SwaggerModule.createDocument(app, swaggerConfig);
-    SwaggerModule.setup("docs", app, document, {
+    SwaggerModule.setup(swaggerPath, app, document, {
       swaggerOptions: {
         persistAuthorization: true,
         tagsSorter: "alpha",
         operationsSorter: "alpha",
       },
+      jsonDocumentUrl: `/${swaggerJsonPath}`,
     });
   }
 

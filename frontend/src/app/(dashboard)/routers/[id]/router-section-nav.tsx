@@ -1,7 +1,7 @@
 'use client';
 
 import { clsx } from 'clsx';
-import { ArrowRightLeft, History, Layers3, Link2, Radio, TerminalSquare, Users2 } from 'lucide-react';
+import { ArrowRightLeft, History, Layers3, Link2, Radio, TerminalSquare, Users2, MonitorSmartphone } from 'lucide-react';
 import type { RouterDetailSection } from './router-detail.types';
 
 interface RouterSectionNavProps {
@@ -29,6 +29,7 @@ const SECTION_ITEMS: Array<{
   { id: 'migration', label: 'Migration', icon: ArrowRightLeft },
   { id: 'history', label: 'Historique', icon: History },
   { id: 'terminal', label: 'Terminal SSH', icon: TerminalSquare },
+  { id: 'access', label: 'Accès Distant', icon: MonitorSmartphone },
 ];
 
 function getSectionCount(
@@ -54,6 +55,8 @@ function getSectionCount(
       return usersCount;
     case 'migration':
     case 'history':
+    case 'terminal':
+    case 'access':
       return 0;
   }
 }

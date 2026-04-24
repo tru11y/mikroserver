@@ -102,12 +102,20 @@ export type PlanPayload = {
 
 export type RouterStatus = "ONLINE" | "OFFLINE" | "DEGRADED" | "MAINTENANCE";
 
+export type WgProvision = {
+  privateKey: string;
+  wgIp: string;
+  vpsPublicKey: string;
+  vpsEndpoint: string;
+  listenPort: number;
+};
+
 export type RouterItem = {
   id: string;
   name: string;
   description?: string;
   location?: string;
-  wireguardIp: string;
+  wireguardIp: string | null;
   apiPort: number;
   apiUsername: string;
   hotspotProfile: string;
@@ -115,6 +123,7 @@ export type RouterItem = {
   status: RouterStatus;
   lastSeenAt?: string;
   createdAt: string;
+  wgProvision?: WgProvision;
 };
 
 export type CreateRouterPayload = {
@@ -275,7 +284,7 @@ export type SettingEntry = {
 export type SettingsMap = Record<string, SettingEntry>;
 
 const DEFAULT_API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL?.trim() || "http://139.84.241.27/proxy/api/v1";
+  process.env.EXPO_PUBLIC_API_BASE_URL?.trim() || "http://139.84.241.27:3001/proxy/api/v1";
 
 let apiBaseUrl = normalizeApiBaseUrl(DEFAULT_API_BASE_URL);
 let accessToken: string | null = null;
@@ -625,6 +634,54 @@ export const api = {
       return unwrapApi(response);
     },
 
+    async finalizeOnboarding(payload: {
+      tunnelId: string;
+      name: string;
+      comment?: string;
+      agentUsername: string;
+      agentPassword: string;
+      identity?: string;
+      routerOsVersion?: string;
+      boardName?: string;
+      architecture?: string;
+      hotspotAlreadyConfigured: boolean;
+      hotspotInterface?: string;
+    }): Promise<{
+      id: string;
+      name: string;
+      status: string;
+      tunnelIp: string;
+      hotspotConfigured: boolean;
+    }> {
+      const response = await apiClient.post<
+        ApiEnvelope<{
+          id: string;
+          name: string;
+          status: string;
+          tunnelIp: string;
+          hotspotConfigured: boolean;
+        }>
+      >("/routers/finalize-onboarding", payload);
+      return unwrapApi(response);
+    },
+
+    async bootstrap(id: string): Promise<{
+      routerId: string; routerName: string; wgIp: string | null;
+      privateKey: string | null; publicKey: string | null;
+      vpsPublicKey: string | null; endpoint: string | null;
+      listenPort: number; tunnelReady: boolean; mikrotikCmd: string | null;
+      provisionedAt: string | null;
+    }> {
+      const response = await apiClient.get<ApiEnvelope<{
+        routerId: string; routerName: string; wgIp: string | null;
+        privateKey: string | null; publicKey: string | null;
+        vpsPublicKey: string | null; endpoint: string | null;
+        listenPort: number; tunnelReady: boolean; mikrotikCmd: string | null;
+        provisionedAt: string | null;
+      }>>(`/routers/${id}/bootstrap`);
+      return unwrapApi(response);
+    },
+
     async healthCheck(id: string): Promise<{ success: boolean }> {
       const response = await apiClient.post<ApiEnvelope<{ success: boolean }>>(
         `/routers/${id}/health-check`,
@@ -644,6 +701,31 @@ export const api = {
         `/routers/${id}/wireguard-config`,
       );
       return unwrapApi(response);
+    },
+  },
+
+  tunnels: {
+    async allocate(): Promise<{
+      tunnelId: string;
+      tunnelIp: string;
+      clientPrivateKey: string;
+      serverPublicKey: string;
+      serverEndpoint: string;
+    }> {
+      const response = await apiClient.post<
+        ApiEnvelope<{
+          tunnelId: string;
+          tunnelIp: string;
+          clientPrivateKey: string;
+          serverPublicKey: string;
+          serverEndpoint: string;
+        }>
+      >("/tunnels/allocate");
+      return unwrapApi(response);
+    },
+
+    async remove(tunnelId: string): Promise<void> {
+      await apiClient.delete(`/tunnels/${tunnelId}`);
     },
   },
 

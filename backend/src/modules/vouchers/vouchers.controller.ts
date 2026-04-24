@@ -23,6 +23,13 @@ import { Permissions } from "../auth/decorators/permissions.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { JwtPayload } from "../auth/interfaces/jwt-payload.interface";
 import { UserRole, VoucherStatus } from "@prisma/client";
+import {
+  DownloadVoucherPdfDto,
+  GenerateBatchVouchersDto,
+  GenerateBulkVouchersDto,
+  VerifyTicketDto,
+  VoucherIdsDto,
+} from "./dto/voucher.dto";
 
 @ApiTags("vouchers")
 @Controller({ path: "vouchers", version: "1" })
@@ -89,10 +96,7 @@ export class VouchersController {
       required: ["ticket"],
     },
   })
-  verify(
-    @Body() body: { ticket: string; password?: string; routerId?: string },
-    @CurrentUser() user: JwtPayload,
-  ) {
+  verify(@Body() body: VerifyTicketDto, @CurrentUser() user: JwtPayload) {
     return this.voucherService.verifyVoucherForOperator(
       body.ticket,
       body.password,
@@ -120,7 +124,7 @@ export class VouchersController {
     },
   })
   deleteVerifiedTicket(
-    @Body() body: { ticket: string; password?: string; routerId?: string },
+    @Body() body: VerifyTicketDto,
     @CurrentUser() user: JwtPayload,
   ) {
     return this.voucherService.deleteTicketPermanently(
@@ -149,10 +153,7 @@ export class VouchersController {
       required: ["voucherIds"],
     },
   })
-  bulkDelete(
-    @Body() body: { voucherIds: string[] },
-    @CurrentUser() user: JwtPayload,
-  ) {
+  bulkDelete(@Body() body: VoucherIdsDto, @CurrentUser() user: JwtPayload) {
     return this.voucherService.bulkDeleteVouchers(body.voucherIds, user);
   }
 
@@ -219,7 +220,7 @@ export class VouchersController {
     },
   })
   async printVouchers(
-    @Body() body: { voucherIds: string[] },
+    @Body() body: VoucherIdsDto,
     @Res({ passthrough: true }) reply: FastifyReply,
     @CurrentUser() user: JwtPayload,
   ): Promise<StreamableFile> {
@@ -268,18 +269,7 @@ export class VouchersController {
     },
   })
   generateBulk(
-    @Body()
-    body: {
-      planId: string;
-      routerId: string;
-      count: number;
-      codeLength?: number;
-      ticketPrefix?: string;
-      ticketType?: "PIN" | "USER_PASSWORD";
-      numericOnly?: boolean;
-      passwordLength?: number;
-      passwordNumericOnly?: boolean;
-    },
+    @Body() body: GenerateBulkVouchersDto,
     @CurrentUser() user: JwtPayload,
   ) {
     return this.voucherService.generateBulk(
@@ -320,7 +310,7 @@ export class VouchersController {
     },
   })
   generateBatch(
-    @Body() body: { planId: string; quantity: number; routerId?: string },
+    @Body() body: GenerateBatchVouchersDto,
     @CurrentUser() user: JwtPayload,
   ) {
     return this.voucherService.generateBulk(
@@ -356,7 +346,7 @@ export class VouchersController {
     },
   })
   async batchPrint(
-    @Body() body: { voucherIds: string[] },
+    @Body() body: VoucherIdsDto,
     @Res({ passthrough: true }) reply: FastifyReply,
     @CurrentUser() user: JwtPayload,
   ): Promise<StreamableFile> {
@@ -402,13 +392,7 @@ export class VouchersController {
     },
   })
   async downloadPdf(
-    @Body()
-    body: {
-      voucherIds: string[];
-      businessName?: string;
-      includeQrCode?: boolean;
-      ticketsPerPage?: number;
-    },
+    @Body() body: DownloadVoucherPdfDto,
     @Res({ passthrough: true }) reply: FastifyReply,
     @CurrentUser() user: JwtPayload,
   ): Promise<StreamableFile> {

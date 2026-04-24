@@ -22,6 +22,7 @@ import { useRouterLiveOperations } from './use-router-live-operations';
 import { useRouterHotspotManagement } from './use-router-hotspot-management';
 import { RouterMigrationSection } from './router-migration-section';
 import { RouterHistorySection } from './router-history-section';
+import { RouterAccessCard } from './router-access-card';
 import dynamic from 'next/dynamic';
 const SshTerminal = dynamic(
   () => import('@/components/ssh-terminal').then((m) => m.SshTerminal),
@@ -370,6 +371,10 @@ export default function RouterDetailPage() {
 
       {activeSection === 'history' && (
         <RouterHistorySection routerId={id} />
+      )}
+
+      {activeSection === 'access' && (
+        <RouterAccessCard routerId={id} />
       )}
 
       {activeSection === 'terminal' && (

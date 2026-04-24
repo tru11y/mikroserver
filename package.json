@@ -1,0 +1,13 @@
+{
+  "name": "mikroserver-tooling",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "prepare": "husky",
+    "precommit": "lint-staged && npm --prefix backend run type-check && npm --prefix frontend run type-check"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.2"
+  }
+}

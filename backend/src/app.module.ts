@@ -42,6 +42,10 @@ import { SpeedBoostsModule } from "./modules/speed-boosts/speed-boosts.module";
 import { InsightsModule } from "./modules/insights/insights.module";
 import { AdminModule } from "./modules/admin/admin.module";
 import { SshModule } from "./modules/ssh/ssh.module";
+import { TunnelsModule } from "./modules/tunnels/tunnels.module";
+import { BeaconModule } from "./modules/beacon/beacon.module";
+import { MikroTikClientModule } from "./modules/mikrotik-client/mikrotik-client.module";
+import { HotspotSetupModule } from "./modules/hotspot-setup/hotspot-setup.module";
 
 @Module({
   providers: [
@@ -156,6 +160,10 @@ import { SshModule } from "./modules/ssh/ssh.module";
     InsightsModule,
     AdminModule,
     SshModule,
+    TunnelsModule,
+    BeaconModule,
+    MikroTikClientModule,
+    HotspotSetupModule,
   ],
 })
 export class AppModule {}

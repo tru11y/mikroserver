@@ -1,7 +1,12 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { AuditAction, Prisma } from "@prisma/client";
+import { AuditAction, Prisma, UserRole } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { ListAuditLogsQueryDto } from "./dto/audit.dto";
+
+export interface AuditActor {
+  sub: string;
+  role: UserRole;
+}
 
 export interface AuditLogInput {
   userId?: string;
@@ -74,10 +79,10 @@ export class AuditService {
     }
   }
 
-  async findLogs(query: ListAuditLogsQueryDto) {
+  async findLogs(query: ListAuditLogsQueryDto, actor?: AuditActor) {
     const page = Math.max(1, query.page ?? 1);
     const limit = Math.min(Math.max(query.limit ?? 25, 1), 100);
-    const where = this.buildWhere(query);
+    const where = this.buildWhere(query, actor);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -125,6 +130,7 @@ export class AuditService {
         }),
         this.prisma.auditLog.findMany({
           distinct: ["entityType"],
+          where,
           select: { entityType: true },
           orderBy: { entityType: "asc" },
         }),
@@ -158,8 +164,23 @@ export class AuditService {
     };
   }
 
-  private buildWhere(query: ListAuditLogsQueryDto): Prisma.AuditLogWhereInput {
+  private buildWhere(
+    query: ListAuditLogsQueryDto,
+    actor?: AuditActor,
+  ): Prisma.AuditLogWhereInput {
     const where: Prisma.AuditLogWhereInput = {};
+
+    // Tenant isolation: non-SUPER_ADMIN only sees their own logs
+    if (actor && actor.role !== UserRole.SUPER_ADMIN) {
+      where.AND = [
+        {
+          OR: [
+            { userId: actor.sub },
+            { router: { is: { ownerId: actor.sub } } },
+          ],
+        },
+      ];
+    }
     const createdAt: Prisma.DateTimeFilter = {};
 
     if (query.action) {

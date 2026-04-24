@@ -106,7 +106,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         refreshToken: result.tokens.refreshToken,
       });
       setUser(result.user);
-      router.replace("/home");
+      router.replace("/(tabs)");
     } catch (authError) {
       setError(extractErrorMessage(authError));
       throw authError;

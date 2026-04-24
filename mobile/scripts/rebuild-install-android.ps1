@@ -91,7 +91,7 @@ if (-not $SkipBuild) {
   Ensure-Java17
   Push-Location $androidDir
   try {
-    cmd /c "gradlew.bat $gradleTask"
+    cmd /c ".\gradlew.bat $gradleTask"
     if ($LASTEXITCODE -ne 0) {
       throw "Gradle build failed with exit code $LASTEXITCODE."
     }

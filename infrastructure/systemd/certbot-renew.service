@@ -1,0 +1,9 @@
+[Unit]
+Description=Renew Let's Encrypt certificates for MikroServer
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/root/mikroserver
+ExecStart=/bin/bash /root/mikroserver/infrastructure/scripts/certbot_renew.sh

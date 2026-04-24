@@ -29,6 +29,12 @@ const envSchema = z
     API_PREFIX: z.string().default("api/v1"),
     APP_NAME: z.string().default("MikroServer"),
     CORS_ORIGINS: z.string().default("http://localhost:3001"),
+    SWAGGER_ENABLED: z
+      .string()
+      .optional()
+      .transform((v) => (v === undefined ? undefined : v === "true")),
+    SWAGGER_PATH: z.string().default("docs"),
+    SWAGGER_JSON_PATH: z.string().default("docs-json"),
 
     // --- Database ---
     DATABASE_URL: z.string().url(),
@@ -119,6 +125,19 @@ const envSchema = z
     CIRCUIT_BREAKER_RESET_MS: z.string().default("30000").transform(Number),
     CIRCUIT_BREAKER_THRESHOLD: z.string().default("50").transform(Number),
 
+    // --- Encryption (router credentials) ---
+    ENCRYPTION_KEY: z.string().min(64),
+
+    // --- WireGuard ---
+    WG_INTERFACE: z.string().default("wg0"),
+    WG_CONFIG_PATH: z.string().default("/etc/wireguard/wg0.conf"),
+    WG_PUBLIC_ENDPOINT: optionalText,
+
+    // --- VPS public IP (used for port-mapping URLs) ---
+    VPS_PUBLIC_IP: z.string().default("127.0.0.1"),
+    PORT_MAP_RANGE_START: z.string().default("19000").transform(Number),
+    PORT_MAP_RANGE_END: z.string().default("19999").transform(Number),
+
     // --- Security ---
     RATE_LIMIT_TTL_MS: z.string().default("60000").transform(Number),
     RATE_LIMIT_MAX: z.string().default("100").transform(Number),
@@ -143,11 +162,26 @@ const envSchema = z
       .default("true")
       .transform((v) => v === "true"),
     SNAPSHOT_CRON: z.string().default("0 0 * * *"), // Daily at midnight
+    OTEL_ENABLED: z
+      .string()
+      .default("false")
+      .transform((v) => v === "true"),
+    OTEL_SERVICE_NAME: z.string().default("mikroserver-api"),
+    OTEL_EXPORTER_OTLP_ENDPOINT: optionalUrl,
+    OTEL_SAMPLE_RATIO: z.string().default("1").transform(Number),
 
     // --- Transaction ---
     TRANSACTION_EXPIRY_MINUTES: z.string().default("30").transform(Number),
   })
   .superRefine((cfg, ctx) => {
+    if (cfg.OTEL_SAMPLE_RATIO < 0 || cfg.OTEL_SAMPLE_RATIO > 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["OTEL_SAMPLE_RATIO"],
+        message: "OTEL_SAMPLE_RATIO must be between 0 and 1",
+      });
+    }
+
     const waveEnabled = Boolean(
       cfg.WAVE_API_KEY ||
       cfg.WAVE_WEBHOOK_SECRET ||

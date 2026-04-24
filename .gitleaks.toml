@@ -9,7 +9,6 @@ title = "Mikroserver gitleaks config"
     '''v2/.*''',
   ]
   regexes = [
-    # Placeholder JWT/encryption keys used only in test containers
     '''aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa''',
     '''bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb''',
     '''0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef''',

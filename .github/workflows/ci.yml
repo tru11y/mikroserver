@@ -42,8 +42,6 @@ jobs:
 
       - name: Run gitleaks
         uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ---------------------------------------------------------------------------
   # JOB 2 — Backend: lint, type-check, unit tests

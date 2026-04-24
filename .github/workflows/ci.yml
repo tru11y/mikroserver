@@ -194,7 +194,7 @@ jobs:
       - uses: docker/setup-buildx-action@v3
 
       - name: Build backend image (local only)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./backend
           file: ./backend/Dockerfile
@@ -217,7 +217,7 @@ jobs:
           exit-code: "1"
 
       - name: Build frontend image (local only)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./frontend
           file: ./frontend/Dockerfile
@@ -279,7 +279,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push API image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./backend
           file: ./backend/Dockerfile
@@ -292,7 +292,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=trivy-backend
 
       - name: Push migrations image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./backend
           file: ./backend/Dockerfile
@@ -305,7 +305,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=trivy-backend
 
       - name: Push dashboard image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./frontend
           file: ./frontend/Dockerfile

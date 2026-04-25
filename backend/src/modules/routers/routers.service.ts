@@ -4,6 +4,7 @@ import {
   NotFoundException,
   ConflictException,
 } from "@nestjs/common";
+import * as net from "net";
 import { Cron } from "@nestjs/schedule";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../prisma/prisma.service";
@@ -975,6 +976,204 @@ export class RoutersService {
     }
 
     throw lastErr;
+  }
+
+  // ── Access credentials ────────────────────────────────────────────────────
+
+  private wgPort(wireguardIp: string | null, base: number): number | null {
+    if (!wireguardIp) return null;
+    const octet = parseInt(wireguardIp.split(".")[3], 10);
+    if (isNaN(octet) || octet < 2 || octet > 254) return null;
+    return base + octet;
+  }
+
+  private buildAccessCredentials(
+    router: RouterSafeView,
+    vpsIp: string,
+  ): Record<string, unknown> {
+    const wgIp = router.wireguardIp ?? "—";
+    const webfigProxyPort = this.wgPort(router.wireguardIp, 9000);
+    const webfigUrl = webfigProxyPort
+      ? `http://${vpsIp}:${webfigProxyPort}`
+      : `http://${wgIp}:${router.webfigPort}`;
+
+    return {
+      routerId: router.id,
+      routerName: router.name,
+      vpnIp: wgIp,
+      winbox: {
+        address: `${wgIp}:${router.winboxPort}`,
+        port: router.winboxPort,
+        username: router.accessUsername,
+        password: router.accessPassword ?? null,
+        deepLink: `winbox://${wgIp}:${router.winboxPort}`,
+      },
+      webfig: {
+        url: webfigUrl,
+        port: webfigProxyPort ?? router.webfigPort,
+        username: router.accessUsername,
+        password: router.accessPassword ?? null,
+      },
+      ssh: {
+        command: `ssh ${router.accessUsername}@${wgIp} -p ${router.sshPort}`,
+        host: wgIp,
+        port: router.sshPort,
+        username: router.accessUsername,
+        password: router.accessPassword ?? null,
+      },
+    };
+  }
+
+  async getAccess(
+    id: string,
+    requestingUserId?: string,
+    requestingUserRole?: string,
+  ): Promise<Record<string, unknown>> {
+    const router = await this.findOne(id, requestingUserId, requestingUserRole);
+    const vpsIp = this.configService.get<string>(
+      "VPS_PUBLIC_IP",
+      "139.84.241.27",
+    );
+    return this.buildAccessCredentials(router, vpsIp);
+  }
+
+  async updateAccess(
+    id: string,
+    dto: {
+      winboxPort?: number;
+      webfigPort?: number;
+      sshPort?: number;
+      accessUsername?: string;
+      accessPassword?: string;
+    },
+    requestingUserId?: string,
+  ): Promise<Record<string, unknown>> {
+    await this.findOne(id, requestingUserId);
+    const updated = await this.prisma.router.update({
+      where: { id, deletedAt: null },
+      data: {
+        ...(dto.winboxPort !== undefined && { winboxPort: dto.winboxPort }),
+        ...(dto.webfigPort !== undefined && { webfigPort: dto.webfigPort }),
+        ...(dto.sshPort !== undefined && { sshPort: dto.sshPort }),
+        ...(dto.accessUsername !== undefined && {
+          accessUsername: dto.accessUsername,
+        }),
+        ...(dto.accessPassword !== undefined && {
+          accessPassword: dto.accessPassword,
+        }),
+      },
+    });
+    const vpsIp = this.configService.get<string>(
+      "VPS_PUBLIC_IP",
+      "139.84.241.27",
+    );
+    return this.buildAccessCredentials(
+      updated as unknown as RouterSafeView,
+      vpsIp,
+    );
+  }
+
+  async testAccess(
+    id: string,
+    requestingUserId?: string,
+    requestingUserRole?: string,
+  ): Promise<{ reachable: boolean; latencyMs: number }> {
+    const router = await this.findOne(id, requestingUserId, requestingUserRole);
+    if (!router.wireguardIp) return { reachable: false, latencyMs: 0 };
+    const start = Date.now();
+    return new Promise((resolve) => {
+      const socket = net.createConnection(
+        { host: router.wireguardIp!, port: router.apiPort, timeout: 4000 },
+        () => {
+          socket.destroy();
+          resolve({ reachable: true, latencyMs: Date.now() - start });
+        },
+      );
+      socket.on("error", () => {
+        socket.destroy();
+        resolve({ reachable: false, latencyMs: Date.now() - start });
+      });
+      socket.on("timeout", () => {
+        socket.destroy();
+        resolve({ reachable: false, latencyMs: 4000 });
+      });
+    });
+  }
+
+  // ── Port-map (nginx stream proxy) ─────────────────────────────────────────
+
+  async getPortMap(
+    id: string,
+    requestingUserId?: string,
+    requestingUserRole?: string,
+  ): Promise<Record<string, unknown>> {
+    const router = await this.findOne(id, requestingUserId, requestingUserRole);
+    const webfigPort = this.wgPort(router.wireguardIp, 9000);
+    if (!webfigPort) {
+      throw new NotFoundException(
+        "No port-map: router has no valid WireGuard IP",
+      );
+    }
+    const vpsIp = this.configService.get<string>(
+      "VPS_PUBLIC_IP",
+      "139.84.241.27",
+    );
+    const wgIp = router.wireguardIp!;
+    const octet = parseInt(wgIp.split(".")[3], 10);
+    return {
+      rulesActive: true,
+      vpnIp: wgIp,
+      webfig: {
+        url: `http://${vpsIp}:${webfigPort}`,
+        port: webfigPort,
+      },
+      winbox: {
+        address: `${wgIp}:${router.winboxPort}`,
+        port: router.winboxPort,
+        deepLink: `winbox://${wgIp}:${router.winboxPort}`,
+      },
+      ssh: {
+        command: `ssh ${router.accessUsername}@${wgIp} -p ${router.sshPort}`,
+        host: wgIp,
+        port: router.sshPort,
+      },
+      credentials: { username: router.accessUsername },
+      _meta: { octet, vpsIp },
+    };
+  }
+
+  async testPortMap(
+    id: string,
+    requestingUserId?: string,
+    requestingUserRole?: string,
+  ): Promise<{ reachable: boolean; latencyMs: number }> {
+    const router = await this.findOne(id, requestingUserId, requestingUserRole);
+    const webfigPort = this.wgPort(router.wireguardIp, 9000);
+    if (!webfigPort || !router.wireguardIp) {
+      return { reachable: false, latencyMs: 0 };
+    }
+    const vpsIp = this.configService.get<string>(
+      "VPS_PUBLIC_IP",
+      "139.84.241.27",
+    );
+    const start = Date.now();
+    return new Promise((resolve) => {
+      const socket = net.createConnection(
+        { host: vpsIp, port: webfigPort, timeout: 4000 },
+        () => {
+          socket.destroy();
+          resolve({ reachable: true, latencyMs: Date.now() - start });
+        },
+      );
+      socket.on("error", () => {
+        socket.destroy();
+        resolve({ reachable: false, latencyMs: Date.now() - start });
+      });
+      socket.on("timeout", () => {
+        socket.destroy();
+        resolve({ reachable: false, latencyMs: 4000 });
+      });
+    });
   }
 
   async getBandwidthStats(id: string): Promise<RouterBandwidthStats> {

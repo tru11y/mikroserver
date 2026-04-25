@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Patch,
   Delete,
   Param,
@@ -442,5 +443,112 @@ export class RoutersController {
       user.sub,
       body.dryRun ?? false,
     );
+  }
+
+  // ── Access credentials ──────────────────────────────────────────────────────
+
+  @Get(":id/access")
+  @Roles(UserRole.VIEWER)
+  @Permissions("routers.view")
+  @ApiOperation({ summary: "Get access credentials (Winbox / WebFig / SSH)" })
+  getAccess(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.routersService.getAccess(id, user.sub, user.role);
+  }
+
+  @Put(":id/access")
+  @Roles(UserRole.ADMIN)
+  @Permissions("routers.manage")
+  @ApiOperation({ summary: "Update access credentials / ports" })
+  updateAccess(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body()
+    body: {
+      winboxPort?: number;
+      webfigPort?: number;
+      sshPort?: number;
+      accessUsername?: string;
+      accessPassword?: string;
+    },
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.routersService.updateAccess(id, body, user.sub);
+  }
+
+  @Get(":id/access/test")
+  @Roles(UserRole.VIEWER)
+  @Permissions("routers.view")
+  @ApiOperation({
+    summary: "Test TCP reachability of router API port via WireGuard",
+  })
+  testAccess(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.routersService.testAccess(id, user.sub, user.role);
+  }
+
+  // ── Port-map (nginx stream proxy) ──────────────────────────────────────────
+
+  @Get(":id/port-map")
+  @Roles(UserRole.VIEWER)
+  @Permissions("routers.view")
+  @ApiOperation({
+    summary:
+      "Get public port-map info (nginx stream proxy: WebFig at VPS port 9000+N)",
+  })
+  getPortMap(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.routersService.getPortMap(id, user.sub, user.role);
+  }
+
+  @Post(":id/port-map")
+  @Roles(UserRole.ADMIN)
+  @Permissions("routers.manage")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      "Activate port-map (nginx stream is statically configured — returns existing port-map info)",
+  })
+  allocatePortMap(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.routersService.getPortMap(id, user.sub, user.role);
+  }
+
+  @Delete(":id/port-map")
+  @Roles(UserRole.ADMIN)
+  @Permissions("routers.manage")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: "Remove port-map (no-op for static nginx stream)" })
+  deletePortMap() {
+    return;
+  }
+
+  @Get(":id/port-map/test")
+  @Roles(UserRole.VIEWER)
+  @Permissions("routers.view")
+  @ApiOperation({ summary: "Test TCP reachability of the WebFig stream port" })
+  testPortMap(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.routersService.testPortMap(id, user.sub, user.role);
+  }
+
+  @Post(":id/port-map/apply-rules")
+  @Roles(UserRole.ADMIN)
+  @Permissions("routers.manage")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Apply port-map rules (no-op for nginx stream — rules are static)",
+  })
+  applyPortMapRules() {
+    return { applied: true, message: "nginx stream proxy rules are static" };
   }
 }

@@ -470,21 +470,6 @@ export class RoutersService {
     vpsEndpoint: string;
     listenPort: number;
   }> {
-    // Pre-step: capture localIp/lanIp BEFORE allocate() runs.
-    // allocate() performs a Prisma JSON update which — even after its own
-    // read-merge-write fix — runs inside a transaction boundary. Reading here
-    // gives us the cleanest snapshot and makes hasLocalIp independent of any
-    // future change to WgIpPoolService internals.
-    const preAllocateRouter = await this.prisma.router.findUnique({
-      where: { id: routerId },
-      select: { metadata: true },
-    });
-    const preMeta = (preAllocateRouter?.metadata ?? {}) as Record<
-      string,
-      unknown
-    >;
-    const hasLocalIp = !!(preMeta.localIp || preMeta.lanIp);
-
     // Step A: atomically reserve the next free IP (PostgreSQL advisory lock)
     const wgIp = await this.wgIpPool.allocate(routerId);
 
@@ -526,13 +511,15 @@ export class RoutersService {
     });
 
     // Step D: enqueue durable provisioning job (survives process restart)
-    // safeOnboard=true  → production router: full 5-phase audit + push + validate
-    // safeOnboard=false → mobile-provisioned: poll-only (user already pushed config)
+    // Always poll-only: the mobile app pushes WireGuard config to the router
+    // via RouterOS REST API on LAN. The VPS cannot reach the router's LAN IP
+    // before the tunnel is established (chicken-and-egg). safeOnboard=true
+    // (VPS-initiated push) is reserved for post-tunnel reconfiguration only.
     await this.queueService.enqueueRouterProvision({
       routerId,
       routerPublicKey: publicKey,
       wgIp,
-      safeOnboard: hasLocalIp,
+      safeOnboard: false,
     });
 
     return {
@@ -1572,7 +1559,7 @@ export class RoutersService {
           routerId,
           routerPublicKey: String(wg.publicKey),
           wgIp: String(wg.wgIp),
-          safeOnboard: !!(meta.localIp || meta.lanIp),
+          safeOnboard: false, // poll-only: mobile pushes config via LAN
         })
         .catch(() => {}); // jobId dedup makes this a no-op if job exists
       return;
@@ -1676,7 +1663,7 @@ export class RoutersService {
           routerId: router.id,
           routerPublicKey: String(wg.publicKey),
           wgIp: String(wg.wgIp),
-          safeOnboard: !!(meta.localIp || meta.lanIp),
+          safeOnboard: false, // poll-only: mobile pushes config via LAN
         })
         .catch((err) => {
           this.logger.warn(

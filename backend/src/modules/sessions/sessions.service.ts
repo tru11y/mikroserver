@@ -65,9 +65,22 @@ export class SessionsService {
       orderBy: { name: "asc" },
     });
 
+    const ROUTER_TIMEOUT_MS = 5000;
     const statsResults = await Promise.allSettled(
       routers.map(async (router) => {
-        const stats = await this.routerApiService.getLiveStats(router.id);
+        const statsPromise = this.routerApiService.getLiveStats(router.id);
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(
+            () =>
+              reject(
+                new Error(
+                  `Router ${router.name} timed out after ${ROUTER_TIMEOUT_MS}ms`,
+                ),
+              ),
+            ROUTER_TIMEOUT_MS,
+          ),
+        );
+        const stats = await Promise.race([statsPromise, timeoutPromise]);
         return stats.clients.map<ActiveSessionView>((client) => ({
           id: client.id,
           routerId: router.id,

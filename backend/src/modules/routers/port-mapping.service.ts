@@ -5,14 +5,27 @@ import {
   ConflictException,
   InternalServerErrorException,
 } from "@nestjs/common";
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import { promisify } from "util";
 import * as net from "net";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../prisma/prisma.service";
 import type { RouterPortMap } from "@prisma/client";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
+
+// Strict whitelist validation — reject anything that doesn't look like
+// a valid WireGuard IP or port number before it reaches the shell.
+function assertVpnIp(ip: string): void {
+  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
+    throw new Error(`Invalid VPN IP: ${ip}`);
+  }
+}
+function assertPort(port: number): void {
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`Invalid port: ${port}`);
+  }
+}
 
 @Injectable()
 export class PortMappingService {
@@ -70,19 +83,20 @@ export class PortMappingService {
     return [free[0], free[1], free[2]];
   }
 
-  private async sh(cmd: string): Promise<void> {
-    // Run in host network namespace via nsenter (container has pid:host + privileged).
-    // Falls back to direct execution when running outside Docker (e.g. tests).
-    const wrapped = "nsenter -t 1 -n -m -- " + cmd;
-    const { stderr } = await execAsync(wrapped).catch(() => execAsync(cmd));
+  /** Run a command in the host network namespace via nsenter (array args — no shell injection). */
+  private async sh(args: string[]): Promise<void> {
+    const nsenterArgs = ["-t", "1", "-n", "-m", "--", ...args];
+    const run = () => execFileAsync("nsenter", nsenterArgs);
+    const fallback = () => execFileAsync(args[0], args.slice(1));
+    const { stderr } = await run().catch(fallback);
     if (stderr) this.logger.warn(`iptables stderr: ${stderr}`);
   }
 
-  /** Delete an iptables rule, ignoring "not found" errors (idempotent). */
-  private async shDel(cmd: string): Promise<void> {
-    const wrapped = "nsenter -t 1 -n -m -- " + cmd;
-    await execAsync(wrapped)
-      .catch(() => execAsync(cmd))
+  /** Delete an iptables rule, idempotent (ignores "not found"). */
+  private async shDel(args: string[]): Promise<void> {
+    const nsenterArgs = ["-t", "1", "-n", "-m", "--", ...args];
+    await execFileAsync("nsenter", nsenterArgs)
+      .catch(() => execFileAsync(args[0], args.slice(1)))
       .catch(() => null);
   }
 
@@ -130,53 +144,202 @@ export class PortMappingService {
     const { vpnIp, publicWebfigPort, publicWinboxPort, publicSshPort } =
       portMap;
 
+    assertVpnIp(vpnIp);
+    assertPort(publicWebfigPort);
+    assertPort(publicWinboxPort);
+    assertPort(publicSshPort);
+
     try {
       // Enable IP forwarding
-      await this.sh("sysctl -w net.ipv4.ip_forward=1");
+      await this.sh(["sysctl", "-w", "net.ipv4.ip_forward=1"]);
 
       // Remove existing rules first (idempotent — tolerates missing rules)
-      await this.shDel(
-        `iptables -t nat -D PREROUTING -p tcp --dport ${publicWebfigPort} -j DNAT --to-destination ${vpnIp}:80`,
-      );
-      await this.shDel(
-        `iptables -t nat -D POSTROUTING -p tcp -d ${vpnIp} --dport 80 -j MASQUERADE`,
-      );
-      await this.shDel(
-        `iptables -t nat -D PREROUTING -p tcp --dport ${publicWinboxPort} -j DNAT --to-destination ${vpnIp}:8291`,
-      );
-      await this.shDel(
-        `iptables -t nat -D POSTROUTING -p tcp -d ${vpnIp} --dport 8291 -j MASQUERADE`,
-      );
-      await this.shDel(
-        `iptables -t nat -D PREROUTING -p tcp --dport ${publicSshPort} -j DNAT --to-destination ${vpnIp}:22`,
-      );
-      await this.shDel(
-        `iptables -t nat -D POSTROUTING -p tcp -d ${vpnIp} --dport 22 -j MASQUERADE`,
-      );
+      await this.shDel([
+        "iptables",
+        "-t",
+        "nat",
+        "-D",
+        "PREROUTING",
+        "-p",
+        "tcp",
+        "--dport",
+        String(publicWebfigPort),
+        "-j",
+        "DNAT",
+        "--to-destination",
+        `${vpnIp}:80`,
+      ]);
+      await this.shDel([
+        "iptables",
+        "-t",
+        "nat",
+        "-D",
+        "POSTROUTING",
+        "-p",
+        "tcp",
+        "-d",
+        vpnIp,
+        "--dport",
+        "80",
+        "-j",
+        "MASQUERADE",
+      ]);
+      await this.shDel([
+        "iptables",
+        "-t",
+        "nat",
+        "-D",
+        "PREROUTING",
+        "-p",
+        "tcp",
+        "--dport",
+        String(publicWinboxPort),
+        "-j",
+        "DNAT",
+        "--to-destination",
+        `${vpnIp}:8291`,
+      ]);
+      await this.shDel([
+        "iptables",
+        "-t",
+        "nat",
+        "-D",
+        "POSTROUTING",
+        "-p",
+        "tcp",
+        "-d",
+        vpnIp,
+        "--dport",
+        "8291",
+        "-j",
+        "MASQUERADE",
+      ]);
+      await this.shDel([
+        "iptables",
+        "-t",
+        "nat",
+        "-D",
+        "PREROUTING",
+        "-p",
+        "tcp",
+        "--dport",
+        String(publicSshPort),
+        "-j",
+        "DNAT",
+        "--to-destination",
+        `${vpnIp}:22`,
+      ]);
+      await this.shDel([
+        "iptables",
+        "-t",
+        "nat",
+        "-D",
+        "POSTROUTING",
+        "-p",
+        "tcp",
+        "-d",
+        vpnIp,
+        "--dport",
+        "22",
+        "-j",
+        "MASQUERADE",
+      ]);
 
       // WebFig: VPS:publicWebfigPort → vpnIp:80
-      await this.sh(
-        `iptables -t nat -A PREROUTING -p tcp --dport ${publicWebfigPort} -j DNAT --to-destination ${vpnIp}:80`,
-      );
-      await this.sh(
-        `iptables -t nat -A POSTROUTING -p tcp -d ${vpnIp} --dport 80 -j MASQUERADE`,
-      );
+      await this.sh([
+        "iptables",
+        "-t",
+        "nat",
+        "-A",
+        "PREROUTING",
+        "-p",
+        "tcp",
+        "--dport",
+        String(publicWebfigPort),
+        "-j",
+        "DNAT",
+        "--to-destination",
+        `${vpnIp}:80`,
+      ]);
+      await this.sh([
+        "iptables",
+        "-t",
+        "nat",
+        "-A",
+        "POSTROUTING",
+        "-p",
+        "tcp",
+        "-d",
+        vpnIp,
+        "--dport",
+        "80",
+        "-j",
+        "MASQUERADE",
+      ]);
 
       // Winbox: VPS:publicWinboxPort → vpnIp:8291
-      await this.sh(
-        `iptables -t nat -A PREROUTING -p tcp --dport ${publicWinboxPort} -j DNAT --to-destination ${vpnIp}:8291`,
-      );
-      await this.sh(
-        `iptables -t nat -A POSTROUTING -p tcp -d ${vpnIp} --dport 8291 -j MASQUERADE`,
-      );
+      await this.sh([
+        "iptables",
+        "-t",
+        "nat",
+        "-A",
+        "PREROUTING",
+        "-p",
+        "tcp",
+        "--dport",
+        String(publicWinboxPort),
+        "-j",
+        "DNAT",
+        "--to-destination",
+        `${vpnIp}:8291`,
+      ]);
+      await this.sh([
+        "iptables",
+        "-t",
+        "nat",
+        "-A",
+        "POSTROUTING",
+        "-p",
+        "tcp",
+        "-d",
+        vpnIp,
+        "--dport",
+        "8291",
+        "-j",
+        "MASQUERADE",
+      ]);
 
       // SSH: VPS:publicSshPort → vpnIp:22
-      await this.sh(
-        `iptables -t nat -A PREROUTING -p tcp --dport ${publicSshPort} -j DNAT --to-destination ${vpnIp}:22`,
-      );
-      await this.sh(
-        `iptables -t nat -A POSTROUTING -p tcp -d ${vpnIp} --dport 22 -j MASQUERADE`,
-      );
+      await this.sh([
+        "iptables",
+        "-t",
+        "nat",
+        "-A",
+        "PREROUTING",
+        "-p",
+        "tcp",
+        "--dport",
+        String(publicSshPort),
+        "-j",
+        "DNAT",
+        "--to-destination",
+        `${vpnIp}:22`,
+      ]);
+      await this.sh([
+        "iptables",
+        "-t",
+        "nat",
+        "-A",
+        "POSTROUTING",
+        "-p",
+        "tcp",
+        "-d",
+        vpnIp,
+        "--dport",
+        "22",
+        "-j",
+        "MASQUERADE",
+      ]);
 
       await this.prisma.routerPortMap.update({
         where: { id: portMap.id },
@@ -205,21 +368,112 @@ export class PortMappingService {
     const { vpnIp, publicWebfigPort, publicWinboxPort, publicSshPort } =
       portMap;
 
-    const cmds = [
-      `iptables -t nat -D PREROUTING -p tcp --dport ${publicWebfigPort} -j DNAT --to-destination ${vpnIp}:80`,
-      `iptables -t nat -D POSTROUTING -p tcp -d ${vpnIp} --dport 80 -j MASQUERADE`,
-      `iptables -t nat -D PREROUTING -p tcp --dport ${publicWinboxPort} -j DNAT --to-destination ${vpnIp}:8291`,
-      `iptables -t nat -D POSTROUTING -p tcp -d ${vpnIp} --dport 8291 -j MASQUERADE`,
-      `iptables -t nat -D PREROUTING -p tcp --dport ${publicSshPort} -j DNAT --to-destination ${vpnIp}:22`,
-      `iptables -t nat -D POSTROUTING -p tcp -d ${vpnIp} --dport 22 -j MASQUERADE`,
+    assertVpnIp(vpnIp);
+    assertPort(publicWebfigPort);
+    assertPort(publicWinboxPort);
+    assertPort(publicSshPort);
+
+    const cmds: string[][] = [
+      [
+        "iptables",
+        "-t",
+        "nat",
+        "-D",
+        "PREROUTING",
+        "-p",
+        "tcp",
+        "--dport",
+        String(publicWebfigPort),
+        "-j",
+        "DNAT",
+        "--to-destination",
+        `${vpnIp}:80`,
+      ],
+      [
+        "iptables",
+        "-t",
+        "nat",
+        "-D",
+        "POSTROUTING",
+        "-p",
+        "tcp",
+        "-d",
+        vpnIp,
+        "--dport",
+        "80",
+        "-j",
+        "MASQUERADE",
+      ],
+      [
+        "iptables",
+        "-t",
+        "nat",
+        "-D",
+        "PREROUTING",
+        "-p",
+        "tcp",
+        "--dport",
+        String(publicWinboxPort),
+        "-j",
+        "DNAT",
+        "--to-destination",
+        `${vpnIp}:8291`,
+      ],
+      [
+        "iptables",
+        "-t",
+        "nat",
+        "-D",
+        "POSTROUTING",
+        "-p",
+        "tcp",
+        "-d",
+        vpnIp,
+        "--dport",
+        "8291",
+        "-j",
+        "MASQUERADE",
+      ],
+      [
+        "iptables",
+        "-t",
+        "nat",
+        "-D",
+        "PREROUTING",
+        "-p",
+        "tcp",
+        "--dport",
+        String(publicSshPort),
+        "-j",
+        "DNAT",
+        "--to-destination",
+        `${vpnIp}:22`,
+      ],
+      [
+        "iptables",
+        "-t",
+        "nat",
+        "-D",
+        "POSTROUTING",
+        "-p",
+        "tcp",
+        "-d",
+        vpnIp,
+        "--dport",
+        "22",
+        "-j",
+        "MASQUERADE",
+      ],
     ];
 
     for (const cmd of cmds) {
       try {
-        await this.sh(cmd);
+        await this.shDel(cmd);
       } catch (err) {
-        // -D fails if rule doesn't exist — log and continue
-        this.logger.warn(`iptables -D skipped (rule not found?): ${cmd}`);
+        // shDel already swallows errors, but keep catch for explicit logging
+        this.logger.warn(
+          `iptables -D skipped (rule not found?): ${cmd.join(" ")}`,
+        );
       }
     }
 

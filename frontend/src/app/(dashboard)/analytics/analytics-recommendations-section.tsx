@@ -16,13 +16,13 @@ export function AnalyticsRecommendationsSection({
     <section id="recommendations" className="rounded-xl border bg-card p-5 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="font-semibold">Recommandations IA</h2>
+          <h2 className="font-semibold">Insights automatiques</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Feed actionnable genere depuis incidents, abonnements et historique ventes.
+            Actions prioritaires générées depuis incidents, abonnements et historique ventes.
           </p>
         </div>
         <span className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs text-primary">
-          {recommendations.length} recommandation(s)
+          {recommendations.length} insight(s)
         </span>
       </div>
 

@@ -36,9 +36,12 @@ export class BeaconController {
     });
     if (!router) return; // silent — don't leak existence
 
-    // Security: beacon must come from the router's tunnel IP
+    // Security: reject beacons from unprovisioned routers (no tunnel = no valid source IP)
+    if (!router.tunnel) return;
+
+    // Security: beacon must come from the router's WireGuard tunnel IP
     const sourceIp = this.extractClientIp(req);
-    if (router.tunnel && sourceIp !== router.tunnel.tunnelIp) {
+    if (sourceIp !== router.tunnel.tunnelIp) {
       this.logger.warn(
         `Beacon IP mismatch for router ${routerId}: got ${sourceIp}, expected ${router.tunnel.tunnelIp}`,
       );

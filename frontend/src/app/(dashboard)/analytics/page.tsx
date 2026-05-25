@@ -3,7 +3,7 @@
 import { BarChart3 } from 'lucide-react';
 import { AnalyticsOverviewSection } from './analytics-overview-section';
 import { AnalyticsRecommendationsSection } from './analytics-recommendations-section';
-import { AnalyticsRevenueChartsSection } from './analytics-revenue-charts-section';
+import { AnalyticsRevenueChartsSection } from '@/components/charts/lazy';
 import { AnalyticsSubscriptionsSection } from './analytics-subscriptions-section';
 import { AnalyticsTicketReportSection } from './analytics-ticket-report-section';
 import { useAnalyticsData } from './use-analytics-data';

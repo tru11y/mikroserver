@@ -6,19 +6,11 @@ import { api, unwrap } from '@/lib/api';
 import { hasPermission } from '@/lib/permissions';
 import { KpiCard } from '@/components/dashboard/kpi-card';
 import { IncidentCenterCard } from '@/components/dashboard/incident-center-card';
-import { RevenueChart } from '@/components/charts/revenue-chart';
+import { RevenueChart, TopRoutersChart } from '@/components/charts/lazy';
 import { RouterStatusPanel } from '@/components/dashboard/router-status-panel';
 import { TransactionFeed } from '@/components/dashboard/transaction-feed';
 import { customersApi } from '@/lib/api/customers';
 import { apiClient } from '@/lib/api/client';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
 import {
   Banknote,
   TrendingUp,
@@ -168,7 +160,9 @@ export default function DashboardPage() {
     ? (unwrap<{ items: DailyRecommendation[] }>(dailyRecommendationsData).items ?? [])
     : [];
 
-  const routers = routersData ? (routersData.data as any)?.data ?? [] : null;
+  const routers = routersData
+    ? (routersData.data as { data: { id: string }[] }).data ?? []
+    : null;
   const showOnboarding =
     routers !== null &&
     routers.length === 0 &&
@@ -371,9 +365,9 @@ export default function DashboardPage() {
         <div className="rounded-xl border bg-card p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h2 className="font-semibold">Recommandations IA</h2>
+              <h2 className="font-semibold">Insights automatiques</h2>
               <p className="text-xs text-muted-foreground mt-1">
-                Suggestions automatiques basees sur incidents et ventes.
+                Actions prioritaires basées sur vos incidents et ventes.
               </p>
             </div>
             <Sparkles className="h-4 w-4 text-primary" />
@@ -425,44 +419,7 @@ export default function DashboardPage() {
             {(stats?.topRouters ?? []).length === 0 ? (
               <p className="text-sm text-muted-foreground">Aucune donnée disponible.</p>
             ) : (
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart
-                  data={stats?.topRouters ?? []}
-                  layout="vertical"
-                  margin={{ top: 0, right: 12, left: 0, bottom: 0 }}
-                >
-                  <XAxis
-                    type="number"
-                    tickFormatter={(v: number) =>
-                      v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)
-                    }
-                    tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="name"
-                    width={80}
-                    tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <Tooltip
-                    formatter={(value: number) => [
-                      new Intl.NumberFormat('fr-FR').format(value) + ' FCFA',
-                      'Revenus',
-                    ]}
-                    contentStyle={{
-                      fontSize: 12,
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: 8,
-                      background: 'hsl(var(--card))',
-                    }}
-                  />
-                  <Bar dataKey="revenue" fill="#3b82f6" radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <TopRoutersChart data={stats?.topRouters ?? []} />
             )}
 
             {/* Table fallback for top routers */}

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { clsx } from 'clsx';
-import { getStoredAccessToken } from '@/lib/api/client';
+import { getStoredAccessToken, unwrap } from '@/lib/api/client';
 import { api } from '@/lib/api';
 import { apiClient } from '@/lib/api/client';
 import { hasAnyPermission, hasPermission } from '@/lib/permissions';
@@ -50,7 +50,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     queryKey: ['operator-subscription'],
     queryFn: async () => {
       const res = await apiClient.get('/saas/subscription');
-      return (res.data as any)?.data ?? null;
+      return (res.data as { data: { status: string; tier?: { slug: string } } | null })?.data ?? null;
     },
     staleTime: 5 * 60 * 1000,
     retry: 1,
@@ -60,7 +60,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     queryKey: ['saas-usage'],
     queryFn: async () => {
       const res = await apiClient.get('/saas/usage');
-      return (res.data as any)?.data ?? null;
+      return (res.data as { data: Record<string, { current: number; limit: number | null }> | null })?.data ?? null;
     },
     staleTime: 5 * 60 * 1000,
     retry: 1,
@@ -72,11 +72,11 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     sidebarUsage !== null &&
     sidebarUsage !== undefined &&
     (['routers', 'resellers', 'monthlyTx'] as const).some((key) => {
-      const meter = sidebarUsage[key] as { current: number; limit: number | null } | undefined;
+      const meter = sidebarUsage[key];
       return meter?.limit != null && meter.current >= meter.limit * 0.8;
     });
 
-  const user = (meData as any)?.data?.data;
+  const user = meData ? unwrap<Record<string, unknown>>(meData) : undefined;
   const fallbackRole = !user ? getRoleFromAccessToken() : null;
   const isFallbackAdmin = fallbackRole === 'ADMIN' || fallbackRole === 'SUPER_ADMIN';
   const isFallbackReseller = fallbackRole === 'RESELLER' || fallbackRole === 'VIEWER';
@@ -271,7 +271,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               <p className="text-xs font-semibold truncate">
                 {user ? `${user.firstName} ${user.lastName}` : '...'}
               </p>
-              <p className="text-[10px] text-muted-foreground truncate">{user?.role ?? ''}</p>
+              <p className="text-[10px] text-muted-foreground truncate">{(user?.role as string) ?? ''}</p>
             </div>
           </div>
         </div>

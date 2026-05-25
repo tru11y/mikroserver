@@ -8,7 +8,7 @@ import { formatCurrency } from './analytics.utils';
 
 const SECTION_LINKS = [
   { href: '#subscriptions', label: 'Abonnements' },
-  { href: '#recommendations', label: 'Recommandations' },
+  { href: '#recommendations', label: 'Insights' },
   { href: '#tickets', label: 'Tickets' },
   { href: '#charts', label: 'Courbes' },
 ];

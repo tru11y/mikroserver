@@ -57,6 +57,9 @@ const config: Config = {
           DEFAULT: 'hsl(var(--info))',
           foreground: 'hsl(var(--info-foreground))',
         },
+        brand: {
+          pink: 'hsl(var(--brand-pink))',
+        },
       },
       boxShadow: {
         // 5-level elevation system — maps to CSS custom props in globals.css

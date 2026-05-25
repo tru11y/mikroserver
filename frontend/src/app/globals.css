@@ -4,98 +4,100 @@
 
 @layer base {
   :root {
-    /* ── Surface ─────────────────────────────────────────────────────────── */
-    --background: 220 33% 97%;        /* Near-white with slight blue tint */
-    --foreground: 222 39% 11%;        /* Deep charcoal — high contrast */
+    /* ── Surface — Violet Cosmos Light ──────────────────────────────────── */
+    --background: 270 40% 97%;        /* Lavande très claire */
+    --foreground: 260 45% 10%;        /* Violet-charcoal profond */
     --card: 0 0% 100%;
-    --card-foreground: 222 39% 11%;
+    --card-foreground: 260 45% 10%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222 39% 11%;
+    --popover-foreground: 260 45% 10%;
 
     /* ── Brand ───────────────────────────────────────────────────────────── */
-    --primary: 239 84% 58%;           /* Deep Indigo #4F46E5 — WCAG AA on white */
+    --primary: 271 91% 55%;           /* Violet #9333EA — WCAG AA on white */
     --primary-foreground: 0 0% 100%;
-    --primary-hover: 239 84% 50%;     /* Darker on hover */
+    --primary-hover: 271 91% 47%;
+    --brand-pink: 330 81% 55%;        /* Rose néon #DB2777 */
 
     /* ── Neutral ─────────────────────────────────────────────────────────── */
-    --secondary: 220 18% 92%;
-    --secondary-foreground: 222 39% 11%;
-    --muted: 220 18% 92%;
-    --muted-foreground: 218 16% 40%;  /* 5.9:1 contrast ratio — WCAG AA ✓ */
-    --accent: 220 18% 92%;
-    --accent-foreground: 222 39% 11%;
+    --secondary: 270 30% 93%;
+    --secondary-foreground: 260 45% 10%;
+    --muted: 270 30% 93%;
+    --muted-foreground: 270 15% 42%;
+    --accent: 270 30% 93%;
+    --accent-foreground: 260 45% 10%;
 
     /* ── Semantic ─────────────────────────────────────────────────────────── */
     --destructive: 0 84% 55%;
     --destructive-foreground: 0 0% 100%;
-    --success: 145 63% 32%;
+    --success: 158 63% 35%;
     --success-foreground: 0 0% 100%;
-    --warning: 38 96% 46%;
+    --warning: 43 96% 46%;
     --warning-foreground: 0 0% 100%;
-    --info: 214 89% 48%;
+    --info: 213 89% 50%;
     --info-foreground: 0 0% 100%;
 
     /* ── Chrome ───────────────────────────────────────────────────────────── */
-    --border: 220 18% 82%;            /* Charcoal-tinted — clearly visible */
-    --border-subtle: 220 18% 91%;     /* For dividers */
-    --input: 220 18% 82%;
-    --ring: 239 84% 58%;
+    --border: 270 25% 84%;
+    --border-subtle: 270 25% 92%;
+    --input: 270 25% 84%;
+    --ring: 271 91% 55%;
     --radius: 0.75rem;
 
-    /* ── Elevation (shadow palette) ──────────────────────────────────────── */
-    --shadow-xs: 0 1px 2px 0 hsl(222 39% 11% / 0.05);
-    --shadow-sm: 0 1px 3px 0 hsl(222 39% 11% / 0.08), 0 1px 2px -1px hsl(222 39% 11% / 0.06);
-    --shadow-md: 0 4px 6px -1px hsl(222 39% 11% / 0.08), 0 2px 4px -2px hsl(222 39% 11% / 0.05);
-    --shadow-lg: 0 10px 15px -3px hsl(222 39% 11% / 0.09), 0 4px 6px -4px hsl(222 39% 11% / 0.06);
-    --shadow-xl: 0 20px 25px -5px hsl(222 39% 11% / 0.10), 0 8px 10px -6px hsl(222 39% 11% / 0.06);
-    --shadow-glow: 0 0 0 1px hsl(var(--primary) / 0.12), 0 4px 20px -2px hsl(var(--primary) / 0.20);
+    /* ── Elevation ───────────────────────────────────────────────────────── */
+    --shadow-xs: 0 1px 2px 0 hsl(260 45% 10% / 0.05);
+    --shadow-sm: 0 1px 3px 0 hsl(260 45% 10% / 0.08), 0 1px 2px -1px hsl(260 45% 10% / 0.06);
+    --shadow-md: 0 4px 6px -1px hsl(260 45% 10% / 0.08), 0 2px 4px -2px hsl(260 45% 10% / 0.05);
+    --shadow-lg: 0 10px 15px -3px hsl(260 45% 10% / 0.09), 0 4px 6px -4px hsl(260 45% 10% / 0.06);
+    --shadow-xl: 0 20px 25px -5px hsl(260 45% 10% / 0.10), 0 8px 10px -6px hsl(260 45% 10% / 0.06);
+    --shadow-glow: 0 0 0 1px hsl(var(--primary) / 0.15), 0 4px 20px -2px hsl(var(--primary) / 0.25);
   }
 
   .dark {
-    /* ── Surface ─────────────────────────────────────────────────────────── */
-    --background: 222 28% 9%;         /* Deep navy — not pure black */
-    --foreground: 210 40% 96%;
-    --card: 222 28% 13%;              /* Raised surface */
-    --card-foreground: 210 40% 96%;
-    --popover: 222 28% 13%;
-    --popover-foreground: 210 40% 96%;
+    /* ── Surface — Violet Cosmos Dark ───────────────────────────────────── */
+    --background: 260 59% 5%;         /* #0A0514 — Cosmos noir violet */
+    --foreground: 270 100% 95%;       /* #F3E8FF — Lavande clair */
+    --card: 256 58% 11%;              /* #150C2E — Surface élevée */
+    --card-foreground: 270 100% 95%;
+    --popover: 256 58% 11%;
+    --popover-foreground: 270 100% 95%;
 
     /* ── Brand ───────────────────────────────────────────────────────────── */
-    --primary: 239 84% 72%;           /* Lightened Indigo for dark bg */
-    --primary-foreground: 222 28% 9%;
-    --primary-hover: 239 84% 78%;
+    --primary: 271 91% 65%;           /* #A855F7 — Violet électrique */
+    --primary-foreground: 260 59% 5%;
+    --primary-hover: 271 91% 73%;
+    --brand-pink: 330 81% 62%;        /* #EC4899 — Rose néon */
 
     /* ── Neutral ─────────────────────────────────────────────────────────── */
-    --secondary: 222 28% 19%;
-    --secondary-foreground: 210 40% 96%;
-    --muted: 222 28% 19%;
-    --muted-foreground: 215 20% 62%;  /* 4.8:1 on dark bg — WCAG AA ✓ */
-    --accent: 222 28% 19%;
-    --accent-foreground: 210 40% 96%;
+    --secondary: 253 56% 16%;         /* #1C1240 */
+    --secondary-foreground: 270 100% 95%;
+    --muted: 253 56% 16%;
+    --muted-foreground: 270 25% 62%;  /* Lavande atténuée — WCAG AA ✓ */
+    --accent: 253 56% 16%;
+    --accent-foreground: 270 100% 95%;
 
     /* ── Semantic ─────────────────────────────────────────────────────────── */
     --destructive: 0 72% 51%;
-    --destructive-foreground: 210 40% 96%;
-    --success: 145 63% 45%;
-    --success-foreground: 222 28% 9%;
-    --warning: 38 96% 56%;
-    --warning-foreground: 222 28% 9%;
-    --info: 214 89% 64%;
-    --info-foreground: 222 28% 9%;
+    --destructive-foreground: 270 100% 95%;
+    --success: 158 65% 52%;           /* #34D399 — Émeraude */
+    --success-foreground: 260 59% 5%;
+    --warning: 43 96% 56%;            /* #FBBF24 — Ambre */
+    --warning-foreground: 260 59% 5%;
+    --info: 213 93% 67%;              /* #60A5FA — Bleu ciel */
+    --info-foreground: 260 59% 5%;
 
     /* ── Chrome ───────────────────────────────────────────────────────────── */
-    --border: 222 28% 22%;            /* Visible but subtle */
-    --border-subtle: 222 28% 17%;
-    --input: 222 28% 22%;
-    --ring: 239 84% 72%;
+    --border: 256 40% 22%;
+    --border-subtle: 256 40% 16%;
+    --input: 256 40% 22%;
+    --ring: 271 91% 65%;
 
-    /* ── Elevation (adjusted for dark bg) ────────────────────────────────── */
-    --shadow-xs: 0 1px 2px 0 hsl(0 0% 0% / 0.25);
-    --shadow-sm: 0 1px 3px 0 hsl(0 0% 0% / 0.30), 0 1px 2px -1px hsl(0 0% 0% / 0.20);
-    --shadow-md: 0 4px 6px -1px hsl(0 0% 0% / 0.30), 0 2px 4px -2px hsl(0 0% 0% / 0.20);
-    --shadow-lg: 0 10px 15px -3px hsl(0 0% 0% / 0.35), 0 4px 6px -4px hsl(0 0% 0% / 0.20);
-    --shadow-xl: 0 20px 25px -5px hsl(0 0% 0% / 0.40), 0 8px 10px -6px hsl(0 0% 0% / 0.25);
-    --shadow-glow: 0 0 0 1px hsl(var(--primary) / 0.20), 0 4px 20px -2px hsl(var(--primary) / 0.30);
+    /* ── Elevation (violet glow) ─────────────────────────────────────────── */
+    --shadow-xs: 0 1px 2px 0 hsl(0 0% 0% / 0.35);
+    --shadow-sm: 0 1px 3px 0 hsl(0 0% 0% / 0.40), 0 1px 2px -1px hsl(0 0% 0% / 0.30);
+    --shadow-md: 0 4px 6px -1px hsl(0 0% 0% / 0.40), 0 2px 4px -2px hsl(0 0% 0% / 0.30);
+    --shadow-lg: 0 10px 15px -3px hsl(0 0% 0% / 0.45), 0 4px 6px -4px hsl(0 0% 0% / 0.30);
+    --shadow-xl: 0 20px 25px -5px hsl(0 0% 0% / 0.50), 0 8px 10px -6px hsl(0 0% 0% / 0.35);
+    --shadow-glow: 0 0 0 1px hsl(var(--primary) / 0.25), 0 4px 20px -2px hsl(var(--primary) / 0.45);
   }
 }
 
@@ -149,9 +151,9 @@
     border: 1px solid hsl(255 255% 255% / 0.06);
   }
 
-  /* Gradient text */
+  /* Gradient text — violet → rose néon */
   .text-gradient {
-    background: linear-gradient(135deg, hsl(var(--primary)), hsl(239 84% 80%));
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--brand-pink)));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;

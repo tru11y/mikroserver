@@ -445,51 +445,6 @@ export class RoutersController {
     );
   }
 
-  // ── Access credentials ──────────────────────────────────────────────────────
-
-  @Get(":id/access")
-  @Roles(UserRole.VIEWER)
-  @Permissions("routers.view")
-  @ApiOperation({ summary: "Get access credentials (Winbox / WebFig / SSH)" })
-  getAccess(
-    @Param("id", ParseUUIDPipe) id: string,
-    @CurrentUser() user: JwtPayload,
-  ) {
-    return this.routersService.getAccess(id, user.sub, user.role);
-  }
-
-  @Put(":id/access")
-  @Roles(UserRole.ADMIN)
-  @Permissions("routers.manage")
-  @ApiOperation({ summary: "Update access credentials / ports" })
-  updateAccess(
-    @Param("id", ParseUUIDPipe) id: string,
-    @Body()
-    body: {
-      winboxPort?: number;
-      webfigPort?: number;
-      sshPort?: number;
-      accessUsername?: string;
-      accessPassword?: string;
-    },
-    @CurrentUser() user: JwtPayload,
-  ) {
-    return this.routersService.updateAccess(id, body, user.sub);
-  }
-
-  @Get(":id/access/test")
-  @Roles(UserRole.VIEWER)
-  @Permissions("routers.view")
-  @ApiOperation({
-    summary: "Test TCP reachability of router API port via WireGuard",
-  })
-  testAccess(
-    @Param("id", ParseUUIDPipe) id: string,
-    @CurrentUser() user: JwtPayload,
-  ) {
-    return this.routersService.testAccess(id, user.sub, user.role);
-  }
-
   // ── Port-map (nginx stream proxy) ──────────────────────────────────────────
 
   @Get(":id/port-map")

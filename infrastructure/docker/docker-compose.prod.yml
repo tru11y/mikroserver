@@ -236,7 +236,8 @@ services:
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/proxy}
       API_INTERNAL_URL: http://api:3000
-    # Port 3001 NOT exposed to host — nginx proxies via app-net
+    ports:
+      - "3001:3001"
     networks:
       - app-net
     depends_on:

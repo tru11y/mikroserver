@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, unwrap } from '@/lib/api';
 import { hasPermission, isAdminUser } from '@/lib/permissions';
 import { toast } from 'sonner';
+import { format } from 'date-fns';
 import { Users, Wifi, RefreshCw, Ban, AlertTriangle, Trash2 } from 'lucide-react';
 
 interface Session {
@@ -17,6 +18,9 @@ interface Session {
   bytesIn: number;
   bytesOut: number;
   routerName?: string;
+  connectedAt: string | null;
+  expiresAt: string | null;
+  planName: string | null;
 }
 
 interface RouterError {
@@ -30,6 +34,26 @@ interface SessionsResponse {
   routerErrors: RouterError[];
   totalRouters: number;
   respondingRouters: number;
+}
+
+function formatConnectedAt(iso: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  const today = new Date();
+  const sameDay =
+    d.getDate() === today.getDate() &&
+    d.getMonth() === today.getMonth() &&
+    d.getFullYear() === today.getFullYear();
+  return format(d, sameDay ? 'HH:mm' : 'dd/MM HH:mm');
+}
+
+function formatCountdown(iso: string | null): string {
+  if (!iso) return '—';
+  const diff = new Date(iso).getTime() - Date.now();
+  if (diff <= 0) return 'Expiré';
+  const h = Math.floor(diff / 3_600_000);
+  const m = Math.floor((diff % 3_600_000) / 60_000);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
 function formatBytes(bytes: number): string {
@@ -116,6 +140,7 @@ export default function SessionsPage() {
         </div>
         <div className="flex gap-2 items-center">
           <select
+            aria-label="Filtrer par routeur"
             value={routerId ?? ''}
             onChange={e => setRouterId(e.target.value || undefined)}
             className="flex-1 sm:flex-none rounded-lg border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
@@ -126,6 +151,7 @@ export default function SessionsPage() {
             ))}
           </select>
           <button
+            type="button"
             onClick={() => refetch()}
             className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-card hover:bg-muted transition-colors text-sm shrink-0"
           >
@@ -168,7 +194,7 @@ export default function SessionsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/30">
-                {['Utilisateur', 'IP / MAC', 'Routeur', 'Uptime', 'Download', 'Upload', ''].map(h => (
+                {['Utilisateur', 'IP / MAC', 'Routeur', 'Uptime', 'Connecté à', 'Expire à', 'Download', 'Upload', ''].map(h => (
                   <th key={h} className="text-left px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
@@ -192,11 +218,21 @@ export default function SessionsPage() {
                     </span>
                   </td>
                   <td className="px-5 py-3.5 font-mono text-xs whitespace-nowrap">{s.uptime}</td>
+                  <td className="px-5 py-3.5 font-mono text-xs whitespace-nowrap">{formatConnectedAt(s.connectedAt)}</td>
+                  <td className="px-5 py-3.5 text-xs whitespace-nowrap">
+                    {s.expiresAt ? (
+                      <span className={new Date(s.expiresAt).getTime() - Date.now() < 5 * 60_000 ? 'text-amber-400' : 'text-muted-foreground'}>
+                        {s.planName && <span className="font-medium text-foreground mr-1">{s.planName}</span>}
+                        {formatCountdown(s.expiresAt)}
+                      </span>
+                    ) : '—'}
+                  </td>
                   <td className="px-5 py-3.5 text-emerald-400 font-medium">{formatBytes(s.bytesIn)}</td>
                   <td className="px-5 py-3.5 text-blue-400 font-medium">{formatBytes(s.bytesOut)}</td>
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-2">
                       <button
+                        type="button"
                         onClick={() => { setTerminatingId(s.id); terminateMutation.mutate(s); }}
                         disabled={terminatingId === s.id && terminateMutation.isPending}
                         className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs text-red-400 hover:bg-red-400/10 transition-colors disabled:opacity-50"
@@ -209,6 +245,7 @@ export default function SessionsPage() {
                           <div className="flex items-center gap-1.5">
                             <span className="text-xs text-amber-300">Confirmer ?</span>
                             <button
+                              type="button"
                               onClick={() => { setDeletingId(s.id); setConfirmDeleteId(null); deleteMutation.mutate(s); }}
                               disabled={deletingId === s.id && deleteMutation.isPending}
                               className="px-2 py-1 rounded-lg border border-red-400/30 bg-red-400/10 text-xs text-red-300 hover:bg-red-400/20 transition-colors disabled:opacity-50"
@@ -216,6 +253,7 @@ export default function SessionsPage() {
                               {deletingId === s.id && deleteMutation.isPending ? "..." : "Oui"}
                             </button>
                             <button
+                              type="button"
                               onClick={() => setConfirmDeleteId(null)}
                               className="px-2 py-1 rounded-lg border text-xs text-muted-foreground hover:bg-muted transition-colors"
                             >
@@ -224,6 +262,7 @@ export default function SessionsPage() {
                           </div>
                         ) : (
                           <button
+                            type="button"
                             onClick={() => setConfirmDeleteId(s.id)}
                             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs text-amber-300 hover:bg-amber-400/10 transition-colors"
                           >

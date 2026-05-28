@@ -131,6 +131,7 @@ export interface RouterLiveStats {
     ipAddress: string;
     macAddress: string;
     uptime: string;
+    connectedAt: Date;
     bytesIn: number;
     bytesOut: number;
   }>;

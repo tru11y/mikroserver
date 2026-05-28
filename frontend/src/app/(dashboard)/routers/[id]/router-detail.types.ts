@@ -31,6 +31,7 @@ export interface LiveClient {
   ipAddress: string;
   macAddress: string;
   uptime: string;
+  connectedAt: string | null;
   bytesIn: number;
   bytesOut: number;
 }

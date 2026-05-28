@@ -11,7 +11,7 @@ import {
 import { clsx } from 'clsx';
 import type { LiveClientWithHotspotMeta } from './router-detail.selectors';
 import type { HotspotUserRow } from './router-detail.types';
-import { formatBytes, formatElapsedFromMinutes } from './router-detail.utils';
+import { formatBytes, formatElapsedFromMinutes, parseRouterUptimeToSeconds } from './router-detail.utils';
 
 interface ConnectedClientsSectionProps {
   isLoading: boolean;
@@ -182,16 +182,17 @@ export function ConnectedClientsSection({
                   </td>
                   <td className="px-5 py-3.5">
                     <p className="text-xs">
-                      {client.hotspotUser?.firstConnectionAt
-                        ? new Date(client.hotspotUser.firstConnectionAt).toLocaleString(
-                            'fr-FR',
-                          )
-                        : '-'}
+                      {new Date(
+                        client.hotspotUser?.firstConnectionAt ??
+                          client.connectedAt ??
+                          (Date.now() - parseRouterUptimeToSeconds(client.uptime) * 1000),
+                      ).toLocaleString('fr-FR')}
                     </p>
                     <p className="mt-1 text-[11px] text-muted-foreground">
                       Ecoule:{' '}
                       {formatElapsedFromMinutes(
-                        client.hotspotUser?.elapsedSinceFirstConnectionMinutes,
+                        client.hotspotUser?.elapsedSinceFirstConnectionMinutes ??
+                          Math.floor(parseRouterUptimeToSeconds(client.uptime) / 60),
                       )}
                     </p>
                     <p className="mt-1 text-[11px] text-muted-foreground">

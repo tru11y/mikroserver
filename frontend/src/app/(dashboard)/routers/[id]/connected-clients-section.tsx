@@ -77,6 +77,7 @@ export function ConnectedClientsSection({
         <div className="flex items-center gap-2">
           {expiredActiveCount > 0 && canTerminateSessions && onDisconnectExpired && (
             <button
+              type="button"
               onClick={onDisconnectExpired}
               disabled={isDisconnectExpiredPending}
               className="flex items-center gap-1.5 rounded-lg border border-red-400/30 bg-red-400/10 px-3 py-1.5 text-xs text-red-400 transition-colors hover:bg-red-400/20 disabled:opacity-50"
@@ -150,111 +151,116 @@ export function ConnectedClientsSection({
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {clients.map((client) => (
-                <tr
-                  key={client.id}
-                  className={clsx(
-                    'transition-colors hover:bg-muted/20',
-                    client.hotspotUser?.enforcementStatus === 'EXPIRED_BUT_ACTIVE' &&
-                      'bg-red-500/5',
-                  )}
-                >
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
-                      <div>
-                        <span className="font-medium font-mono text-xs">
-                          {client.username}
-                        </span>
-                        <p className="mt-1 text-[11px] text-muted-foreground">
-                          {client.hotspotUser?.planName ??
-                            client.hotspotUser?.profile ??
-                            'Client non gere par MikroServer'}
-                        </p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <p className="font-mono text-xs">{client.ipAddress}</p>
-                    <p className="font-mono text-xs text-muted-foreground">
-                      {client.macAddress}
-                    </p>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <p className="text-xs">
-                      {new Date(
-                        client.hotspotUser?.firstConnectionAt ??
-                          client.connectedAt ??
-                          (Date.now() - parseRouterUptimeToSeconds(client.uptime) * 1000),
-                      ).toLocaleString('fr-FR')}
-                    </p>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      Ecoule:{' '}
-                      {formatElapsedFromMinutes(
-                        client.hotspotUser?.elapsedSinceFirstConnectionMinutes ??
-                          Math.floor(parseRouterUptimeToSeconds(client.uptime) / 60),
-                      )}
-                    </p>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      Expire:{' '}
-                      {client.hotspotUser?.voucherExpiresAt
-                        ? new Date(client.hotspotUser.voucherExpiresAt).toLocaleString(
-                            'fr-FR',
-                          )
-                        : '-'}
-                    </p>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <span className="font-mono text-xs">{client.uptime}</span>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <span className="text-emerald-400 font-medium">
-                      {formatBytes(client.bytesIn)}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <span className="text-blue-400 font-medium">
-                      {formatBytes(client.bytesOut)}
-                    </span>
-                  </td>
-                  {(canManageHotspot || canTerminateSessions || canAdminDeleteTicket) && (
+              {clients.map((client) => {
+                const planLabel = client.hotspotUser?.planName ?? client.hotspotUser?.profile;
+                return (
+                  <tr
+                    key={client.id}
+                    className={clsx(
+                      'transition-colors hover:bg-muted/20',
+                      client.hotspotUser?.enforcementStatus === 'EXPIRED_BUT_ACTIVE' &&
+                        'bg-red-500/5',
+                    )}
+                  >
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-2">
-                        {canManageHotspot && client.hotspotUser && (
-                          <button
-                            onClick={() => onChangeProfile(client.hotspotUser as HotspotUserRow)}
-                            disabled={isProfileChangePending}
-                            className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs transition-colors hover:bg-muted disabled:opacity-50"
-                          >
-                            <Pencil className="h-3 w-3" />
-                            {isProfileChangePending ? 'Profil...' : 'Profil'}
-                          </button>
-                        )}
-                        {canTerminateSessions && (
-                          <button
-                            onClick={() => onDisconnect(client.id)}
-                            disabled={isDisconnectPending}
-                            className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs text-red-400 transition-colors hover:bg-red-400/10 disabled:opacity-50"
-                          >
-                            <Ban className="h-3 w-3" />
-                            {disconnectingId === client.id ? 'Coupure...' : 'Couper'}
-                          </button>
-                        )}
-                        {canAdminDeleteTicket && (
-                          <button
-                            onClick={() => onDelete(client.username)}
-                            disabled={isDeletePending}
-                            className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs text-amber-300 transition-colors hover:bg-amber-400/10 disabled:opacity-50"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                            {isDeletePending ? 'Suppression...' : 'Supprimer'}
-                          </button>
-                        )}
+                        <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+                        <div>
+                          <span className="font-medium font-mono text-xs">
+                            {client.username}
+                          </span>
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            {planLabel ?? 'Client non gere par MikroServer'}
+                          </p>
+                        </div>
                       </div>
                     </td>
-                  )}
-                </tr>
-              ))}
+                    <td className="px-5 py-3.5">
+                      <p className="font-mono text-xs">{client.ipAddress}</p>
+                      <p className="font-mono text-xs text-muted-foreground">
+                        {client.macAddress}
+                      </p>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      {planLabel && (
+                        <p className="text-xs font-medium mb-1">{planLabel}</p>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(
+                          client.hotspotUser?.firstConnectionAt ??
+                            client.connectedAt ??
+                            (Date.now() - parseRouterUptimeToSeconds(client.uptime) * 1000),
+                        ).toLocaleString('fr-FR')}
+                      </p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        Ecoule:{' '}
+                        {formatElapsedFromMinutes(
+                          client.hotspotUser?.elapsedSinceFirstConnectionMinutes ??
+                            Math.floor(parseRouterUptimeToSeconds(client.uptime) / 60),
+                        )}
+                      </p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        Expire:{' '}
+                        {client.hotspotUser?.voucherExpiresAt
+                          ? new Date(client.hotspotUser.voucherExpiresAt).toLocaleString('fr-FR')
+                          : '-'}
+                      </p>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <span className="font-mono text-xs">{client.uptime}</span>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <span className="text-emerald-400 font-medium">
+                        {formatBytes(client.bytesIn)}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <span className="text-blue-400 font-medium">
+                        {formatBytes(client.bytesOut)}
+                      </span>
+                    </td>
+                    {(canManageHotspot || canTerminateSessions || canAdminDeleteTicket) && (
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-2">
+                          {canManageHotspot && client.hotspotUser && (
+                            <button
+                              type="button"
+                              onClick={() => onChangeProfile(client.hotspotUser as HotspotUserRow)}
+                              disabled={isProfileChangePending}
+                              className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs transition-colors hover:bg-muted disabled:opacity-50"
+                            >
+                              <Pencil className="h-3 w-3" />
+                              {isProfileChangePending ? 'Profil...' : 'Profil'}
+                            </button>
+                          )}
+                          {canTerminateSessions && (
+                            <button
+                              type="button"
+                              onClick={() => onDisconnect(client.id)}
+                              disabled={isDisconnectPending}
+                              className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs text-red-400 transition-colors hover:bg-red-400/10 disabled:opacity-50"
+                            >
+                              <Ban className="h-3 w-3" />
+                              {disconnectingId === client.id ? 'Coupure...' : 'Couper'}
+                            </button>
+                          )}
+                          {canAdminDeleteTicket && (
+                            <button
+                              type="button"
+                              onClick={() => onDelete(client.username)}
+                              disabled={isDeletePending}
+                              className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs text-amber-300 transition-colors hover:bg-amber-400/10 disabled:opacity-50"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                              {isDeletePending ? 'Suppression...' : 'Supprimer'}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

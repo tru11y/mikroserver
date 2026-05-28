@@ -309,7 +309,7 @@ export function RouterOverviewSection({
               />
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Total: {formatBytes(stats?.totalBytesIn ?? 0)}
+              Total: {stats ? formatBytes(stats.totalBytesIn) : '—'}
             </p>
           </div>
         </div>
@@ -336,7 +336,7 @@ export function RouterOverviewSection({
               />
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Total: {formatBytes(stats?.totalBytesOut ?? 0)}
+              Total: {stats ? formatBytes(stats.totalBytesOut) : '—'}
             </p>
           </div>
         </div>

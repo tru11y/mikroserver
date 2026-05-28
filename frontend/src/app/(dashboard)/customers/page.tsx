@@ -101,7 +101,7 @@ export default function CustomersPage() {
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Client</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Routeur</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Première connexion</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Dernière vue</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell whitespace-nowrap">Dernière vue</th>
               <th className="text-right px-4 py-3 font-medium text-muted-foreground">Sessions</th>
               <th className="text-right px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">Data</th>
               <th className="text-right px-4 py-3 font-medium text-muted-foreground">Actions</th>

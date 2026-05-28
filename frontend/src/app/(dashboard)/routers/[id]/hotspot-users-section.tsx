@@ -50,7 +50,7 @@ export function HotspotUsersSection({
         <input
           value={searchValue}
           onChange={(event) => onSearchChange(event.target.value)}
-          placeholder="Rechercher un utilisateur precis ou un profil"
+          placeholder="Rechercher un utilisateur ou un profil"
           className="w-full max-w-sm rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
         />
       </div>

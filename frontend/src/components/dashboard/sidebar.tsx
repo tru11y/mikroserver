@@ -7,7 +7,7 @@ import { clsx } from 'clsx';
 import { getStoredAccessToken, unwrap } from '@/lib/api/client';
 import { api } from '@/lib/api';
 import { apiClient } from '@/lib/api/client';
-import { hasAnyPermission, hasPermission } from '@/lib/permissions';
+import { hasAnyPermission, hasPermission, isAdminUser } from '@/lib/permissions';
 import {
   LayoutDashboard, Wifi, CreditCard, Ticket,
   BarChart3, Settings, Activity, Users, Tag, ShieldCheck, AlertTriangle, History,
@@ -93,9 +93,11 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const canVerifyTickets = user
     ? hasPermission(user, 'tickets.verify')
     : isFallbackAdmin || isFallbackReseller;
-  const canViewUsers = user
+  const hasUserManagePermission = user
     ? hasAnyPermission(user, ['users.view', 'users.manage'])
     : isFallbackAdmin;
+  const canViewUsers = hasUserManagePermission;
+  const canViewResellers = user ? (isAdminUser(user) || hasUserManagePermission) : isFallbackAdmin;
   const canViewPlans = user
     ? hasAnyPermission(user, ['plans.view', 'plans.manage'])
     : isFallbackAdmin || isFallbackReseller;
@@ -152,8 +154,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     ...(isSuperAdmin ? [
       { href: '/operators', icon: Crown, label: 'Opérateurs', separator: true },
       { href: '/users', icon: Users, label: 'Utilisateurs', subItem: true },
+    ] : canViewUsers ? [
+      { href: '/users', icon: Users, label: 'Utilisateurs', separator: true },
     ] : []),
-    ...(canViewUsers ? [{ href: '/resellers', icon: Users, label: 'Revendeurs' }] : []),
+    ...(canViewResellers ? [{ href: '/resellers', icon: Users, label: 'Revendeurs' }] : []),
     { href: '/notifications', icon: Bell, label: 'Notifications', separator: true },
     ...(canViewTransactions
       ? [{ href: '/transactions', icon: CreditCard, label: 'Transactions' }]

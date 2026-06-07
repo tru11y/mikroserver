@@ -13,9 +13,18 @@ out
 # Node
 node_modules
 
-# Env
+# Env — never commit secrets or production configs
 .env
 .env.local
+.env.prod
+.env.production
+.env.staging
+
+# TLS certificates and private keys
+*.pem
+*.key
+*.crt
+infrastructure/nginx/ssl/
 
 # Logs
 *.log

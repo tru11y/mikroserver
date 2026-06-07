@@ -87,7 +87,7 @@ jobs:
           script: |
             set -euo pipefail
 
-            COMPOSE="docker compose -f $HOME/mikroserver/infrastructure/docker/docker-compose.prod.yml"
+            COMPOSE="docker compose -f $HOME/mikroserver/infrastructure/docker/docker-compose.prod.yml --env-file $HOME/mikroserver/.env.prod"
             DEPLOY_DIR="$HOME/mikroserver"
 
             echo "==> Deploying image tag: $IMAGE_TAG"
@@ -123,22 +123,31 @@ jobs:
             IMAGE_TAG="$IMAGE_TAG" $COMPOSE up -d --no-deps --remove-orphans api dashboard
 
             # ----------------------------------------------------------------
-            # 6. Health check — up to 60s (12 × 5s)
-            #    /health/live  → fast liveness (just checks process is alive)
-            #    /health/ready → full readiness (DB + Redis)
-            #    We check /ready to confirm the app reached its dependencies.
+            # 6. Health check — up to 120s (24 × 5s)
+            #    Port 3000 is NOT exposed to host (nginx-only ingress).
+            #    We use Docker's own healthcheck status instead of HTTP curl.
+            #    The compose healthcheck runs: curl -f localhost:3000/health/live
+            #    inside the container, so "healthy" means the app is responding.
             # ----------------------------------------------------------------
-            echo "Waiting for readiness..."
-            for i in $(seq 1 12); do
+            echo "Waiting for API health check..."
+            for i in $(seq 1 24); do
               sleep 5
-              HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/api/v1/health/ready 2>/dev/null || echo "000")
-              if [ "$HTTP_STATUS" = "200" ]; then
+              CONTAINER_ID=$($COMPOSE ps -q api 2>/dev/null | head -1)
+              if [ -z "$CONTAINER_ID" ]; then
+                echo "  Attempt $i/24 — container not found yet"
+                continue
+              fi
+              STATUS=$(docker inspect --format='{{.State.Health.Status}}' "$CONTAINER_ID" 2>/dev/null || echo "unknown")
+              echo "  Attempt $i/24 — $STATUS"
+              if [ "$STATUS" = "healthy" ]; then
                 echo "$IMAGE_TAG" > .image_tag
                 echo "==> Deploy successful: $IMAGE_TAG (was $PREV_TAG)"
                 docker logout ghcr.io
                 exit 0
+              elif [ "$STATUS" = "unhealthy" ]; then
+                echo "==> Container reported unhealthy — triggering rollback"
+                break
               fi
-              echo "  Attempt $i/12 — HTTP $HTTP_STATUS"
             done
 
             # ----------------------------------------------------------------

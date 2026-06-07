@@ -183,7 +183,11 @@ services:
       - NET_ADMIN
       - SYS_PTRACE
     pid: host
-    # Port 3000 NOT exposed to host — nginx proxies via app-net
+    # Port 3000 exposed on 127.0.0.1 ONLY — never reachable from the public internet.
+    # Required by: restore-iptables.sh (systemd), deploy_prod.sh (manual fallback).
+    # External traffic still goes through nginx on 443.
+    ports:
+      - "127.0.0.1:3000:3000"
     volumes:
       - app-logs:/app/logs
     networks:

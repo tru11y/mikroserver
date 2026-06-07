@@ -68,9 +68,9 @@ jobs:
           POSTGRES_USER: mikroserver
           POSTGRES_PASSWORD: mikroserver
           POSTGRES_DB: mikroserver_test
-        # No `ports:` needed: GitHub Actions service containers share a Docker
-        # network with the runner. The job reaches postgres via localhost without
-        # host-port mapping. Omitting ports reduces the attack surface.
+        # ports: required — job runs directly on the runner (no container: directive),
+        # so service containers are only reachable via localhost when ports are mapped.
+        ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U mikroserver"
           --health-interval 10s

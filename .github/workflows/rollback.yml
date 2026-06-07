@@ -57,7 +57,7 @@ jobs:
           script: |
             set -euo pipefail
 
-            COMPOSE="docker compose -f $HOME/mikroserver/infrastructure/docker/docker-compose.prod.yml"
+            COMPOSE="docker compose -f $HOME/mikroserver/infrastructure/docker/docker-compose.prod.yml --env-file $HOME/mikroserver/.env.prod"
             DEPLOY_DIR="$HOME/mikroserver"
 
             echo "==> ROLLBACK initiated by $ACTOR"
@@ -75,17 +75,25 @@ jobs:
             # Restart app containers only
             IMAGE_TAG="$IMAGE_TAG" $COMPOSE up -d --no-deps api dashboard
 
-            # Health check
-            for i in $(seq 1 12); do
+            # Health check — docker inspect (port 3000 not exposed to host)
+            for i in $(seq 1 24); do
               sleep 5
-              HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/api/v1/health/ready 2>/dev/null || echo "000")
-              if [ "$HTTP_STATUS" = "200" ]; then
+              CONTAINER_ID=$($COMPOSE ps -q api 2>/dev/null | head -1)
+              if [ -z "$CONTAINER_ID" ]; then
+                echo "  Attempt $i/24 — container not found yet"
+                continue
+              fi
+              STATUS=$(docker inspect --format='{{.State.Health.Status}}' "$CONTAINER_ID" 2>/dev/null || echo "unknown")
+              echo "  Attempt $i/24 — $STATUS"
+              if [ "$STATUS" = "healthy" ]; then
                 echo "$IMAGE_TAG" > .image_tag
                 echo "==> Rollback successful: now on $IMAGE_TAG (was $CURRENT_TAG)"
                 docker logout ghcr.io
                 exit 0
+              elif [ "$STATUS" = "unhealthy" ]; then
+                echo "==> Rollback target also unhealthy — manual intervention required"
+                break
               fi
-              echo "  Attempt $i/12 — HTTP $HTTP_STATUS"
             done
 
             echo "==> ROLLBACK HEALTH CHECK FAILED — manual intervention required"

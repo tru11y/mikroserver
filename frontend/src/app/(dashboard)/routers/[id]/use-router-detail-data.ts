@@ -274,10 +274,6 @@ export function useRouterDetailData({
     setMaxBps((prev) => Math.max(prev, peak));
   }, [stats]);
 
-  const portalHref = routerInfo
-    ? `/portal?hotspot=${encodeURIComponent(routerInfo.hotspotServer)}&site=${encodeURIComponent(routerInfo.name)}`
-    : '/portal';
-
   return {
     currentUser,
     isMeLoading,
@@ -317,6 +313,5 @@ export function useRouterDetailData({
     configChecks,
     liveClients,
     maxBps,
-    portalHref,
   };
 }

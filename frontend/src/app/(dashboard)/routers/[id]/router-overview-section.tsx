@@ -16,13 +16,11 @@ interface RouterOverviewSectionProps {
   statsErrorMessage?: string | null;
   dataUpdatedAt: number;
   maxBps: number;
-  portalHref: string;
   canSyncRouters: boolean;
   canRunHealthCheck: boolean;
   isSyncPending: boolean;
   isChecking: boolean;
   onBack: () => void;
-  onOpenPortal: () => void;
   onSync: () => void;
   onHealthCheck: () => void;
 }
@@ -56,13 +54,11 @@ export function RouterOverviewSection({
   statsErrorMessage,
   dataUpdatedAt,
   maxBps,
-  portalHref,
   canSyncRouters,
   canRunHealthCheck,
   isSyncPending,
   isChecking,
   onBack,
-  onOpenPortal,
   onSync,
   onHealthCheck,
 }: RouterOverviewSectionProps) {
@@ -113,7 +109,6 @@ export function RouterOverviewSection({
           canRunHealthCheck={canRunHealthCheck}
           isSyncPending={isSyncPending}
           isChecking={isChecking}
-          onOpenPortal={onOpenPortal}
           onSync={onSync}
           onHealthCheck={onHealthCheck}
         />
@@ -325,17 +320,6 @@ export function RouterOverviewSection({
                 <span className={mono ? 'font-mono text-xs' : undefined}>{value}</span>
               </div>
             ))}
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Portail</span>
-              <a
-                href={portalHref}
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                Ouvrir
-              </a>
-            </div>
           </div>
 
           {isHealthCheckStale && (

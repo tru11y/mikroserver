@@ -86,7 +86,6 @@ export default function RouterDetailPage() {
     configChecks,
     liveClients,
     maxBps,
-    portalHref,
   } = useRouterDetailData({
     id,
     activeSection,
@@ -242,15 +241,11 @@ export default function RouterDetailPage() {
         statsErrorMessage={statsErrorMessage}
         dataUpdatedAt={dataUpdatedAt}
         maxBps={maxBps}
-        portalHref={portalHref}
         canSyncRouters={canSyncRouters}
         canRunHealthCheck={canRunHealthCheck}
         isSyncPending={syncMutation.isPending}
         isChecking={isChecking}
         onBack={() => router.push('/routers')}
-        onOpenPortal={() =>
-          window.open(portalHref, '_blank', 'noopener,noreferrer')
-        }
         onSync={() => syncMutation.mutate()}
         onHealthCheck={healthCheck}
       />

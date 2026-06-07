@@ -1,6 +1,6 @@
 'use client';
 
-import { Activity, ExternalLink, Globe, Monitor, Radio, RefreshCw } from 'lucide-react';
+import { Activity, Globe, Monitor, Radio, RefreshCw } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { RouterDetail } from './router-detail.types';
 
@@ -11,7 +11,6 @@ interface RouterHeaderActionsProps {
   canRunHealthCheck: boolean;
   isSyncPending: boolean;
   isChecking: boolean;
-  onOpenPortal: () => void;
   onSync: () => void;
   onHealthCheck: () => void;
 }
@@ -26,7 +25,6 @@ export function RouterHeaderActions({
   canRunHealthCheck,
   isSyncPending,
   isChecking,
-  onOpenPortal,
   onSync,
   onHealthCheck,
 }: RouterHeaderActionsProps) {
@@ -63,16 +61,6 @@ export function RouterHeaderActions({
           </a>
         </>
       )}
-
-      <button
-        type="button"
-        onClick={onOpenPortal}
-        aria-label="Ouvrir l'aperçu du portail captif"
-        className={btnBase}
-      >
-        <ExternalLink className="h-4 w-4" aria-hidden="true" />
-        <span className="hidden sm:inline">Portail</span>
-      </button>
 
       {canSyncRouters && (
         <button

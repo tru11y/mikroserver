@@ -1,4 +1,4 @@
-FROM node:20-alpine AS base
+FROM node:26-alpine AS base
 WORKDIR /app
 RUN apk add --no-cache libc6-compat
 
@@ -19,7 +19,7 @@ RUN mkdir -p public
 ENV NODE_OPTIONS="--max-old-space-size=768"
 RUN npm run build
 
-FROM node:20-alpine AS production
+FROM node:26-alpine AS production
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

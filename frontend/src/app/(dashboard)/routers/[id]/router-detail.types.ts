@@ -31,6 +31,7 @@ export interface LiveClient {
   ipAddress: string;
   macAddress: string;
   uptime: string;
+  connectedAt: string | null;
   bytesIn: number;
   bytesOut: number;
 }
@@ -122,7 +123,17 @@ export interface PlanSummary {
 
 export type IpBindingType = 'regular' | 'blocked' | 'bypassed';
 
-export type RouterDetailSection = 'live' | 'profiles' | 'bindings' | 'users' | 'migration' | 'history' | 'terminal' | 'access';
+export type RouterDetailSection = 'live' | 'profiles' | 'bindings' | 'users' | 'migration' | 'history' | 'terminal' | 'access' | 'conformite';
+
+export interface RouterComplianceCheck {
+  id: string;
+  category: 'connectivity' | 'configuration' | 'sessions';
+  severity: 'ok' | 'warning' | 'critical';
+  label: string;
+  description: string;
+  actionId?: 'health_check' | 'sync' | 'disconnect_expired' | 'configure_profile';
+  actionLabel?: string;
+}
 
 export interface RouterAccessCredentials {
   routerId: string;

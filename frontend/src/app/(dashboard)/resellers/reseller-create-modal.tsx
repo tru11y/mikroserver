@@ -1,13 +1,10 @@
 'use client';
 
-import { useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import { AlertCircle, CheckCircle2, Shield, UserPlus } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Loader2, Shield, UserPlus } from 'lucide-react';
 import { DashboardModalShell } from '@/components/dashboard/dashboard-modal-shell';
-import { apiClient } from '@/lib/api/client';
 import type { FormData, PermissionOptions } from './resellers.types';
-
-type UserSearchResult = { id: string; firstName: string; lastName: string; email: string };
+import { useResellerSearch } from './use-reseller-search';
 
 function UserSearchField({
   selectedUserId,
@@ -16,59 +13,56 @@ function UserSearchField({
   selectedUserId: string;
   onSelect: (id: string) => void;
 }) {
-  const [userSearch, setUserSearch] = useState('');
-  const [userResults, setUserResults] = useState<UserSearchResult[]>([]);
-  const [searchingUsers, setSearchingUsers] = useState(false);
-
-  const searchUsers = async (q: string) => {
-    if (q.length < 2) { setUserResults([]); return; }
-    setSearchingUsers(true);
-    try {
-      const res = await apiClient.get('/users', { params: { search: q, role: 'RESELLER', limit: 10 } });
-      const items = (res.data as unknown as { data: { items: UserSearchResult[] } }).data.items;
-      setUserResults(items ?? []);
-    } catch {
-      setUserResults([]);
-    }
-    setSearchingUsers(false);
-  };
+  const { inputValue, setInputValue, results, isFetching, debouncedQuery } = useResellerSearch();
+  const showResults = results.length > 0 && !selectedUserId && debouncedQuery.length >= 2;
 
   return (
-    <div className="col-span-2 space-y-1.5 relative">
-      <span className="text-sm font-medium">Rechercher un utilisateur existant (rôle REVENDEUR)</span>
+    <div className="col-span-2 relative space-y-1.5">
+      <span className="text-sm font-medium">
+        Rechercher un utilisateur existant (rôle REVENDEUR)
+      </span>
       <div className="relative">
         <input
-          value={selectedUserId ? (userResults.find(u => u.id === selectedUserId)?.email ?? selectedUserId) : userSearch}
+          value={selectedUserId ? (results.find((u) => u.id === selectedUserId)?.email ?? selectedUserId) : inputValue}
           onChange={(e) => {
-            setUserSearch(e.target.value);
+            setInputValue(e.target.value);
             onSelect('');
-            void searchUsers(e.target.value);
           }}
           placeholder="Rechercher par nom ou email..."
           className="w-full rounded-xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
         />
-        {searchingUsers && (
-          <span className="absolute right-3 top-2.5 text-xs text-muted-foreground">Recherche...</span>
+        {isFetching && (
+          <span className="absolute right-3 top-2.5 text-xs text-muted-foreground">
+            Recherche...
+          </span>
         )}
-        {userResults.length > 0 && !selectedUserId && (
-          <div className="absolute z-10 top-full left-0 right-0 bg-card border rounded-xl shadow-lg mt-1 divide-y max-h-48 overflow-y-auto">
-            {userResults.map(u => (
+        {showResults && (
+          <div className="absolute z-10 top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto divide-y rounded-xl border bg-card shadow-lg">
+            {results.map((u) => (
               <button
                 key={u.id}
                 type="button"
-                onClick={() => { onSelect(u.id); setUserResults([]); setUserSearch(''); }}
-                className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted transition-colors"
+                onClick={() => {
+                  onSelect(u.id);
+                  setInputValue('');
+                }}
+                className="w-full px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted"
               >
-                <p className="font-medium">{u.firstName} {u.lastName}</p>
+                <p className="font-medium">
+                  {u.firstName} {u.lastName}
+                </p>
                 <p className="text-xs text-muted-foreground">{u.email}</p>
               </button>
             ))}
           </div>
         )}
       </div>
-      {selectedUserId && (
-        <p className="text-xs text-green-500 flex items-center gap-1">✓ Utilisateur sélectionné</p>
-      )}
+      {selectedUserId ? (
+        <p className="flex items-center gap-1 text-xs text-success">
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          Utilisateur sélectionné
+        </p>
+      ) : null}
       <p className="text-xs text-muted-foreground">
         Optionnel — laissez vide pour créer un nouveau compte ci-dessous.
       </p>
@@ -118,11 +112,11 @@ export function ResellerCreateModal({
     >
       <div className="space-y-6">
         {formError ? (
-          <div className="flex items-start gap-3 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-4 text-sm text-red-200">
+          <div className="flex items-start gap-3 rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-4 text-sm text-destructive">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
             <div>
-              <p className="font-medium">Creation interrompue</p>
-              <p className="mt-1 text-red-100/80">{formError}</p>
+              <p className="font-medium">Création interrompue</p>
+              <p className="mt-1 text-destructive/80">{formError}</p>
             </div>
           </div>
         ) : null}
@@ -200,9 +194,9 @@ export function ResellerCreateModal({
             </label>
           </section>
 
-          <section className="space-y-4 rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(56,189,248,0.1),rgba(255,255,255,0.03))] p-5">
+          <section className="space-y-4 rounded-[24px] border border-white/10 bg-info/5 p-5">
             <div>
-              <p className="text-[11px] uppercase tracking-[0.2em] text-sky-200/70">
+              <p className="text-[11px] uppercase tracking-[0.2em] text-info/70">
                 Gouvernance
               </p>
               <h3 className="mt-2 text-lg font-semibold">Role & acces initial</h3>
@@ -250,7 +244,7 @@ export function ResellerCreateModal({
                       }
                       className={`rounded-2xl border px-4 py-3 text-left transition-all ${
                         selected
-                          ? 'border-primary/40 bg-primary/10 shadow-[0_16px_36px_-28px_rgba(56,189,248,0.8)]'
+                          ? 'border-primary/40 bg-primary/10 shadow-glow'
                           : 'border-white/10 bg-background/40 hover:bg-background/60'
                       }`}
                     >
@@ -276,7 +270,7 @@ export function ResellerCreateModal({
 
             <div className="rounded-2xl border border-white/10 bg-background/40 p-4">
               <div className="flex items-start gap-3">
-                <Shield className="mt-0.5 h-4 w-4 text-sky-300" />
+                <Shield className="mt-0.5 h-4 w-4 text-info" />
                 <div>
                   <p className="text-sm font-medium">Lecture commerciale</p>
                   <p className="mt-1 text-xs text-muted-foreground">
@@ -299,7 +293,7 @@ export function ResellerCreateModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-full border px-4 py-2 text-sm transition-colors hover:bg-muted/40"
+              className="rounded-full border px-4 py-2 text-sm transition-all duration-200 ease-out hover:bg-muted/40 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               Annuler
             </button>
@@ -307,9 +301,12 @@ export function ResellerCreateModal({
               type="button"
               onClick={onSubmit}
               disabled={isPending}
-              className="rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-all duration-200 ease-out hover:bg-primary/90 hover:shadow-glow active:scale-[0.98] disabled:opacity-60 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
-              {isPending ? 'Creation...' : 'Creer le compte'}
+              {isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+              ) : null}
+              {isPending ? 'Création...' : 'Créer le compte'}
             </button>
           </div>
         </div>

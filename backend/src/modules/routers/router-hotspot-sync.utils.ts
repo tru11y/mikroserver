@@ -15,6 +15,7 @@ import type {
   HotspotActiveClient,
   RouterSyncSummary,
 } from "./router-api.types";
+import { parseUptimeToSeconds } from "./router-hotspot-live.utils";
 
 interface RouterHotspotSyncDeps {
   prisma: Pick<PrismaService, "router" | "session" | "voucher" | "transaction">;
@@ -127,6 +128,9 @@ export async function syncRouterHotspotActiveClients(
 
     activeVoucherIds.add(voucher.id);
     const existingSession = sessionByVoucherId.get(voucher.id);
+    const uptimeSec = parseUptimeToSeconds(client.uptime);
+    const connectedAt = new Date(fetchedAt.getTime() - uptimeSec * 1000);
+
     const sessionData = {
       routerId: router.id,
       mikrotikId: client[".id"],
@@ -145,17 +149,20 @@ export async function syncRouterHotspotActiveClients(
         where: { id: existingSession.id },
         data: {
           ...sessionData,
+          // Preserve original startedAt if session was already active; use
+          // the uptime-derived connectedAt only when re-activating a previously
+          // disconnected session (more accurate than fetchedAt).
           startedAt:
             existingSession.status === SessionStatus.ACTIVE
               ? existingSession.startedAt
-              : fetchedAt,
+              : connectedAt,
         },
       });
     } else {
       await deps.prisma.session.create({
         data: {
           voucherId: voucher.id,
-          startedAt: fetchedAt,
+          startedAt: connectedAt,
           ...sessionData,
         },
       });

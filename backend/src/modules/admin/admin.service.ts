@@ -297,8 +297,8 @@ export class AdminService {
   ): Promise<ProvisionOperatorResult> {
     const normalizedEmail = normalizeAuthEmail(dto.email);
 
-    const existing = await this.prisma.user.findUnique({
-      where: { email: normalizedEmail },
+    const existing = await this.prisma.user.findFirst({
+      where: { email: normalizedEmail, deletedAt: null },
     });
     if (existing) {
       throw new ConflictException(

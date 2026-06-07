@@ -2,20 +2,29 @@
 # MikroServer - Production Docker Compose
 #
 # ARCHITECTURAL DECISIONS:
-# 1. All services on isolated internal network — only Nginx exposed externally
+# 1. Three-tier network segmentation: db-net / app-net keep DB unreachable from Nginx
 # 2. Named volumes for data persistence — never bind-mount data dirs in prod
 # 3. Resource limits prevent any single service from starving others
 # 4. Health checks enable zero-downtime deploys with depends_on conditions
 # 5. restart: unless-stopped for resilience without infinite crash loops
 # 6. Secrets via environment file — no secrets in image layers
+# 7. api/dashboard ports NOT exposed to host — nginx is the only ingress
 # =============================================================================
 
 networks:
-  mikroserver-internal:
+  # DB tier: only api and db-migrate can reach postgres + redis
+  db-net:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.20.0.0/24
+        - subnet: 172.20.1.0/24
+
+  # App tier: api, dashboard, nginx — no direct DB access from nginx/dashboard
+  app-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.2.0/24
 
 volumes:
   postgres-data:
@@ -47,7 +56,7 @@ services:
       - postgres-data:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     networks:
-      - mikroserver-internal
+      - db-net
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mikroserver} -d ${POSTGRES_DB:-mikroserver}"]
       interval: 10s
@@ -76,7 +85,7 @@ services:
       redis-server
       --requirepass ${REDIS_PASSWORD}
       --maxmemory 256mb
-      --maxmemory-policy noeviction
+      --maxmemory-policy allkeys-lru
       --save 900 1
       --save 300 10
       --save 60 10000
@@ -89,7 +98,7 @@ services:
     volumes:
       - redis-data:/data
     networks:
-      - mikroserver-internal
+      - db-net
     healthcheck:
       test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"${REDIS_PASSWORD}\" ping | grep -q PONG"]
       interval: 10s
@@ -168,15 +177,18 @@ services:
       VPS_PUBLIC_IP: ${VPS_PUBLIC_IP:-139.84.241.27}
       PORT_MAP_RANGE_START: ${PORT_MAP_RANGE_START:-19000}
       PORT_MAP_RANGE_END: ${PORT_MAP_RANGE_END:-19999}
-    # WireGuard management: privileged + pid:host for nsenter into host network namespace
-    privileged: true
+    # WireGuard + iptables: minimal capabilities instead of full privileged
+    # NET_ADMIN: required for iptables/WireGuard; SYS_PTRACE: required for nsenter into host namespaces
+    cap_add:
+      - NET_ADMIN
+      - SYS_PTRACE
     pid: host
-    ports:
-      - "3000:3000"
+    # Port 3000 NOT exposed to host — nginx proxies via app-net
     volumes:
       - app-logs:/app/logs
     networks:
-      - mikroserver-internal
+      - db-net
+      - app-net
     depends_on:
       postgres:
         condition: service_healthy
@@ -227,7 +239,7 @@ services:
     ports:
       - "3001:3001"
     networks:
-      - mikroserver-internal
+      - app-net
     depends_on:
       api:
         condition: service_healthy
@@ -240,6 +252,7 @@ services:
       resources:
         limits:
           memory: 256M
+          cpus: '0.5'
         reservations:
           memory: 128M
 
@@ -263,7 +276,7 @@ services:
       - certbot-var:/var/www/certbot
       - nginx-logs:/var/log/nginx
     networks:
-      - mikroserver-internal
+      - app-net
     depends_on:
       - api
       - dashboard
@@ -276,6 +289,7 @@ services:
       resources:
         limits:
           memory: 128M
+          cpus: '0.5'
 
   # ---------------------------------------------------------------------------
   # Certbot (manual + automated renew via host cron/systemd)
@@ -304,7 +318,7 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
     networks:
-      - mikroserver-internal
+      - db-net
     depends_on:
       postgres:
         condition: service_healthy

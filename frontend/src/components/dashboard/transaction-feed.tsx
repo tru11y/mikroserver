@@ -1,35 +1,17 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api';
-import { clsx } from 'clsx';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { CheckCircle2, XCircle, Clock, Loader2 } from 'lucide-react';
-
-interface Transaction {
-  id: string;
-  reference: string;
-  customerPhone: string | null;
-  amountXof: number;
-  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'EXPIRED';
-  createdAt: string;
-  paidAt: string | null;
-  plan: { name: string; slug: string } | null;
-}
-
-const statusConfig = {
-  COMPLETED: { label: 'Réussi', icon: CheckCircle2, class: 'text-emerald-500' },
-  FAILED: { label: 'Échoué', icon: XCircle, class: 'text-red-500' },
-  EXPIRED: { label: 'Expiré', icon: XCircle, class: 'text-slate-400' },
-  PENDING: { label: 'En attente', icon: Clock, class: 'text-amber-500' },
-  PROCESSING: { label: 'Traitement', icon: Loader2, class: 'text-blue-500 animate-spin' },
-};
+import { clsx } from 'clsx';
+import { api, unwrap } from '@/lib/api';
+import { getTransactionStatusCfg } from '@/lib/transaction-status';
+import type { Transaction, TransactionListResponse } from '@/app/(dashboard)/transactions/transaction.types';
 
 function maskPhone(phone: string | null | undefined): string {
   if (!phone) return 'Vente manuelle';
   if (phone.length < 8) return phone;
-  return phone.slice(0, 4) + '****' + phone.slice(-2);
+  return `${phone.slice(0, 3)}****${phone.slice(-2)}`;
 }
 
 export function TransactionFeed() {
@@ -39,7 +21,8 @@ export function TransactionFeed() {
     refetchInterval: 15_000,
   });
 
-  const transactions = (data?.data?.data?.data as Transaction[]) ?? [];
+  const result = data ? unwrap<TransactionListResponse>(data) : null;
+  const transactions: Transaction[] = result?.data ?? [];
 
   return (
     <div className="rounded-xl border bg-card">
@@ -56,55 +39,62 @@ export function TransactionFeed() {
         </div>
       ) : (
         <div className="divide-y divide-border">
-          {transactions.map((tx) => {
-            const cfg = statusConfig[tx.status] ?? statusConfig.PENDING;
-            const StatusIcon = cfg.icon;
-
-            return (
-              <div
-                key={tx.id}
-                className="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/30 transition-colors"
-              >
-                <StatusIcon className={clsx('h-4 w-4 flex-shrink-0', cfg.class)} />
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">
-                      {maskPhone(tx.customerPhone)}
-                    </span>
-                    <span className="text-xs text-muted-foreground truncate">
-                      · {tx.plan?.name ?? 'Plan inconnu'}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground font-mono">
-                    {tx.reference}
-                  </p>
-                </div>
-
-                <div className="text-right flex-shrink-0">
-                  <p className="text-sm font-semibold">
-                    {tx.amountXof.toLocaleString('fr-CI')} FCFA
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {format(new Date(tx.createdAt), 'dd/MM HH:mm', {
-                      locale: fr,
-                    })}
-                  </p>
-                </div>
-
-                <div className="w-20 text-right">
-                  <span className={clsx('text-xs font-medium', cfg.class)}>
-                    {cfg.label}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-
-          {transactions.length === 0 && (
+          {transactions.length === 0 ? (
             <div className="py-12 text-center text-muted-foreground text-sm">
               Aucune transaction
             </div>
+          ) : (
+            transactions.map((tx) => {
+              const cfg = getTransactionStatusCfg(tx.status);
+              const StatusIcon = cfg.icon;
+
+              return (
+                <div
+                  key={tx.id}
+                  className="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/30 transition-colors"
+                >
+                  <StatusIcon
+                    className={clsx(
+                      'h-4 w-4 flex-shrink-0',
+                      cfg.color,
+                      cfg.pulse && 'animate-spin',
+                    )}
+                    aria-hidden="true"
+                  />
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">
+                        {maskPhone(tx.customerPhone)}
+                      </span>
+                      <span className="text-xs text-muted-foreground truncate">
+                        · {tx.plan?.name ?? 'Plan inconnu'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground font-mono">
+                      {tx.reference}
+                    </p>
+                  </div>
+
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-sm font-semibold tabular-nums">
+                      {tx.amountXof.toLocaleString('fr-CI')} FCFA
+                    </p>
+                    <p className="text-xs text-muted-foreground tabular-nums">
+                      {format(new Date(tx.createdAt), 'dd/MM HH:mm', {
+                        locale: fr,
+                      })}
+                    </p>
+                  </div>
+
+                  <div className="w-20 text-right">
+                    <span className={clsx('text-xs font-medium', cfg.color)}>
+                      {cfg.label}
+                    </span>
+                  </div>
+                </div>
+              );
+            })
           )}
         </div>
       )}

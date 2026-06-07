@@ -2,6 +2,7 @@
 
 import { useDeferredValue, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { api, unwrap } from '@/lib/api';
 import { hasAnyPermission, hasPermission } from '@/lib/permissions';
 import type {
@@ -60,6 +61,7 @@ export function useResellersPage() {
     isLoading,
     isError: usersError,
     error: usersQueryError,
+    refetch: refetchUsers,
   } = useQuery({
     queryKey: ['users', 'list'],
     queryFn: () => api.users.list(),
@@ -116,28 +118,42 @@ export function useResellersPage() {
       setShowForm(false);
       setForm(emptyForm);
       setFormError(null);
+      toast.success('Compte créé avec succès');
     },
     onError: (e: { response?: { data?: { message?: string } } }) => {
-      setFormError(e?.response?.data?.message ?? 'Erreur lors de la creation');
+      setFormError(e?.response?.data?.message ?? 'Erreur lors de la création');
     },
   });
 
   const suspendMutation = useMutation({
     mutationFn: (id: string) => api.users.suspend(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['users', 'list'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['users', 'list'] });
+      toast.success('Compte suspendu');
+    },
+    onError: () => toast.error('Impossible de suspendre ce compte'),
   });
 
   const activateMutation = useMutation({
     mutationFn: (id: string) => api.users.activate(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['users', 'list'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['users', 'list'] });
+      toast.success('Compte réactivé');
+    },
+    onError: () => toast.error('Impossible de réactiver ce compte'),
   });
+
+  const suspendingId = suspendMutation.isPending ? (suspendMutation.variables ?? null) : null;
+  const activatingId = activateMutation.isPending ? (activateMutation.variables ?? null) : null;
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.users.remove(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['users', 'list'] });
       setDeletingId(null);
+      toast.success('Compte supprimé');
     },
+    onError: () => toast.error('Impossible de supprimer ce compte'),
   });
 
   const updateAccessMutation = useMutation({
@@ -155,9 +171,10 @@ export function useResellersPage() {
       qc.invalidateQueries({ queryKey: ['users', 'list'] });
       setAccessTarget(null);
       setAccessError(null);
+      toast.success('Accès mis à jour');
     },
     onError: (e: { response?: { data?: { message?: string } } }) => {
-      setAccessError(e?.response?.data?.message ?? "Erreur lors de la mise a jour de l'acces");
+      setAccessError(e?.response?.data?.message ?? "Erreur lors de la mise à jour de l'accès");
     },
   });
 
@@ -181,9 +198,10 @@ export function useResellersPage() {
       setProfileError(null);
       setPasswordError(null);
       setPasswordSuccess(null);
+      toast.success('Profil mis à jour');
     },
     onError: (e: { response?: { data?: { message?: string } } }) => {
-      setProfileError(e?.response?.data?.message ?? 'Erreur lors de la mise a jour du profil');
+      setProfileError(e?.response?.data?.message ?? 'Erreur lors de la mise à jour du profil');
     },
   });
 
@@ -200,13 +218,13 @@ export function useResellersPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['users', 'list'] });
       setPasswordError(null);
-      setPasswordSuccess('Mot de passe reinitialise et sessions actives revoquees.');
+      setPasswordSuccess('Mot de passe réinitialisé — sessions actives révoquées.');
       setProfileForm((current) => ({ ...current, password: '' }));
     },
     onError: (e: { response?: { data?: { message?: string } } }) => {
       setPasswordSuccess(null);
       setPasswordError(
-        e?.response?.data?.message ?? 'Erreur lors de la reinitialisation du mot de passe',
+        e?.response?.data?.message ?? 'Erreur lors de la réinitialisation du mot de passe',
       );
     },
   });
@@ -321,6 +339,9 @@ export function useResellersPage() {
     permissionOptionsErrorMessage,
     isLoading,
     usersError,
+    refetchUsers,
+    suspendingId,
+    activatingId,
     createMutation,
     suspendMutation,
     activateMutation,

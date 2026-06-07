@@ -1,31 +1,30 @@
 'use client';
 
 import { BarChart3 } from 'lucide-react';
+import { KpiCardSkeleton } from '@/components/ui/skeleton';
+import { AnalyticsRevenueChartsSection } from '@/components/charts/lazy';
 import { AnalyticsOverviewSection } from './analytics-overview-section';
 import { AnalyticsRecommendationsSection } from './analytics-recommendations-section';
-import { AnalyticsRevenueChartsSection } from './analytics-revenue-charts-section';
 import { AnalyticsSubscriptionsSection } from './analytics-subscriptions-section';
 import { AnalyticsTicketReportSection } from './analytics-ticket-report-section';
 import { useAnalyticsData } from './use-analytics-data';
 
-function AnalyticsPageLoading() {
+function PageLoading() {
   return (
     <div className="space-y-4">
-      <div className="h-36 animate-pulse rounded-2xl border bg-card/70" />
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {[1, 2, 3, 4].map((item) => (
-          <div key={item} className="h-32 animate-pulse rounded-xl border bg-card/70" />
-        ))}
+      <div className="h-8 w-48 animate-pulse rounded-md bg-muted" />
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2.5">
+        {Array.from({ length: 6 }).map((_, i) => <KpiCardSkeleton key={i} />)}
       </div>
     </div>
   );
 }
 
-function AnalyticsAccessDenied() {
+function AccessDenied() {
   return (
-    <div className="rounded-xl border bg-card p-8 text-center">
-      <BarChart3 className="mx-auto h-10 w-10 text-muted-foreground" />
-      <h1 className="mt-4 text-xl font-semibold">Acces limite</h1>
+    <div className="rounded-xl border bg-card p-8 text-center" role="alert">
+      <BarChart3 className="mx-auto h-10 w-10 text-muted-foreground" aria-hidden="true" />
+      <h1 className="mt-4 text-xl font-semibold">Accès limité</h1>
       <p className="mt-2 text-sm text-muted-foreground">
         Ton profil ne permet pas de consulter les rapports.
       </p>
@@ -34,55 +33,62 @@ function AnalyticsAccessDenied() {
 }
 
 export default function AnalyticsPage() {
-  const analytics = useAnalyticsData();
+  const a = useAnalyticsData();
 
-  if (analytics.isMeLoading) {
-    return <AnalyticsPageLoading />;
-  }
-
-  if (!analytics.canViewReports) {
-    return <AnalyticsAccessDenied />;
-  }
+  if (a.isMeLoading) return <PageLoading />;
+  if (!a.canViewReports) return <AccessDenied />;
 
   return (
-    <div className="space-y-6">
+    <main className="space-y-5">
       <AnalyticsOverviewSection
-        metrics={analytics.metrics}
-        canExportReports={analytics.canExportReports}
-        isExporting={analytics.isExporting}
-        onExport={analytics.handleExport}
+        metrics={a.metrics}
+        revenueGrowth={a.revenueGrowth}
+        isLoading={a.isKpisLoading}
+        canExportReports={a.canExportReports}
+        isExporting={a.isExporting}
+        onExport={a.handleExport}
       />
 
       <AnalyticsSubscriptionsSection
-        subscriptionsToday={analytics.subscriptionsToday}
-        subscriptionsExpiringToday={analytics.subscriptionsExpiringToday}
-        topRecurringClients={analytics.topRecurringClients}
-        topRecurringPlans={analytics.topRecurringPlans}
+        subscriptionsToday={a.subscriptionsToday}
+        subscriptionsExpiringToday={a.subscriptionsExpiringToday}
+        topRecurringClients={a.topRecurringClients}
+        topRecurringPlans={a.topRecurringPlans}
+        isLoading={a.isSubscriptionsLoading}
       />
 
       <AnalyticsRecommendationsSection
-        recommendations={analytics.dailyRecommendations}
-        generatedAt={analytics.recommendationsGeneratedAt}
+        recommendations={a.dailyRecommendations}
+        generatedAt={a.recommendationsGeneratedAt}
       />
 
       <AnalyticsTicketReportSection
-        startDate={analytics.startDate}
-        endDate={analytics.endDate}
-        operatorId={analytics.operatorId}
-        planId={analytics.planId}
-        users={analytics.users}
-        plans={analytics.plans}
-        report={analytics.report}
-        isReportLoading={analytics.isReportLoading}
-        reportError={analytics.reportError}
-        isDateRangeValid={analytics.isDateRangeValid}
-        onStartDateChange={analytics.setStartDate}
-        onEndDateChange={analytics.setEndDate}
-        onOperatorChange={analytics.setOperatorId}
-        onPlanChange={analytics.setPlanId}
+        startDate={a.startDate}
+        endDate={a.endDate}
+        operatorId={a.operatorId}
+        planId={a.planId}
+        users={a.users}
+        plans={a.plans}
+        report={a.report}
+        isReportLoading={a.isReportLoading}
+        isFetching={a.isReportFetching}
+        reportError={a.reportError}
+        isDateRangeValid={a.isDateRangeValid}
+        onStartDateChange={a.setStartDate}
+        onEndDateChange={a.setEndDate}
+        onOperatorChange={a.setOperatorId}
+        onPlanChange={a.setPlanId}
+        onRetry={a.handleRetry}
       />
 
-      <AnalyticsRevenueChartsSection points={analytics.formattedRevenuePoints} />
-    </div>
+      <AnalyticsRevenueChartsSection
+        points={a.formattedRevenuePoints}
+        rawPoints={a.rawRevenuePoints}
+        isLoading={a.isChartsLoading}
+        periodKey={a.chartPeriod.key}
+        periodDays={a.chartPeriod.days}
+        onPeriodChange={a.setChartPeriod}
+      />
+    </main>
   );
 }

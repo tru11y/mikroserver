@@ -22,3 +22,9 @@ node_modules
 
 # OS
 .DS_Store
+
+# Design mockups (non-code)
+design-proposals/
+
+# Build artifacts
+frontend/tsconfig.tsbuildinfo

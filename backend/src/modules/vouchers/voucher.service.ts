@@ -832,33 +832,44 @@ export class VoucherService {
     if (!voucher) throw new NotFoundException(`Voucher ${voucherId} not found`);
     if (voucher.status === VoucherStatus.REVOKED) return voucher;
 
+    // Router cleanup is best-effort — router may be offline or unreachable
     if (voucher.routerId) {
-      await this.routerApiService.disconnectActiveSessionsByUsername(
-        voucher.routerId,
-        voucher.code,
-      );
-      await this.routerApiService.removeHotspotUser(
-        voucher.routerId,
-        voucher.code,
-      );
+      await this.routerApiService
+        .disconnectActiveSessionsByUsername(voucher.routerId, voucher.code)
+        .catch((err) =>
+          this.logger.warn(
+            `revokeVoucher: disconnect failed for ${voucher.code}: ${(err as Error).message}`,
+          ),
+        );
+      await this.routerApiService
+        .removeHotspotUser(voucher.routerId, voucher.code)
+        .catch((err) =>
+          this.logger.warn(
+            `revokeVoucher: removeHotspotUser failed for ${voucher.code}: ${(err as Error).message}`,
+          ),
+        );
     }
 
-    await this.prisma.session.updateMany({
-      where: {
-        voucherId,
-        status: SessionStatus.ACTIVE,
-      },
-      data: {
-        status: SessionStatus.TERMINATED,
-        terminatedAt: new Date(),
-        terminateReason: "voucher_revoked",
-      },
-    });
+    // DB writes are atomic — session termination + voucher revocation commit together
+    const [, updatedVoucher] = await this.prisma.$transaction([
+      this.prisma.session.updateMany({
+        where: {
+          voucherId,
+          status: SessionStatus.ACTIVE,
+        },
+        data: {
+          status: SessionStatus.TERMINATED,
+          terminatedAt: new Date(),
+          terminateReason: "voucher_revoked",
+        },
+      }),
+      this.prisma.voucher.update({
+        where: { id: voucherId },
+        data: { status: VoucherStatus.REVOKED, revokedAt: new Date() },
+      }),
+    ]);
 
-    return this.prisma.voucher.update({
-      where: { id: voucherId },
-      data: { status: VoucherStatus.REVOKED, revokedAt: new Date() },
-    });
+    return updatedVoucher;
   }
 
   async redeliverVoucher(

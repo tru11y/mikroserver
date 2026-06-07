@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useTheme } from 'next-themes';
 import { Sun, Moon, LogOut, Menu } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -14,10 +15,20 @@ interface TopBarProps {
 export function TopBar({ onMenuToggle }: TopBarProps) {
   const { theme, setTheme } = useTheme();
   const router = useRouter();
+  const [dateLabel, setDateLabel] = useState('');
+
+  useEffect(() => {
+    setDateLabel(
+      new Date().toLocaleDateString('fr-FR', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+      }),
+    );
+  }, []);
 
   const handleLogout = async () => {
     try {
-      // Server route revokes the token family and clears the httpOnly cookie.
       await api.auth.logout();
     } catch { /* ignore */ }
     clearAccessToken();
@@ -25,37 +36,42 @@ export function TopBar({ onMenuToggle }: TopBarProps) {
   };
 
   return (
-    <header className="h-16 border-b bg-card/50 flex items-center justify-between px-4 flex-shrink-0">
-      {/* Hamburger — visible on mobile only */}
-      <button
-        className="md:hidden p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-        onClick={onMenuToggle}
-        aria-label="Ouvrir le menu"
-      >
-        <Menu className="h-5 w-5" />
-      </button>
+    <header className="h-14 border-b bg-card/80 backdrop-blur-sm flex items-center justify-between px-2 md:px-4 flex-shrink-0">
+      {/* Left — hamburger (mobile) + date (desktop) */}
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          className="md:hidden h-11 w-11 -mx-1 inline-flex items-center justify-center rounded-lg tap-transparent active:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+          onClick={onMenuToggle}
+          aria-label="Ouvrir le menu"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
 
-      {/* Desktop spacer */}
-      <div className="hidden md:block" />
+        {dateLabel && (
+          <span className="hidden md:block text-xs text-muted-foreground capitalize">
+            {dateLabel}
+          </span>
+        )}
+      </div>
 
-      <div className="flex items-center gap-1">
+      {/* Right — actions */}
+      <div className="flex items-center gap-0.5 md:gap-1.5">
         <NotificationBell />
 
         <button
+          type="button"
           onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-          className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+          className="h-11 w-11 md:h-9 md:w-9 inline-flex items-center justify-center rounded-lg tap-transparent active:bg-muted hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
           aria-label="Changer le thème"
         >
-          {theme === 'dark' ? (
-            <Sun className="h-4 w-4" />
-          ) : (
-            <Moon className="h-4 w-4" />
-          )}
+          {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
 
         <button
+          type="button"
           onClick={handleLogout}
-          className="p-2 rounded-lg hover:bg-destructive/10 transition-colors text-muted-foreground hover:text-destructive"
+          className="h-11 w-11 md:h-9 md:w-9 inline-flex items-center justify-center rounded-lg tap-transparent active:bg-destructive/10 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
           aria-label="Déconnexion"
         >
           <LogOut className="h-4 w-4" />

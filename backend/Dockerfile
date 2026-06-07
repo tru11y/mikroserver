@@ -22,7 +22,7 @@ COPY . .
 # ---- Build ----
 FROM deps AS build
 RUN npm run prisma:generate
-RUN npm run build
+RUN NODE_OPTIONS="--max-old-space-size=512" npm run build
 
 # ---- Migrations target ----
 FROM base AS migrations

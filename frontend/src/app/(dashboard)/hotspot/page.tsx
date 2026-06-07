@@ -7,7 +7,6 @@ import { api, unwrap } from '@/lib/api';
 import { hasPermission } from '@/lib/permissions';
 import {
   AlertTriangle,
-  ExternalLink,
   Server,
   ShieldCheck,
   Sparkles,
@@ -216,13 +215,6 @@ export default function HotspotOpsPage() {
                       >
                         <ShieldCheck className="h-4 w-4" />
                         Gerer hotspot
-                      </Link>
-                      <Link
-                        href={`/portal?hotspot=${encodeURIComponent(router.hotspotServer || 'hotspot1')}&site=${encodeURIComponent(router.name)}`}
-                        className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted/40"
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                        Voir portail
                       </Link>
                     </div>
                   </div>

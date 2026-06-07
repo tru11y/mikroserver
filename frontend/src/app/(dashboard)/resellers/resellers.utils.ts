@@ -3,15 +3,15 @@ import type { FormData, PermissionOptions, ProfileFormData, Reseller } from './r
 export const statusConfig = {
   ACTIVE: {
     label: 'Actif',
-    cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+    cls: 'bg-success/10 text-success border border-success/20',
   },
   SUSPENDED: {
     label: 'Suspendu',
-    cls: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+    cls: 'bg-destructive/10 text-destructive border border-destructive/20',
   },
   PENDING_VERIFICATION: {
     label: 'En attente',
-    cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+    cls: 'bg-warning/10 text-warning border border-warning/20',
   },
 };
 

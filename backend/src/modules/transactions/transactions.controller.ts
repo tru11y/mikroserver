@@ -18,10 +18,9 @@ import { Permissions } from "../auth/decorators/permissions.decorator";
 import { Public } from "../auth/decorators/public.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { JwtPayload } from "../auth/interfaces/jwt-payload.interface";
-import { UserRole } from "@prisma/client";
+import { UserRole, TransactionStatus, PaymentProvider } from "@prisma/client";
 import { IsString, IsOptional, IsUUID, IsEnum } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { PaymentProvider } from "@prisma/client";
 
 class InitiatePaymentDto {
   @ApiProperty() @IsUUID() planId!: string;
@@ -64,6 +63,17 @@ export class TransactionsController {
     return this.transactionsService.getPortalStatus(id);
   }
 
+  @Get("summary")
+  @ApiBearerAuth()
+  @Roles(UserRole.VIEWER)
+  @Permissions("transactions.view")
+  @ApiOperation({
+    summary: "Transaction KPI summary — counts by status + total revenue",
+  })
+  getSummary(@CurrentUser() user: JwtPayload) {
+    return this.transactionsService.summary({ sub: user.sub, role: user.role });
+  }
+
   @Get()
   @ApiBearerAuth()
   @Roles(UserRole.VIEWER)
@@ -72,13 +82,25 @@ export class TransactionsController {
     summary: "List transactions (tenant-scoped by router owner)",
   })
   findAll(
+    @CurrentUser() user: JwtPayload,
     @Query("page", new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query("limit", new DefaultValuePipe(20), ParseIntPipe) limit: number,
-    @CurrentUser() user: JwtPayload,
+    @Query("status") status?: string,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
   ) {
+    const validStatus =
+      status &&
+      Object.values(TransactionStatus).includes(status as TransactionStatus)
+        ? (status as TransactionStatus)
+        : undefined;
+
     return this.transactionsService.findAll({
       page,
       limit: Math.min(limit, 100),
+      status: validStatus,
+      from: from ? new Date(from) : undefined,
+      to: to ? new Date(to) : undefined,
       actor: { sub: user.sub, role: user.role },
     });
   }

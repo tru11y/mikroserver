@@ -1,9 +1,14 @@
 'use client';
 
-import { Activity, RefreshCw, Wrench } from 'lucide-react';
+import { useState } from 'react';
+import { Activity, Loader2, RefreshCw, Wrench } from 'lucide-react';
+import { clsx } from 'clsx';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import type { RouterStatus } from './routers.types';
 
 interface RoutersBulkActionsBarProps {
   selectedCount: number;
+  selectedStatuses: RouterStatus[];
   canRunHealthCheck: boolean;
   canSyncRouters: boolean;
   canManageRouters: boolean;
@@ -14,8 +19,11 @@ interface RoutersBulkActionsBarProps {
   onDisableMaintenance: () => void;
 }
 
+type PendingBulkAction = 'maintenance' | null;
+
 export function RoutersBulkActionsBar({
   selectedCount,
+  selectedStatuses,
   canRunHealthCheck,
   canSyncRouters,
   canManageRouters,
@@ -25,68 +33,97 @@ export function RoutersBulkActionsBar({
   onEnableMaintenance,
   onDisableMaintenance,
 }: RoutersBulkActionsBarProps) {
-  if (selectedCount === 0) {
-    return null;
-  }
+  const [confirmAction, setConfirmAction] = useState<PendingBulkAction>(null);
+
+  if (selectedCount === 0) return null;
+
+  // Derive intent from selection: majority in maintenance → exit, otherwise → enter
+  const maintenanceCount = selectedStatuses.filter((s) => s === 'MAINTENANCE').length;
+  const exitMaintenance = maintenanceCount === selectedCount;
+
+  const handleConfirm = () => {
+    if (exitMaintenance) onDisableMaintenance();
+    else onEnableMaintenance();
+    setConfirmAction(null);
+  };
+
+  const btnClass = (primary?: boolean) =>
+    clsx(
+      'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium active:scale-[0.98] transition-all duration-200 ease-out disabled:opacity-60 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))] focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+      primary
+        ? 'bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-[var(--shadow-glow)]'
+        : 'border bg-card hover:bg-muted/50',
+    );
+
+  const icon = (node: React.ReactNode) =>
+    isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : node;
 
   return (
-    <section className="rounded-[24px] border border-primary/20 bg-[linear-gradient(135deg,rgba(56,189,248,0.12),rgba(255,255,255,0.03))] p-5">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div>
-          <p className="text-sm font-medium">{selectedCount} routeur(s) selectionne(s)</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Operations groupees pour le terrain, avec une hierarchie plus claire que
-            l&apos;ancien bloc d&apos;actions.
-          </p>
-        </div>
+    <>
+      <section
+        aria-live="polite"
+        aria-label={`${selectedCount} routeur${selectedCount > 1 ? 's' : ''} sélectionné${selectedCount > 1 ? 's' : ''}`}
+        className="sticky top-0 z-20 rounded-lg border border-primary/30 bg-primary/5 backdrop-blur-sm p-3"
+      >
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center justify-center h-6 min-w-6 px-1.5 rounded-md bg-primary text-primary-foreground text-xs font-bold tabular-nums">
+              {selectedCount}
+            </span>
+            <p className="text-xs font-medium">
+              routeur{selectedCount > 1 ? 's' : ''} sélectionné{selectedCount > 1 ? 's' : ''}
+            </p>
+          </div>
 
-        <div className="flex flex-wrap gap-2">
-          {canRunHealthCheck ? (
-            <button
-              type="button"
-              onClick={onHealthCheck}
-              disabled={isPending}
-              className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm transition-colors hover:bg-white/5 disabled:opacity-60"
-            >
-              <Activity className="h-4 w-4" />
-              Health check
-            </button>
-          ) : null}
-          {canSyncRouters ? (
-            <button
-              type="button"
-              onClick={onSync}
-              disabled={isPending}
-              className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm transition-colors hover:bg-white/5 disabled:opacity-60"
-            >
-              <RefreshCw className="h-4 w-4" />
-              Synchroniser
-            </button>
-          ) : null}
-          {canManageRouters ? (
-            <>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {canRunHealthCheck && (
+              <button type="button" onClick={onHealthCheck} disabled={isPending} className={btnClass(true)}>
+                {icon(<Activity className="h-3.5 w-3.5" aria-hidden="true" />)}
+                Health-check
+              </button>
+            )}
+            {canSyncRouters && (
+              <button type="button" onClick={onSync} disabled={isPending} className={btnClass()}>
+                {icon(<RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />)}
+                Synchroniser
+              </button>
+            )}
+            {canManageRouters && (
               <button
                 type="button"
-                onClick={onEnableMaintenance}
+                onClick={() => setConfirmAction('maintenance')}
                 disabled={isPending}
-                className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm transition-colors hover:bg-white/5 disabled:opacity-60"
+                className={btnClass()}
+                aria-label={exitMaintenance ? 'Sortir les routeurs sélectionnés de maintenance' : 'Passer les routeurs sélectionnés en maintenance'}
               >
-                <Wrench className="h-4 w-4" />
-                Passer en maintenance
+                {icon(<Wrench className="h-3.5 w-3.5" aria-hidden="true" />)}
+                {exitMaintenance ? 'Sortir maintenance' : 'Maintenance'}
+                {maintenanceCount > 0 && maintenanceCount < selectedCount && (
+                  <span className="ml-0.5 opacity-60 text-[10px]">({maintenanceCount}/{selectedCount})</span>
+                )}
               </button>
-              <button
-                type="button"
-                onClick={onDisableMaintenance}
-                disabled={isPending}
-                className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm transition-colors hover:bg-white/5 disabled:opacity-60"
-              >
-                <Wrench className="h-4 w-4" />
-                Retirer maintenance
-              </button>
-            </>
-          ) : null}
+            )}
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
+
+      <ConfirmDialog
+        open={confirmAction !== null}
+        title={
+          exitMaintenance
+            ? `Sortir ${selectedCount} routeur${selectedCount > 1 ? 's' : ''} de maintenance ?`
+            : `Passer ${selectedCount} routeur${selectedCount > 1 ? 's' : ''} en maintenance ?`
+        }
+        description={
+          exitMaintenance
+            ? 'Ces routeurs reprendront le traitement des connexions.'
+            : 'Ces routeurs ne traiteront plus de connexions pendant la maintenance.'
+        }
+        confirmLabel={exitMaintenance ? 'Sortir de maintenance' : 'Passer en maintenance'}
+        isLoading={isPending}
+        onConfirm={handleConfirm}
+        onCancel={() => setConfirmAction(null)}
+      />
+    </>
   );
 }

@@ -29,13 +29,24 @@ export class CidrAllocatorService {
     const subnet = "10.66.66";
     const serverIp = `${subnet}.1`;
 
-    // Get all currently allocated tunnel IPs (including other owners — IPs are global)
-    const existing = await prisma.tunnel.findMany({
-      where: { deletedAt: null },
-      select: { tunnelIp: true },
-    });
+    // Get all IPs in use — both active tunnels AND legacy routers without a tunnel row.
+    // Without this, a new allocation could return 10.66.66.2 (the production router)
+    // and clobber its WG peer on wg0.
+    const [tunnelIps, routerIps] = await Promise.all([
+      prisma.tunnel.findMany({
+        where: { deletedAt: null },
+        select: { tunnelIp: true },
+      }),
+      prisma.router.findMany({
+        where: { deletedAt: null, wireguardIp: { not: null } },
+        select: { wireguardIp: true },
+      }),
+    ]);
 
-    const usedIps = new Set(existing.map((t) => t.tunnelIp));
+    const usedIps = new Set([
+      ...tunnelIps.map((t) => t.tunnelIp),
+      ...routerIps.map((r) => r.wireguardIp as string),
+    ]);
 
     for (let i = 2; i <= 254; i++) {
       const candidate = `${subnet}.${i}`;

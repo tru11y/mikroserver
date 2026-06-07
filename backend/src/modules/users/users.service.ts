@@ -267,8 +267,8 @@ export class UsersService {
     const firstName = this.normalizeRequiredString(dto.firstName);
     const lastName = this.normalizeRequiredString(dto.lastName);
     const phone = this.normalizeOptionalString(dto.phone);
-    const existing = await this.prisma.user.findUnique({
-      where: { email: normalizedEmail },
+    const existing = await this.prisma.user.findFirst({
+      where: { email: normalizedEmail, deletedAt: null },
     });
     if (existing) throw new ConflictException("Email already registered");
 
@@ -333,8 +333,8 @@ export class UsersService {
         : this.normalizeOptionalString(dto.phone);
 
     if (email !== user.email) {
-      const existingByEmail = await this.prisma.user.findUnique({
-        where: { email },
+      const existingByEmail = await this.prisma.user.findFirst({
+        where: { email, deletedAt: null },
       });
       if (existingByEmail && existingByEmail.id !== id) {
         throw new ConflictException("Email already registered");

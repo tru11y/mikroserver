@@ -186,7 +186,7 @@ export function NotificationBell() {
                         <span className="shrink-0 h-2 w-2 rounded-full bg-primary mt-1" />
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5 leading-tight line-clamp-2">
+                    <p className="text-xs text-muted-foreground mt-0.5 leading-tight line-clamp-3">
                       {notif.body}
                     </p>
                     <p className="text-[10px] text-muted-foreground mt-1">

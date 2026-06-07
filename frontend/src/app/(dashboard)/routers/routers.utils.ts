@@ -1,3 +1,5 @@
+import { formatDistanceToNow } from 'date-fns';
+import { fr } from 'date-fns/locale';
 import type { RouterFormState, RouterItem, RouterStatus } from './routers.types';
 
 export const STATUS_OPTIONS: Array<{ value: 'ALL' | RouterStatus; label: string }> = [
@@ -24,40 +26,53 @@ export const EMPTY_FORM: RouterFormState = {
 };
 
 export function formatRelative(value?: string | null): string {
-  if (!value) {
+  if (!value) return 'Jamais';
+  try {
+    return formatDistanceToNow(new Date(value), { addSuffix: true, locale: fr });
+  } catch {
     return 'Jamais';
   }
-
-  return new Intl.DateTimeFormat('fr-FR', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value));
 }
 
-export function getStatusLabel(status: RouterStatus) {
-  if (status === 'ONLINE') {
-    return 'En ligne';
-  }
-  if (status === 'DEGRADED') {
-    return 'Degrade';
-  }
-  if (status === 'MAINTENANCE') {
-    return 'Maintenance';
-  }
-  return 'Hors ligne';
+export const STATUS_PRIORITY: Record<RouterStatus, number> = {
+  OFFLINE:     0,
+  DEGRADED:    1,
+  MAINTENANCE: 2,
+  ONLINE:      3,
+};
+
+export const STATUS_LABELS: Record<RouterStatus, string> = {
+  ONLINE:      'En ligne',
+  DEGRADED:    'Dégradé',
+  OFFLINE:     'Hors ligne',
+  MAINTENANCE: 'Maintenance',
+};
+
+export function getStatusLabel(status: RouterStatus): string {
+  return STATUS_LABELS[status];
 }
 
-export function getStatusClasses(status: RouterStatus) {
-  if (status === 'ONLINE') {
-    return 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200';
-  }
-  if (status === 'DEGRADED') {
-    return 'border-orange-400/30 bg-orange-400/10 text-orange-100';
-  }
-  if (status === 'MAINTENANCE') {
-    return 'border-amber-400/30 bg-amber-400/10 text-amber-100';
-  }
-  return 'border-red-400/30 bg-red-400/10 text-red-200';
+// Token-based classes — no hardcoded colors
+export const STATUS_CLASSES: Record<RouterStatus, string> = {
+  ONLINE:      'border-success/30 bg-success/10 text-success',
+  DEGRADED:    'border-warning/30 bg-warning/10 text-warning',
+  OFFLINE:     'border-destructive/30 bg-destructive/10 text-destructive',
+  MAINTENANCE: 'border-info/30 bg-info/10 text-info',
+};
+
+export function getStatusClasses(status: RouterStatus): string {
+  return STATUS_CLASSES[status];
+}
+
+export const STATUS_DOT_CLASSES: Record<RouterStatus, string> = {
+  ONLINE:      'bg-success',
+  DEGRADED:    'bg-warning',
+  OFFLINE:     'bg-destructive',
+  MAINTENANCE: 'bg-info',
+};
+
+export function getStatusDotClass(status: RouterStatus): string {
+  return STATUS_DOT_CLASSES[status];
 }
 
 export function parseTags(tagsInput: string): string[] {

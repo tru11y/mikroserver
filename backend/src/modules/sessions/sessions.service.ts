@@ -8,7 +8,12 @@ import {
 import { Cron } from "@nestjs/schedule";
 import { PrismaService } from "../prisma/prisma.service";
 import { RouterApiService } from "../routers/router-api.service";
-import { SessionStatus, NotificationType, UserRole } from "@prisma/client";
+import {
+  SessionStatus,
+  NotificationType,
+  UserRole,
+  RouterStatus,
+} from "@prisma/client";
 import { NotificationsService } from "../notifications/notifications.service";
 import { CustomersService } from "../customers/customers.service";
 import { scopeToOwner } from "../../common/helpers/tenant-scope.helper";
@@ -23,6 +28,9 @@ export interface ActiveSessionView {
   uptime: string;
   bytesIn: number;
   bytesOut: number;
+  connectedAt: Date | null;
+  expiresAt: Date | null;
+  planName: string | null;
 }
 
 export interface SessionRouterError {
@@ -65,10 +73,23 @@ export class SessionsService {
       orderBy: { name: "asc" },
     });
 
+    const ROUTER_TIMEOUT_MS = 5000;
     const statsResults = await Promise.allSettled(
       routers.map(async (router) => {
-        const stats = await this.routerApiService.getLiveStats(router.id);
-        return stats.clients.map<ActiveSessionView>((client) => ({
+        const statsPromise = this.routerApiService.getLiveStats(router.id);
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(
+            () =>
+              reject(
+                new Error(
+                  `Router ${router.name} timed out after ${ROUTER_TIMEOUT_MS}ms`,
+                ),
+              ),
+            ROUTER_TIMEOUT_MS,
+          ),
+        );
+        const stats = await Promise.race([statsPromise, timeoutPromise]);
+        return stats.clients.map((client) => ({
           id: client.id,
           routerId: router.id,
           routerName: router.name,
@@ -76,15 +97,61 @@ export class SessionsService {
           ipAddress: client.ipAddress,
           macAddress: client.macAddress,
           uptime: client.uptime,
+          // connectedAt is derived from uptime at fetch time — most accurate source
+          connectedAt: client.connectedAt,
           bytesIn: client.bytesIn,
           bytesOut: client.bytesOut,
+          expiresAt: null as Date | null,
+          planName: null as string | null,
         }));
       }),
     );
 
-    const items = statsResults
+    const rawItems = statsResults
       .flatMap((result) => (result.status === "fulfilled" ? result.value : []))
       .sort((a, b) => b.bytesIn - a.bytesIn);
+
+    // Batch-enrich with DB session data (connectedAt, expiresAt, planName)
+    const allUsernames = rawItems.map((s) => s.username);
+    const dbSessions =
+      allUsernames.length > 0
+        ? await this.prisma.session.findMany({
+            where: {
+              status: SessionStatus.ACTIVE,
+              voucher: { code: { in: allUsernames } },
+            },
+            select: {
+              startedAt: true,
+              voucher: {
+                select: {
+                  code: true,
+                  expiresAt: true,
+                  plan: { select: { name: true } },
+                },
+              },
+            },
+          })
+        : [];
+
+    const dbByUsername = new Map(
+      dbSessions
+        .filter(
+          (s): s is typeof s & { voucher: NonNullable<typeof s.voucher> } =>
+            s.voucher?.code != null,
+        )
+        .map((s) => [s.voucher.code, s]),
+    );
+
+    const items: ActiveSessionView[] = rawItems.map((item) => {
+      const db = dbByUsername.get(item.username);
+      return {
+        ...item,
+        // Keep live connectedAt (uptime-derived, most accurate); DB startedAt only as fallback
+        connectedAt: item.connectedAt ?? db?.startedAt ?? null,
+        expiresAt: db?.voucher?.expiresAt ?? null,
+        planName: db?.voucher?.plan?.name ?? null,
+      };
+    });
 
     const routerErrors = statsResults.flatMap((result, index) => {
       if (result.status === "fulfilled") {
@@ -411,5 +478,31 @@ export class SessionsService {
     this.logger.log(
       `Session cleanup: ${expired.count} expired, ${stale.count} stale`,
     );
+  }
+
+  /**
+   * Background sync — poll all ONLINE routers every 2 minutes so DB session data
+   * (startedAt, bytesIn/Out, lastSeenAt, voucher.expiresAt) stays fresh even when
+   * the dashboard is not open. Errors per router are best-effort / silenced.
+   */
+  @Cron("0 */2 * * * *") // Every 2 minutes
+  async backgroundSyncAllRouters() {
+    const routers = await this.prisma.router.findMany({
+      where: { deletedAt: null, status: RouterStatus.ONLINE },
+      select: { id: true, name: true },
+    });
+
+    if (routers.length === 0) return;
+
+    const results = await Promise.allSettled(
+      routers.map((r) => this.routerApiService.getLiveStats(r.id)),
+    );
+
+    const failed = results.filter((r) => r.status === "rejected").length;
+    if (failed > 0) {
+      this.logger.warn(
+        `backgroundSyncAllRouters: ${failed}/${routers.length} routers failed`,
+      );
+    }
   }
 }

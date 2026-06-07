@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   AreaChart,
@@ -9,11 +10,13 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
 } from 'recharts';
 import { api } from '@/lib/api';
+import { ChartSkeleton } from '@/components/ui/skeleton';
+import { BarChart2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { clsx } from 'clsx';
 
 interface ChartPoint {
   date: string;
@@ -27,6 +30,12 @@ interface TooltipPayload {
   color: string;
 }
 
+const PERIODS = [
+  { label: '7j',  days: 7  },
+  { label: '30j', days: 30 },
+  { label: '90j', days: 90 },
+] as const;
+
 function CustomTooltip({
   active,
   payload,
@@ -36,7 +45,7 @@ function CustomTooltip({
   payload?: TooltipPayload[];
   label?: string;
 }) {
-  if (!active || !payload || !label) return null;
+  if (!active || !payload?.length || !label) return null;
 
   return (
     <div className="rounded-lg border bg-card p-3 shadow-lg text-sm">
@@ -45,11 +54,8 @@ function CustomTooltip({
       </p>
       {payload.map((entry) => (
         <div key={entry.name} className="flex items-center gap-2">
-          <span
-            className="h-2 w-2 rounded-full"
-            style={{ backgroundColor: entry.color }}
-          />
-          <span className="text-muted-foreground">{entry.name}:</span>
+          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }} />
+          <span className="text-muted-foreground">{entry.name} :</span>
           <span className="font-medium text-foreground">
             {entry.name === 'Revenus'
               ? `${entry.value.toLocaleString('fr-CI')} FCFA`
@@ -61,7 +67,9 @@ function CustomTooltip({
   );
 }
 
-export function RevenueChart({ days = 30 }: { days?: number }) {
+export function RevenueChart() {
+  const [days, setDays] = useState<7 | 30 | 90>(30);
+
   const { data, isLoading } = useQuery({
     queryKey: ['metrics', 'revenue-chart', days],
     queryFn: () => api.metrics.revenueChart(days),
@@ -69,40 +77,61 @@ export function RevenueChart({ days = 30 }: { days?: number }) {
   });
 
   const chartData = (data?.data?.data as ChartPoint[]) ?? [];
+  const isEmpty = !isLoading && chartData.length === 0;
 
   return (
     <div className="rounded-xl border bg-card p-5">
-      <div className="mb-4">
-        <h3 className="font-semibold">Revenus — {days} derniers jours</h3>
-        <p className="text-sm text-muted-foreground">FCFA (XOF)</p>
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="font-semibold">Revenus</h3>
+          <p className="text-sm text-muted-foreground">FCFA (XOF)</p>
+        </div>
+        <div
+          className="flex rounded-md border border-border overflow-hidden"
+          role="group"
+          aria-label="Période du graphique"
+        >
+          {PERIODS.map(({ label, days: d }) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => setDays(d)}
+              aria-label={`${label}${days === d ? ' (actif)' : ''}`}
+              className={clsx(
+                'px-2.5 py-1 text-[11px] font-medium',
+                'transition-all duration-200 ease-out active:scale-[0.97]',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))] focus-visible:ring-inset',
+                days === d
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {isLoading ? (
-        <div className="h-64 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
+        <ChartSkeleton />
+      ) : isEmpty ? (
+        <div className="h-64 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+          <BarChart2 className="h-8 w-8 opacity-30" />
+          <p className="text-sm">Aucune donnée de revenus</p>
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={260}>
-          <AreaChart
-            data={chartData}
-            margin={{ top: 4, right: 12, left: 0, bottom: 0 }}
-          >
+          <AreaChart data={chartData} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.02} />
+                <stop offset="5%"  stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.02} />
               </linearGradient>
             </defs>
-            <CartesianGrid
-              strokeDasharray="3 3"
-              className="stroke-muted"
-              opacity={0.4}
-            />
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.4} />
             <XAxis
               dataKey="date"
-              tickFormatter={(v: string) =>
-                format(parseISO(v), 'dd/MM', { locale: fr })
-              }
+              tickFormatter={(v: string) => format(parseISO(v), 'dd/MM', { locale: fr })}
               tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
               axisLine={false}
               tickLine={false}
@@ -116,17 +145,11 @@ export function RevenueChart({ days = 30 }: { days?: number }) {
               tickLine={false}
             />
             <Tooltip content={<CustomTooltip />} />
-            <Legend
-              wrapperStyle={{ fontSize: 12 }}
-              formatter={(value) =>
-                value === 'revenueXof' ? 'Revenus' : 'Transactions'
-              }
-            />
             <Area
               type="monotone"
               dataKey="revenueXof"
               name="Revenus"
-              stroke="#3b82f6"
+              stroke="hsl(var(--primary))"
               strokeWidth={2}
               fill="url(#colorRevenue)"
               dot={false}

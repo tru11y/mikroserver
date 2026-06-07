@@ -30,11 +30,11 @@ export interface Operator {
   email: string;
   firstName: string;
   lastName: string;
-  status: string;
+  status: 'ACTIVE' | 'SUSPENDED' | 'PENDING_VERIFICATION';
   createdAt: string;
   tierName: string | null;
   tierSlug: string | null;
-  subscriptionStatus: string | null;
+  subscriptionStatus: 'ACTIVE' | 'TRIAL' | 'CANCELLED' | 'EXPIRED' | 'SUSPENDED' | null;
   subscriptionEndDate: string | null;
   routerCount: number;
   activeRouterCount: number;

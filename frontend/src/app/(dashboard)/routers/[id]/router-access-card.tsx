@@ -552,7 +552,7 @@ export function RouterAccessCard({ routerId }: { routerId: string }) {
     );
   }
 
-  const webfigProxyUrl = `/api/v1/routers/${routerId}/webfig/`;
+  const webfigProxyUrl = data.webfig.url;
 
   return (
     <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-6 space-y-4">

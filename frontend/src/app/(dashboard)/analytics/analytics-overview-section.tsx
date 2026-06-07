@@ -1,116 +1,156 @@
 'use client';
 
-import type { ComponentType } from 'react';
-import { BarChart3, CreditCard, Download, TrendingUp, Users, Wifi } from 'lucide-react';
+import {
+  BarChart3,
+  CreditCard,
+  Download,
+  Loader2,
+  ShieldAlert,
+  Ticket,
+  TrendingUp,
+  Users,
+  Wifi,
+} from 'lucide-react';
 import { KpiCard } from '@/components/dashboard/kpi-card';
+import { KpiCardSkeleton } from '@/components/ui/skeleton';
 import type { AnalyticsKpiResponse } from './analytics.types';
 import { formatCurrency } from './analytics.utils';
 
-const SECTION_LINKS = [
-  { href: '#subscriptions', label: 'Abonnements' },
-  { href: '#recommendations', label: 'Insights' },
-  { href: '#tickets', label: 'Tickets' },
-  { href: '#charts', label: 'Courbes' },
-];
+const SECTION_ID = 'analytics-overview-heading';
+
+function calcDelta(current: number, reference: number): { value: number; direction: 'up' | 'down' } | undefined {
+  if (!reference) return undefined;
+  const pct = Math.round(((current - reference) / reference) * 100);
+  return { value: pct, direction: pct >= 0 ? 'up' : 'down' };
+}
 
 export function AnalyticsOverviewSection({
   metrics,
+  revenueGrowth,
+  isLoading,
   canExportReports,
   isExporting,
   onExport,
 }: {
   metrics: AnalyticsKpiResponse;
+  revenueGrowth: number | null;
+  isLoading: boolean;
   canExportReports: boolean;
   isExporting: boolean;
   onExport: () => void;
 }) {
-  const stats: Array<{
-    label: string;
-    value: string;
-    icon: ComponentType<{ className?: string }>;
-    variant: 'primary' | 'success' | 'warning' | 'danger';
-  }> = [
-    {
-      label: 'Revenus ce mois',
-      value: formatCurrency(metrics.revenue?.thisMonth ?? 0),
-      icon: CreditCard,
-      variant: 'primary',
-    },
-    {
-      label: 'Transactions ce mois',
-      value: String(metrics.transactions?.thisMonth ?? 0),
-      icon: TrendingUp,
-      variant: 'success',
-    },
-    {
-      label: 'Clients uniques',
-      value: String(metrics.customers?.uniqueThisMonth ?? 0),
-      icon: Users,
-      variant: 'warning',
-    },
-    {
-      label: 'Routeurs en ligne',
-      value: `${metrics.routers?.online ?? 0} / ${metrics.routers?.total ?? 0}`,
-      icon: Wifi,
-      variant: 'primary',
-    },
-  ];
-
   return (
-    <section id="overview" className="space-y-5">
-      <div className="rounded-2xl border bg-[linear-gradient(135deg,rgba(59,130,246,0.10),rgba(16,185,129,0.06),rgba(0,0,0,0))] p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="max-w-2xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-              <BarChart3 className="h-3.5 w-3.5" />
-              Cockpit operations
-            </div>
-            <h1 className="mt-3 text-3xl font-bold tracking-tight">Rapports</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Pilotage tickets, activations, incidents de delivery et exploitation terrain,
-              avec une lecture plus claire par section.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-3 sm:flex-row lg:flex-col lg:items-end">
-            {canExportReports && (
-              <button
-                type="button"
-                onClick={onExport}
-                disabled={isExporting}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Download className="h-4 w-4" />
-                {isExporting ? 'Export en cours...' : 'Exporter CSV'}
-              </button>
-            )}
-
-            <div className="flex flex-wrap gap-2">
-              {SECTION_LINKS.map((item) => (
-                <a
-                  key={item.href}
-                  href={item.href}
-                  className="rounded-full border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
-                >
-                  {item.label}
-                </a>
-              ))}
-            </div>
-          </div>
+    <section aria-labelledby={SECTION_ID} className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1
+            id={SECTION_ID}
+            className="text-lg font-semibold tracking-tight flex items-center gap-2"
+          >
+            <BarChart3 className="h-4 w-4 text-primary" aria-hidden="true" />
+            Insights
+          </h1>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            Pilotage tickets, activations et exploitation terrain
+          </p>
         </div>
+
+        {canExportReports && (
+          <button
+            type="button"
+            onClick={onExport}
+            disabled={isExporting}
+            aria-label="Exporter le rapport en CSV"
+            className="inline-flex items-center gap-1.5 rounded-md border bg-card px-3 py-1.5 text-xs font-medium hover:bg-muted/50 transition-colors disabled:opacity-60 self-start sm:self-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))]"
+          >
+            {isExporting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <Download className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
+            {isExporting ? 'Export…' : 'Exporter CSV'}
+          </button>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {stats.map(({ label, value, icon: Icon, variant }) => (
+      {isLoading ? (
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2.5">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <KpiCardSkeleton key={i} />
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2.5">
           <KpiCard
-            key={label}
-            title={label}
-            value={value}
-            variant={variant}
-            icon={<Icon className="h-4 w-4" />}
+            title="Revenus ce mois"
+            value={formatCurrency(metrics.revenue?.thisMonth ?? 0)}
+            icon={<CreditCard className="h-4 w-4" />}
+            variant="primary"
+            compact
+            trend={
+              revenueGrowth !== null
+                ? {
+                    value: Math.round(revenueGrowth * 100),
+                    label: 'vs 30j',
+                    direction: revenueGrowth >= 0 ? 'up' : 'down',
+                  }
+                : undefined
+            }
           />
-        ))}
-      </div>
+          <KpiCard
+            title="Transactions"
+            value={String(metrics.transactions?.thisMonth ?? 0)}
+            icon={<TrendingUp className="h-4 w-4" />}
+            variant="success"
+            compact
+            hint={
+              metrics.transactions?.successRate != null
+                ? `${Math.round(metrics.transactions.successRate * 100)}% succès`
+                : undefined
+            }
+          />
+          <KpiCard
+            title="Clients uniques"
+            value={String(metrics.customers?.uniqueThisMonth ?? 0)}
+            icon={<Users className="h-4 w-4" />}
+            variant="warning"
+            compact
+            hint={
+              metrics.customers?.uniqueToday
+                ? `+${metrics.customers.uniqueToday} aujourd'hui`
+                : undefined
+            }
+          />
+          <KpiCard
+            title="Routeurs en ligne"
+            value={`${metrics.routers?.online ?? 0} / ${metrics.routers?.total ?? 0}`}
+            icon={<Wifi className="h-4 w-4" />}
+            variant={
+              (metrics.routers?.offline ?? 0) > 0 ? 'danger' : 'neutral'
+            }
+            compact
+            hint={
+              (metrics.routers?.offline ?? 0) > 0
+                ? `${metrics.routers?.offline} hors ligne`
+                : 'Tous opérationnels'
+            }
+          />
+          <KpiCard
+            title="Vouchers actifs"
+            value={String(metrics.vouchers?.activeToday ?? 0)}
+            icon={<Ticket className="h-4 w-4" />}
+            variant="neutral"
+            compact
+          />
+          <KpiCard
+            title="Delivery KO"
+            value={String(metrics.vouchers?.deliveryFailures ?? 0)}
+            icon={<ShieldAlert className="h-4 w-4" />}
+            variant={(metrics.vouchers?.deliveryFailures ?? 0) > 0 ? 'danger' : 'neutral'}
+            compact
+          />
+        </div>
+      )}
     </section>
   );
 }

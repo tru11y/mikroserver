@@ -5,6 +5,7 @@ import { DashboardModalShell } from '@/components/dashboard/dashboard-modal-shel
 
 interface ResellerDeleteModalProps {
   open: boolean;
+  resellerName: string;
   isPending: boolean;
   onClose: () => void;
   onConfirm: () => void;
@@ -12,6 +13,7 @@ interface ResellerDeleteModalProps {
 
 export function ResellerDeleteModal({
   open,
+  resellerName,
   isPending,
   onClose,
   onConfirm,
@@ -28,14 +30,15 @@ export function ResellerDeleteModal({
       maxWidthClassName="max-w-lg"
     >
       <div className="space-y-5">
-        <div className="rounded-[24px] border border-red-400/20 bg-red-500/10 p-5">
+        <div className="rounded-[24px] border border-destructive/20 bg-destructive/10 p-5">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-5 w-5 text-red-200" />
+            <AlertTriangle className="mt-0.5 h-5 w-5 text-destructive" />
             <div>
-              <p className="font-medium text-red-100">Action sensible</p>
-              <p className="mt-2 text-sm text-red-100/80">
-                Le compte sera masque du tableau de bord et ne devra etre retire qu&apos;apres
-                verification humaine.
+              <p className="font-medium text-destructive">Action sensible</p>
+              <p className="mt-1.5 text-sm text-destructive/80">
+                Le compte de{' '}
+                <span className="font-semibold text-destructive">{resellerName}</span>{' '}
+                sera masqué du tableau de bord. Cette action est réservée au Super Admin.
               </p>
             </div>
           </div>

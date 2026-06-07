@@ -1,9 +1,9 @@
 'use client';
 
-import { AlertCircle, Shield, Users } from 'lucide-react';
+import { AlertCircle, Users } from 'lucide-react';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ResellerAccessModal } from './reseller-access-modal';
 import { ResellerCreateModal } from './reseller-create-modal';
-import { ResellerDeleteModal } from './reseller-delete-modal';
 import { ResellerProfileModal } from './reseller-profile-modal';
 import { ResellersDirectorySection } from './resellers-directory-section';
 import { ResellersFilterBar } from './resellers-filter-bar';
@@ -28,7 +28,7 @@ function ResellersAccessDenied() {
   return (
     <div className="rounded-[28px] border bg-card p-8 text-center">
       <Users className="mx-auto h-10 w-10 text-muted-foreground" />
-      <h1 className="mt-4 text-xl font-semibold">Acces limite</h1>
+      <h1 className="mt-4 text-xl font-semibold">Accès limité</h1>
       <p className="mt-2 text-sm text-muted-foreground">
         Ton profil ne permet pas de consulter les comptes utilisateurs.
       </p>
@@ -47,13 +47,15 @@ export default function ResellersPage() {
     return <ResellersAccessDenied />;
   }
 
+  const deletingTarget = resellers.users.find((u) => u.id === resellers.deletingId);
+
   return (
     <div className="space-y-6">
       <ResellersHeroSection
         total={resellers.users.length}
         active={resellers.activeCount}
+        suspended={resellers.suspendedCount}
         recent={resellers.recentlyActiveCount}
-        pending={resellers.pendingCount}
         canManageUsers={resellers.canManageUsers}
         onCreate={() => {
           resellers.setForm(emptyForm);
@@ -62,44 +64,12 @@ export default function ResellersPage() {
         }}
       />
 
-      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-        <div className="rounded-[24px] border bg-card/80 p-5">
-          <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
-            Lecture produit
-          </p>
-          <h2 className="mt-2 text-lg font-semibold">Qui voit quoi, et pourquoi</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Cette zone doit rassurer un acheteur: recherche rapide, statut clair, roles
-            lisibles et actions sensibles mieux encadrees.
-          </p>
-        </div>
-
-        <div className="rounded-[24px] border bg-[linear-gradient(180deg,rgba(56,189,248,0.08),rgba(255,255,255,0.03))] p-5">
-          <div className="flex items-start gap-3">
-            <Shield className="mt-0.5 h-4 w-4 text-sky-300" />
-            <div className="space-y-2 text-sm">
-              <p className="font-medium">Garde-fous d&apos;exploitation</p>
-              <p className="text-muted-foreground">
-                {resellers.canManageUsers
-                  ? "La gestion des acces est disponible. Les suppressions restent reservees au Super Admin."
-                  : "Ton profil est actuellement limite a la consultation, ce qui protege les comptes deja en production."}
-              </p>
-              {!resellers.canDeleteUsers ? (
-                <p className="text-xs text-muted-foreground">
-                  Suppression definitive bloquee pour eviter les erreurs irreversibles.
-                </p>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      </div>
-
       {resellers.permissionOptionsErrorMessage ? (
-        <div className="flex items-start gap-3 rounded-[24px] border border-amber-400/20 bg-amber-500/10 px-4 py-4 text-sm text-amber-100">
+        <div className="flex items-start gap-3 rounded-[24px] border border-warning/20 bg-warning/10 px-4 py-4 text-sm text-warning">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
-            <p className="font-medium">Profils d&apos;acces indisponibles</p>
-            <p className="mt-1 text-amber-100/80">{resellers.permissionOptionsErrorMessage}</p>
+            <p className="font-medium">Profils d&apos;accès indisponibles</p>
+            <p className="mt-1 text-warning/80">{resellers.permissionOptionsErrorMessage}</p>
           </div>
         </div>
       ) : null}
@@ -118,10 +88,11 @@ export default function ResellersPage() {
         users={resellers.filteredUsers}
         isLoading={resellers.isLoading}
         errorMessage={resellers.usersErrorMessage}
+        onRetry={resellers.refetchUsers}
         canManageUsers={resellers.canManageUsers}
         canDeleteUsers={resellers.canDeleteUsers}
-        isSuspending={resellers.suspendMutation.isPending}
-        isActivating={resellers.activateMutation.isPending}
+        suspendingId={resellers.suspendingId}
+        activatingId={resellers.activatingId}
         isDeleting={resellers.deleteMutation.isPending}
         onOpenProfile={resellers.openProfileModal}
         onOpenAccess={resellers.openAccessModal}
@@ -177,10 +148,17 @@ export default function ResellersPage() {
         onResetPassword={() => resellers.resetPasswordMutation.mutate()}
       />
 
-      <ResellerDeleteModal
+      <ConfirmDialog
         open={Boolean(resellers.deletingId)}
-        isPending={resellers.deleteMutation.isPending}
-        onClose={() => resellers.setDeletingId(null)}
+        title="Supprimer ce compte"
+        description={
+          deletingTarget
+            ? `Le compte de ${deletingTarget.firstName} ${deletingTarget.lastName} sera masqué du tableau de bord. Action réservée au Super Admin.`
+            : 'Ce compte sera masqué du tableau de bord. Action réservée au Super Admin.'
+        }
+        confirmLabel="Supprimer"
+        isLoading={resellers.deleteMutation.isPending}
+        onCancel={() => resellers.setDeletingId(null)}
         onConfirm={() => {
           if (resellers.deletingId) {
             resellers.deleteMutation.mutate(resellers.deletingId);

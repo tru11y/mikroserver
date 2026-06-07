@@ -1,8 +1,19 @@
 'use client';
 
-import { Search, SlidersHorizontal } from 'lucide-react';
-import { STATUS_OPTIONS } from './routers.utils';
+import { Search, X } from 'lucide-react';
+import { clsx } from 'clsx';
 import type { RouterStatus } from './routers.types';
+
+const STATUS_PILLS: Array<{ value: 'ALL' | RouterStatus; label: string }> = [
+  { value: 'ALL',         label: 'Tous'         },
+  { value: 'ONLINE',      label: 'En ligne'     },
+  { value: 'DEGRADED',    label: 'Dégradés'     },
+  { value: 'OFFLINE',     label: 'Hors ligne'   },
+  { value: 'MAINTENANCE', label: 'Maintenance'  },
+];
+
+const selectClass =
+  'flex-1 min-w-0 rounded-md border bg-background px-3 py-1.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))] cursor-pointer';
 
 interface RoutersFilterPanelProps {
   searchFilter: string;
@@ -33,95 +44,109 @@ export function RoutersFilterPanel({
   onSiteChange,
   onTagChange,
 }: RoutersFilterPanelProps) {
+  const clearAll = () => {
+    onSearchChange('');
+    onStatusChange('ALL');
+    onSiteChange('');
+    onTagChange('');
+  };
+
   return (
-    <section id="fleet-filters" className="rounded-[28px] border bg-card/90 p-5 shadow-sm">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
-            Recherche terrain
-          </p>
-          <h2 className="mt-2 text-lg font-semibold">Filtres & contexte de flotte</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Trouve un site, une IP, un tag ou un statut sans perdre la lecture globale.
-          </p>
+    <section aria-label="Filtres de la flotte" className="rounded-lg border bg-card p-3 space-y-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        {/* Search */}
+        <div className="relative flex-1 min-w-0">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+          <input
+            value={searchFilter}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder="Nom, IP, site, tag..."
+            aria-label="Rechercher un routeur"
+            className="w-full rounded-md border bg-background py-1.5 pl-9 pr-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))]"
+          />
+          {searchFilter && (
+            <button
+              type="button"
+              onClick={() => onSearchChange('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted active:scale-[0.98] transition-all duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))]"
+              aria-label="Effacer la recherche"
+            >
+              <X className="h-3 w-3" aria-hidden="true" />
+            </button>
+          )}
         </div>
 
-        <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-muted-foreground">
-          <SlidersHorizontal className="h-3.5 w-3.5" />
-          {resultCount} resultat{resultCount !== 1 ? 's' : ''} visible
-          {resultCount !== 1 ? 's' : ''}
-          {hasActiveFilters ? ' avec filtres actifs' : ''}
+        {/* Status pills */}
+        <div
+          role="group"
+          aria-label="Filtrer par statut"
+          className="flex items-center gap-1 overflow-x-auto -mx-1 px-1 sm:mx-0 sm:px-0"
+        >
+          {STATUS_PILLS.map((p) => {
+            const active = statusFilter === p.value;
+            return (
+              <button
+                key={p.value}
+                type="button"
+                onClick={() => onStatusChange(p.value)}
+                aria-current={active ? 'true' : undefined}
+                className={clsx(
+                  'rounded-md px-2.5 py-1 text-xs font-medium whitespace-nowrap active:scale-[0.98] transition-all duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))] focus-visible:ring-offset-1 focus-visible:ring-offset-background',
+                  active
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                )}
+              >
+                {p.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <label className="space-y-1.5 xl:col-span-2">
-          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Recherche
-          </span>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              value={searchFilter}
-              onChange={(event) => onSearchChange(event.target.value)}
-              placeholder="Nom, IP WireGuard, site, tag ou serveur hotspot..."
-              className="w-full rounded-2xl border bg-background py-2.5 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            />
-          </div>
-        </label>
-
-        <label className="space-y-1.5">
-          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Statut
-          </span>
+      {/* Secondary filters */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="flex-1 min-w-0 flex gap-2">
           <select
-            value={statusFilter}
-            onChange={(event) => onStatusChange(event.target.value as 'ALL' | RouterStatus)}
-            className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            value={siteFilter}
+            onChange={(e) => onSiteChange(e.target.value)}
+            aria-label="Filtrer par site"
+            className={selectClass}
           >
-            {STATUS_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
+            <option value="">Tous les sites</option>
+            {siteOptions.map((s) => (
+              <option key={s} value={s}>{s}</option>
             ))}
           </select>
-        </label>
 
-        <label className="space-y-1.5">
-          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Site
-          </span>
-          <input
-            list="router-sites"
-            value={siteFilter}
-            onChange={(event) => onSiteChange(event.target.value)}
-            placeholder="Tous les sites"
-            className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-          />
-          <datalist id="router-sites">
-            {siteOptions.map((site) => (
-              <option key={site} value={site} />
-            ))}
-          </datalist>
-        </label>
-
-        <label className="space-y-1.5">
-          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Tag
-          </span>
-          <input
-            list="router-tags"
+          <select
             value={tagFilter}
-            onChange={(event) => onTagChange(event.target.value)}
-            placeholder="Tous les tags"
-            className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-          />
-          <datalist id="router-tags">
-            {tagOptions.map((tag) => (
-              <option key={tag} value={tag} />
+            onChange={(e) => onTagChange(e.target.value)}
+            aria-label="Filtrer par tag"
+            className={selectClass}
+          >
+            <option value="">Tous les tags</option>
+            {tagOptions.map((t) => (
+              <option key={t} value={t}>{t}</option>
             ))}
-          </datalist>
-        </label>
+          </select>
+        </div>
+
+        <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
+          <span className="tabular-nums">
+            {resultCount} résultat{resultCount !== 1 ? 's' : ''}
+          </span>
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={clearAll}
+              className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-primary hover:bg-primary/10 active:scale-[0.98] transition-all duration-200 ease-out font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            >
+              <X className="h-3 w-3" aria-hidden="true" />
+              Réinitialiser
+            </button>
+          )}
+        </div>
       </div>
     </section>
   );

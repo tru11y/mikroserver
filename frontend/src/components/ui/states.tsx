@@ -40,8 +40,9 @@ export function ErrorState({
       </div>
       {onRetry && (
         <button
+          type="button"
           onClick={onRetry}
-          className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted/50 transition-colors"
+          className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all duration-200 ease-out hover:bg-muted active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
           <RefreshCw className="h-3.5 w-3.5" />
           Réessayer

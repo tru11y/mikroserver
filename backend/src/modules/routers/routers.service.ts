@@ -143,6 +143,16 @@ export class RoutersService {
       this.logger.warn(
         `[HealthCheck] ${failures}/${routers.length} health check(s) failed`,
       );
+      results.forEach((result, i) => {
+        if (result.status === "rejected") {
+          const name = routers[i]?.name ?? routers[i]?.id ?? `index ${i}`;
+          const reason =
+            result.reason instanceof Error
+              ? result.reason.message
+              : String(result.reason);
+          this.logger.error(`[HealthCheck] Router "${name}" threw: ${reason}`);
+        }
+      });
     }
   }
 

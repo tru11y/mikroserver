@@ -1,10 +1,12 @@
 import { apiClient } from './client';
 
+export type InvoiceStatus = 'DRAFT' | 'SENT' | 'PAID' | 'OVERDUE' | 'CANCELLED';
+
 export interface Invoice {
   id: string;
   number: string;
   type: string;
-  status: string;
+  status: InvoiceStatus;
   subtotalXof: number;
   taxXof: number;
   totalXof: number;
@@ -14,6 +16,21 @@ export interface Invoice {
   paidAt: string | null;
   lineItems: Array<{ description: string; quantity: number; unitPriceXof: number; totalXof: number }>;
   createdAt: string;
+}
+
+export interface RevenuePeriodRow {
+  month: string;
+  year: number;
+  monthNum: number;
+  totalXof: number;
+  transactionCount: number;
+}
+
+export interface RevenueRouterRow {
+  routerName: string;
+  routerId: string;
+  totalXof: number;
+  transactionCount: number;
 }
 
 export const accountingApi = {

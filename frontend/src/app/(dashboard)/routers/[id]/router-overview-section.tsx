@@ -1,26 +1,13 @@
 'use client';
 
-import {
-  Activity,
-  AlertTriangle,
-  ArrowLeft,
-  Clock,
-  Download,
-  ExternalLink,
-  Globe,
-  MapPin,
-  Monitor,
-  Radio,
-  RefreshCw,
-  Server,
-  ShieldCheck,
-  Upload,
-  Users,
-  Wifi,
-} from 'lucide-react';
-import { clsx } from 'clsx';
+import { AlertTriangle, ArrowLeft, Download, Upload, Users, Wifi } from 'lucide-react';
 import type { LiveStats, RouterDetail, SyncSummary } from './router-detail.types';
 import { formatBps, formatBytes, formatRelative } from './router-detail.utils';
+import { RouterHeaderIdentity } from './router-header-identity';
+import { RouterHeaderActions } from './router-header-actions';
+import { RouterKpiCard } from './router-kpi-card';
+import { RouterOfflineBanner } from './router-offline-banner';
+import { KpiCardSkeleton } from '@/components/ui/skeleton';
 
 interface RouterOverviewSectionProps {
   routerInfo?: RouterDetail;
@@ -43,57 +30,23 @@ interface RouterOverviewSectionProps {
 function BandwidthBar({
   value,
   max,
-  color,
+  colorClass,
 }: {
   value: number;
   max: number;
-  color: string;
+  colorClass: string;
 }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
   return (
-    <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+    <div
+      className="h-1.5 overflow-hidden rounded-full bg-muted"
+      style={{ '--bar-pct': `${pct}%` } as React.CSSProperties}
+    >
       <div
-        className={clsx('h-full rounded-full transition-all duration-500', color)}
-        style={{ width: `${pct}%` }}
+        className={`h-full w-[var(--bar-pct)] rounded-full transition-all duration-500 ${colorClass}`}
       />
     </div>
   );
-}
-
-function getStatusConfig(status?: string) {
-  if (status === 'ONLINE') {
-    return {
-      label: 'En ligne',
-      color: 'text-emerald-400',
-      bg: 'bg-emerald-400/10 border-emerald-400/20',
-      dot: 'bg-emerald-400',
-    };
-  }
-
-  if (status === 'DEGRADED') {
-    return {
-      label: 'Degrade',
-      color: 'text-orange-300',
-      bg: 'bg-orange-400/10 border-orange-400/20',
-      dot: 'bg-orange-400',
-    };
-  }
-
-  if (status === 'MAINTENANCE') {
-    return {
-      label: 'Maintenance',
-      color: 'text-amber-300',
-      bg: 'bg-amber-400/10 border-amber-400/20',
-      dot: 'bg-amber-400',
-    };
-  }
-
-  return {
-    label: 'Hors ligne',
-    color: 'text-red-400',
-    bg: 'bg-red-400/10 border-red-400/20',
-    dot: 'bg-red-400',
-  };
 }
 
 export function RouterOverviewSection({
@@ -113,7 +66,6 @@ export function RouterOverviewSection({
   onSync,
   onHealthCheck,
 }: RouterOverviewSectionProps) {
-  const statusCfg = getStatusConfig(routerInfo?.status);
   const metadata = routerInfo?.metadata ?? {};
   const syncSummary: SyncSummary | undefined = stats?.syncSummary;
   const unmatchedUsers =
@@ -123,6 +75,10 @@ export function RouterOverviewSection({
   const unmanagedClients = unmatchedUsers.length;
   const lastHealthError = metadata.lastHealthCheckError;
   const lastSyncError = metadata.lastSyncError;
+  const isHealthCheckStale =
+    routerInfo?.status === 'OFFLINE' &&
+    metadata.lastHealthCheckAt != null &&
+    Date.now() - new Date(metadata.lastHealthCheckAt).getTime() > 10 * 60 * 1000;
   const staleActiveClients = metadata.lastActiveClients;
   const activeClientsValue = stats?.activeClients ?? staleActiveClients ?? 0;
   const isUsingStaleActiveClients =
@@ -130,241 +86,138 @@ export function RouterOverviewSection({
 
   return (
     <>
-      <div className="flex items-start gap-4">
-        <button
-          onClick={onBack}
-          className="mt-0.5 rounded-lg border p-2 transition-colors hover:bg-muted"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </button>
-        <div className="flex-1">
-          <div className="mb-1 flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight">
-              {routerInfo?.name ?? '...'}
-            </h1>
-            {routerInfo && (
-              <span
-                className={clsx(
-                  'flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium',
-                  statusCfg.bg,
-                  statusCfg.color,
-                )}
-              >
-                <span
-                  className={clsx(
-                    'h-1.5 w-1.5 rounded-full',
-                    statusCfg.dot,
-                    ['ONLINE', 'DEGRADED'].includes(routerInfo.status ?? '') && 'animate-pulse',
-                  )}
-                />
-                {statusCfg.label}
-              </span>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-            {routerInfo?.location && (
-              <span className="flex items-center gap-1">
-                <MapPin className="h-3 w-3" />
-                {routerInfo.location}
-              </span>
-            )}
-            <span className="flex items-center gap-1">
-              <Server className="h-3 w-3" />
-              {routerInfo?.wireguardIp ?? '—'}:{routerInfo?.apiPort}
-            </span>
-            {routerInfo?.lastSeenAt && (
-              <span className="flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                Vu {formatRelative(routerInfo.lastSeenAt)}
-              </span>
-            )}
-            <span className="flex items-center gap-1">
-              <ShieldCheck className="h-3 w-3" />
-              Hotspot {routerInfo?.hotspotServer ?? '—'} · profil{' '}
-              {routerInfo?.hotspotProfile ?? '—'}
-            </span>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {dataUpdatedAt > 0 && (
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Radio className="h-3 w-3 text-emerald-400" />
-              Live · {new Date(dataUpdatedAt).toLocaleTimeString('fr-FR')}
-            </span>
-          )}
-          {routerInfo?.wireguardIp && (
-            <>
-              <a
-                href={`http://${routerInfo.wireguardIp}/`}
-                target="_blank"
-                rel="noopener noreferrer"
-                title={`WebFig — IP WireGuard ${routerInfo.wireguardIp} · Nécessite d'être connecté au tunnel VPN`}
-                className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors hover:bg-muted"
-              >
-                <Globe className="h-4 w-4" />
-                WebFig
-              </a>
-              <a
-                href={`winbox://${routerInfo.wireguardIp}`}
-                title={`Winbox — IP WireGuard ${routerInfo.wireguardIp} · Nécessite Winbox installé et le tunnel VPN actif`}
-                className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors hover:bg-muted"
-              >
-                <Monitor className="h-4 w-4" />
-                Winbox
-              </a>
-            </>
-          )}
-          <button
-            onClick={onOpenPortal}
-            className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors hover:bg-muted"
-          >
-            <ExternalLink className="h-4 w-4" />
-            Apercu portail
-          </button>
-          {canSyncRouters && (
-            <button
-              onClick={onSync}
-              disabled={isSyncPending}
-              className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors hover:bg-muted disabled:opacity-50"
-            >
-              <RefreshCw
-                className={clsx('h-4 w-4', isSyncPending && 'animate-spin')}
-              />
-              {isSyncPending ? 'Sync...' : 'Synchroniser'}
-            </button>
-          )}
-          {canRunHealthCheck && (
-            <button
-              onClick={onHealthCheck}
-              disabled={isChecking}
-              className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors hover:bg-muted disabled:opacity-50"
-            >
-              <Activity className={clsx('h-4 w-4', isChecking && 'animate-spin')} />
-              {isChecking ? 'Test...' : 'Test API'}
-            </button>
-          )}
-        </div>
-      </div>
+      {/* Offline / degraded banner */}
+      {routerInfo?.status && routerInfo.status !== 'ONLINE' && (
+        <RouterOfflineBanner
+          status={routerInfo.status}
+          lastHealthCheckAt={metadata.lastHealthCheckAt}
+          lastHealthCheckError={lastHealthError}
+        />
+      )}
 
+      {/* Header */}
+      <header className="flex flex-wrap items-start gap-3">
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Retour aux routeurs"
+          className="mt-0.5 flex-shrink-0 rounded-lg border p-2 transition-all duration-200 ease-out hover:bg-muted active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+        </button>
+        <RouterHeaderIdentity routerInfo={routerInfo} />
+        <RouterHeaderActions
+          routerInfo={routerInfo}
+          dataUpdatedAt={dataUpdatedAt}
+          canSyncRouters={canSyncRouters}
+          canRunHealthCheck={canRunHealthCheck}
+          isSyncPending={isSyncPending}
+          isChecking={isChecking}
+          onOpenPortal={onOpenPortal}
+          onSync={onSync}
+          onHealthCheck={onHealthCheck}
+        />
+      </header>
+
+      {/* Diagnostics banner */}
       {(lastHealthError || lastSyncError || statsErrorMessage) && (
-        <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm">
-          <div className="flex items-start gap-2 text-amber-300">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+        <div className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm">
+          <div className="flex items-start gap-2 text-warning">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
             <div className="space-y-1">
               <p className="font-medium">Derniers diagnostics du routeur</p>
-              {lastHealthError && <p>Health check: {lastHealthError}</p>}
-              {lastSyncError && <p>Synchronisation: {lastSyncError}</p>}
-              {statsErrorMessage && <p>Lecture live: {statsErrorMessage}</p>}
+              {lastHealthError && <p>Health check : {lastHealthError}</p>}
+              {lastSyncError && <p>Synchronisation : {lastSyncError}</p>}
+              {statsErrorMessage && <p>Lecture live : {statsErrorMessage}</p>}
             </div>
           </div>
         </div>
       )}
 
+      {/* KPI cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <div className="relative overflow-hidden rounded-xl border bg-card p-5">
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent" />
-          <div className="relative">
-            <div className="mb-3 flex items-center justify-between">
-              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Clients actifs
-              </span>
-              <div className="rounded-lg bg-primary/10 p-1.5">
-                <Users className="h-4 w-4 text-primary" />
-              </div>
-            </div>
-            <p className="text-4xl font-bold tabular-nums">
-              {statsLoading ? (
-                <span className="animate-pulse text-muted-foreground">—</span>
-              ) : (
-                activeClientsValue
-              )}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {isUsingStaleActiveClients
-                ? 'Derniere mesure connue'
-                : `sur ${routerInfo?.hotspotServer ?? 'hotspot'}`}
-            </p>
-          </div>
-        </div>
-
-        <div className="relative overflow-hidden rounded-xl border bg-card p-5">
-          <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent" />
-          <div className="relative">
-            <div className="mb-3 flex items-center justify-between">
-              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Download
-              </span>
-              <div className="rounded-lg bg-emerald-500/10 p-1.5">
-                <Download className="h-4 w-4 text-emerald-400" />
-              </div>
-            </div>
-            <p className="text-2xl font-bold tabular-nums text-emerald-400">
-              {statsLoading ? '—' : formatBps(stats?.rxBytesPerSec ?? 0)}
-            </p>
-            <div className="mt-2">
+        {statsLoading && !stats ? (
+          <>
+            <KpiCardSkeleton />
+            <KpiCardSkeleton />
+            <KpiCardSkeleton />
+            <KpiCardSkeleton />
+          </>
+        ) : (
+          <>
+            <RouterKpiCard
+              label="Clients actifs"
+              icon={Users}
+              gradientClass="from-primary/5"
+              iconBgClass="bg-primary/10"
+              iconColorClass="text-primary"
+              valueSizeClass="text-4xl"
+              value={activeClientsValue}
+              subtitle={
+                isUsingStaleActiveClients
+                  ? 'Dernière mesure connue'
+                  : `sur ${routerInfo?.hotspotServer ?? 'hotspot'}`
+              }
+            />
+            <RouterKpiCard
+              label="Download"
+              icon={Download}
+              gradientClass="from-success/5"
+              iconBgClass="bg-success/10"
+              iconColorClass="text-success"
+              valueColorClass="text-success"
+              valueSizeClass="text-2xl"
+              value={formatBps(stats?.rxBytesPerSec ?? 0)}
+              subtitle={`Total : ${stats ? formatBytes(stats.totalBytesIn) : '—'}`}
+            >
               <BandwidthBar
                 value={stats?.rxBytesPerSec ?? 0}
                 max={maxBps}
-                color="bg-emerald-400"
+                colorClass="bg-success"
               />
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Total: {stats ? formatBytes(stats.totalBytesIn) : '—'}
-            </p>
-          </div>
-        </div>
-
-        <div className="relative overflow-hidden rounded-xl border bg-card p-5">
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent" />
-          <div className="relative">
-            <div className="mb-3 flex items-center justify-between">
-              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Upload
-              </span>
-              <div className="rounded-lg bg-blue-500/10 p-1.5">
-                <Upload className="h-4 w-4 text-blue-400" />
-              </div>
-            </div>
-            <p className="text-2xl font-bold tabular-nums text-blue-400">
-              {statsLoading ? '—' : formatBps(stats?.txBytesPerSec ?? 0)}
-            </p>
-            <div className="mt-2">
+            </RouterKpiCard>
+            <RouterKpiCard
+              label="Upload"
+              icon={Upload}
+              gradientClass="from-info/5"
+              iconBgClass="bg-info/10"
+              iconColorClass="text-info"
+              valueColorClass="text-info"
+              valueSizeClass="text-2xl"
+              value={formatBps(stats?.txBytesPerSec ?? 0)}
+              subtitle={`Total : ${stats ? formatBytes(stats.totalBytesOut) : '—'}`}
+            >
               <BandwidthBar
                 value={stats?.txBytesPerSec ?? 0}
                 max={maxBps}
-                color="bg-blue-400"
+                colorClass="bg-info"
               />
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Total: {stats ? formatBytes(stats.totalBytesOut) : '—'}
-            </p>
-          </div>
-        </div>
-
-        <div className="relative overflow-hidden rounded-xl border bg-card p-5">
-          <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 to-transparent" />
-          <div className="relative">
-            <div className="mb-3 flex items-center justify-between">
-              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Tickets appariés
-              </span>
-              <div className="rounded-lg bg-violet-500/10 p-1.5">
-                <Wifi className="h-4 w-4 text-violet-400" />
-              </div>
-            </div>
-            <p className="text-2xl font-bold">{managedClients}</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {unmanagedClients} utilisateur(s) non géré(s)
-            </p>
-          </div>
-        </div>
+            </RouterKpiCard>
+            <RouterKpiCard
+              label="Tickets appariés"
+              icon={Wifi}
+              gradientClass="from-primary/5"
+              iconBgClass="bg-primary/10"
+              iconColorClass="text-primary"
+              valueSizeClass="text-2xl"
+              value={managedClients}
+              subtitle={`${unmanagedClients} utilisateur(s) non géré(s)`}
+            />
+          </>
+        )}
       </div>
 
+      {/* Sync diagnostic + API state */}
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-        <div className="space-y-4 rounded-xl border bg-card p-5">
+        <section
+          aria-labelledby="sync-diagnostic-heading"
+          className="space-y-4 rounded-xl border bg-card p-5"
+        >
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="font-semibold">Diagnostic de synchronisation</h2>
+              <h2 id="sync-diagnostic-heading" className="font-semibold">
+                Diagnostic de synchronisation
+              </h2>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 Compare les sessions hotspot actives avec les tickets connus par la plateforme
               </p>
@@ -383,8 +236,7 @@ export function RouterOverviewSection({
               { label: 'Tickets appariés', value: managedClients },
               {
                 label: 'Activés par la sync',
-                value:
-                  syncSummary?.activatedVouchers ?? metadata.lastActivatedVouchers ?? 0,
+                value: syncSummary?.activatedVouchers ?? metadata.lastActivatedVouchers ?? 0,
               },
               {
                 label: 'Sessions fermées',
@@ -402,84 +254,107 @@ export function RouterOverviewSection({
           </div>
 
           {unmatchedUsers.length > 0 ? (
-            <div className="rounded-lg border border-amber-400/30 bg-amber-400/10 p-4">
-              <p className="text-sm font-medium text-amber-300">
+            <div className="rounded-lg border border-warning/30 bg-warning/10 p-4">
+              <p className="text-sm font-medium text-warning">
                 Utilisateurs hotspot non gérés par MikroServer
               </p>
-              <p className="mt-1 text-xs text-amber-200/90">
-                Ils sont connectés sur le routeur, mais ne correspondent pas à un ticket actif connu par la plateforme.
+              <p className="mt-1 text-xs text-warning/80">
+                Connectés sur le routeur, mais sans ticket actif connu par la plateforme.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {unmatchedUsers.slice(0, 12).map((username) => (
                   <span
                     key={username}
-                    className="rounded-full border border-amber-400/30 px-2.5 py-1 text-xs font-mono text-amber-100"
+                    className="rounded-full border border-warning/30 px-2.5 py-1 text-xs font-mono text-warning"
                   >
                     {username}
                   </span>
                 ))}
                 {unmatchedUsers.length > 12 && (
-                  <span className="rounded-full border border-amber-400/30 px-2.5 py-1 text-xs text-amber-100">
+                  <span className="rounded-full border border-warning/30 px-2.5 py-1 text-xs text-warning">
                     +{unmatchedUsers.length - 12} autres
                   </span>
                 )}
               </div>
             </div>
           ) : (
-            <div className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-4 text-sm text-emerald-300">
+            <div className="rounded-lg border border-success/30 bg-success/10 p-4 text-sm text-success">
               Tous les utilisateurs actifs vus sur ce hotspot sont connus par la plateforme.
             </div>
           )}
-        </div>
+        </section>
 
-        <div className="space-y-4 rounded-xl border bg-card p-5">
+        <section
+          aria-labelledby="api-state-heading"
+          className="space-y-4 rounded-xl border bg-card p-5"
+        >
           <div>
-            <h2 className="font-semibold">État API</h2>
+            <h2 id="api-state-heading" className="font-semibold">
+              État API
+            </h2>
             <p className="mt-0.5 text-xs text-muted-foreground">
               Santé du lien WireGuard + RouterOS API
             </p>
           </div>
 
           <div className="space-y-3 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Dernier health check</span>
-              <span>{formatRelative(metadata.lastHealthCheckAt)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Dernière sync</span>
-              <span>{formatRelative(metadata.lastSyncAt)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Utilisateur API</span>
-              <span className="font-mono text-xs">{routerInfo?.apiUsername ?? '—'}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Serveur hotspot</span>
-              <span>{routerInfo?.hotspotServer ?? '—'}</span>
-            </div>
+            {[
+              {
+                label: 'Dernier health check',
+                value: formatRelative(metadata.lastHealthCheckAt),
+                mono: false,
+              },
+              {
+                label: 'Dernière sync',
+                value: formatRelative(metadata.lastSyncAt),
+                mono: false,
+              },
+              {
+                label: 'Utilisateur API',
+                value: routerInfo?.apiUsername ?? '—',
+                mono: true,
+              },
+              {
+                label: 'Serveur hotspot',
+                value: routerInfo?.hotspotServer ?? '—',
+                mono: false,
+              },
+            ].map(({ label, value, mono }) => (
+              <div key={label} className="flex items-center justify-between">
+                <span className="text-muted-foreground">{label}</span>
+                <span className={mono ? 'font-mono text-xs' : undefined}>{value}</span>
+              </div>
+            ))}
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Portail</span>
               <a
                 href={portalHref}
                 target="_blank"
                 rel="noreferrer"
-                className="text-xs text-primary hover:underline"
+                className="text-xs text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 Ouvrir
               </a>
             </div>
           </div>
 
+          {isHealthCheckStale && (
+            <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-warning">
+              Le cron health check ne semble plus tourner — dernier check{' '}
+              {formatRelative(metadata.lastHealthCheckAt)}. Vérifier les logs du backend (
+              <code className="font-mono">docker logs api --tail=50</code>).
+            </div>
+          )}
           {lastHealthError ? (
-            <div className="rounded-lg border border-red-400/30 bg-red-400/10 p-3 text-xs text-red-300">
-              Dernière erreur API: {lastHealthError}
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+              Dernière erreur API : {lastHealthError}
             </div>
           ) : (
-            <div className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-3 text-xs text-emerald-300">
+            <div className="rounded-lg border border-success/30 bg-success/10 p-3 text-xs text-success">
               Aucun incident API enregistré lors du dernier check.
             </div>
           )}
-        </div>
+        </section>
       </div>
     </>
   );

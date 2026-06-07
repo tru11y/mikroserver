@@ -10,8 +10,14 @@ export function formatDateInput(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+const currencyFormatter = new Intl.NumberFormat('fr-CI', {
+  style: 'currency',
+  currency: 'XOF',
+  maximumFractionDigits: 0,
+});
+
 export function formatCurrency(value: number): string {
-  return `${value.toLocaleString('fr-FR')} FCFA`;
+  return currencyFormatter.format(value);
 }
 
 export function downloadBlob(blob: Blob, fileName: string) {
@@ -33,14 +39,34 @@ export function getActivationRate(row: TicketReportResponse['breakdowns']['route
   return `${Math.round((row.activated / row.created) * 100)}%`;
 }
 
+const PRIORITY_CLASSES: Record<DailyRecommendationPriority, string> = {
+  HIGH:   'border-destructive/40 bg-destructive/10 text-destructive',
+  MEDIUM: 'border-warning/40 bg-warning/10 text-warning',
+  LOW:    'border-success/40 bg-success/10 text-success',
+};
+
 export function getRecommendationPriorityClass(priority: DailyRecommendationPriority): string {
-  if (priority === 'HIGH') {
-    return 'border-red-400/40 bg-red-500/10 text-red-200';
-  }
-  if (priority === 'MEDIUM') {
-    return 'border-amber-400/40 bg-amber-500/10 text-amber-200';
-  }
-  return 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200';
+  return PRIORITY_CLASSES[priority];
+}
+
+const PRIORITY_LABELS: Record<DailyRecommendationPriority, string> = {
+  HIGH:   'Urgent',
+  MEDIUM: 'Moyen',
+  LOW:    'Faible',
+};
+
+export function getRecommendationPriorityLabel(priority: DailyRecommendationPriority): string {
+  return PRIORITY_LABELS[priority];
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  OPERATIONS: 'Opérations',
+  RETENTION:  'Rétention',
+  CATALOG:    'Catalogue',
+};
+
+export function getRecommendationCategoryLabel(category: string): string {
+  return CATEGORY_LABELS[category] ?? category;
 }
 
 export function createEmptySubscriptionDailyList(date: string): SubscriptionDailyList {

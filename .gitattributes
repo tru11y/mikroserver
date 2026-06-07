@@ -1,0 +1,13 @@
+# Force LF for all text files — prevents CRLF issues on Windows with lint-staged
+* text=auto eol=lf
+
+# Binaries — no conversion
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.eot binary

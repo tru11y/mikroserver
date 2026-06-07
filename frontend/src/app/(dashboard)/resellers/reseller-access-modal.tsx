@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertCircle, CheckCircle2, KeyRound, Shield } from 'lucide-react';
+import { AlertCircle, CheckCircle2, KeyRound, Loader2, Shield } from 'lucide-react';
 import { DashboardModalShell } from '@/components/dashboard/dashboard-modal-shell';
 import type { PermissionOptions, Reseller } from './resellers.types';
 import { CUSTOM_PROFILE_KEY } from './resellers.utils';
@@ -47,11 +47,11 @@ export function ResellerAccessModal({
     >
       <div className="space-y-6">
         {accessError ? (
-          <div className="flex items-start gap-3 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-4 text-sm text-red-200">
+          <div className="flex items-start gap-3 rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-4 text-sm text-destructive">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
             <div>
-              <p className="font-medium">Mise a jour refusee</p>
-              <p className="mt-1 text-red-100/80">{accessError}</p>
+              <p className="font-medium">Mise à jour refusée</p>
+              <p className="mt-1 text-destructive/80">{accessError}</p>
             </div>
           </div>
         ) : null}
@@ -76,7 +76,7 @@ export function ResellerAccessModal({
                     onClick={() => onProfileChange(profile.key)}
                     className={`rounded-2xl border px-4 py-4 text-left transition-all ${
                       selected
-                        ? 'border-primary/40 bg-primary/10 shadow-[0_18px_40px_-30px_rgba(56,189,248,0.75)]'
+                        ? 'border-primary/40 bg-primary/10 shadow-glow'
                         : 'border-white/10 bg-background/50 hover:bg-background/70'
                     }`}
                   >
@@ -102,7 +102,7 @@ export function ResellerAccessModal({
                 onClick={() => onProfileChange(CUSTOM_PROFILE_KEY)}
                 className={`rounded-2xl border px-4 py-4 text-left transition-all ${
                   accessProfile === CUSTOM_PROFILE_KEY
-                    ? 'border-amber-400/30 bg-amber-400/10'
+                    ? 'border-warning/30 bg-warning/10'
                     : 'border-white/10 bg-background/50 hover:bg-background/70'
                 }`}
               >
@@ -114,15 +114,15 @@ export function ResellerAccessModal({
                     </p>
                   </div>
                   {accessProfile === CUSTOM_PROFILE_KEY ? (
-                    <CheckCircle2 className="h-4 w-4 text-amber-300" />
+                    <CheckCircle2 className="h-4 w-4 text-warning" />
                   ) : null}
                 </div>
               </button>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(56,189,248,0.08),rgba(255,255,255,0.03))] p-4">
+            <div className="rounded-2xl border border-white/10 bg-info/5 p-4">
               <div className="flex items-start gap-3">
-                <Shield className="mt-0.5 h-4 w-4 text-sky-300" />
+                <Shield className="mt-0.5 h-4 w-4 text-info" />
                 <div>
                   <p className="text-sm font-medium">Lecture actuelle</p>
                   <p className="mt-1 text-xs text-muted-foreground">
@@ -208,7 +208,7 @@ export function ResellerAccessModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-full border px-4 py-2 text-sm transition-colors hover:bg-muted/40"
+              className="rounded-full border px-4 py-2 text-sm transition-all duration-200 ease-out hover:bg-muted/40 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               Annuler
             </button>
@@ -216,9 +216,12 @@ export function ResellerAccessModal({
               type="button"
               onClick={onSubmit}
               disabled={isPending}
-              className="rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-all duration-200 ease-out hover:bg-primary/90 hover:shadow-glow active:scale-[0.98] disabled:opacity-60 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
-              {isPending ? 'Enregistrement...' : 'Enregistrer les acces'}
+              {isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+              ) : null}
+              {isPending ? 'Enregistrement...' : 'Enregistrer les accès'}
             </button>
           </div>
         </div>

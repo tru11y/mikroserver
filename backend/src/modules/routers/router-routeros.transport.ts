@@ -32,17 +32,43 @@ export async function connectToRouter(
   return connection.getConnectPromise();
 }
 
+function withHardTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () =>
+          reject(
+            new Error(`RouterOS operation timed out after ${ms}ms (${label})`),
+          ),
+        ms,
+      ),
+    ),
+  ]);
+}
+
 export async function executeRouterOperationResult<T>(
   params: RouterTransportParams & {
     operation: (conn: MikroTikConnection) => Promise<T>;
   },
 ): Promise<T> {
-  const conn = await connectToRouter(params);
-  try {
-    return await params.operation(conn);
-  } finally {
-    conn.close();
-  }
+  const run = async () => {
+    const conn = await connectToRouter(params);
+    try {
+      return await params.operation(conn);
+    } finally {
+      conn.close();
+    }
+  };
+  return withHardTimeout(
+    run(),
+    params.timeoutMs,
+    "executeRouterOperationResult",
+  );
 }
 
 export async function executeRouterOperation(
@@ -50,12 +76,15 @@ export async function executeRouterOperation(
     operation: (conn: MikroTikConnection) => Promise<void>;
   },
 ): Promise<void> {
-  const conn = await connectToRouter(params);
-  try {
-    await params.operation(conn);
-  } finally {
-    conn.close();
-  }
+  const run = async () => {
+    const conn = await connectToRouter(params);
+    try {
+      await params.operation(conn);
+    } finally {
+      conn.close();
+    }
+  };
+  await withHardTimeout(run(), params.timeoutMs, "executeRouterOperation");
 }
 
 export async function fetchRouterHotspotActiveClients(

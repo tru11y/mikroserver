@@ -20,6 +20,7 @@ import {
   buildHotspotComplianceSummary,
   buildLegacyTariffProfiles,
   buildPlansWithProfileInfo,
+  buildRouterConfigChecks,
   filterHotspotUsers,
   type LiveClientWithHotspotMeta,
 } from './router-detail.selectors';
@@ -81,7 +82,9 @@ export function useRouterDetailData({
     isAdminUser(currentUser) && hasPermission(currentUser, 'tickets.delete');
   const hasHotspotUserSearch = deferredHotspotUserSearch.trim().length > 0;
   const shouldLoadHotspotUsers =
-    activeSection === 'live' || (activeSection === 'users' && hasHotspotUserSearch);
+    activeSection === 'live' ||
+    activeSection === 'conformite' ||
+    (activeSection === 'users' && hasHotspotUserSearch);
   const shouldLoadHotspotBindings = activeSection === 'bindings';
   const shouldLoadPlans = canViewPlans;
 
@@ -102,6 +105,7 @@ export function useRouterDetailData({
     isLoading: statsLoading,
     dataUpdatedAt,
     error: statsError,
+    refetch: statsRefetch,
   } = useQuery({
     queryKey: ['router-live', id],
     queryFn: () => api.routers.liveStats(id),
@@ -158,6 +162,7 @@ export function useRouterDetailData({
     data: hotspotUsersData,
     isLoading: hotspotUsersLoading,
     error: hotspotUsersError,
+    refetch: hotspotUsersRefetch,
   } = useQuery({
     queryKey: [
       'router-hotspot-users',
@@ -247,6 +252,14 @@ export function useRouterDetailData({
     [hotspotUsers],
   );
 
+  const configChecks = useMemo(
+    () =>
+      routerInfo
+        ? buildRouterConfigChecks(routerInfo, plansWithProfileInfo, hotspotComplianceSummary)
+        : [],
+    [hotspotComplianceSummary, plansWithProfileInfo, routerInfo],
+  );
+
   const liveClients = useMemo<LiveClientWithHotspotMeta[]>(
     () => attachHotspotUsersToLiveClients(stats?.clients ?? [], hotspotUsers),
     [hotspotUsers, stats?.clients],
@@ -291,6 +304,8 @@ export function useRouterDetailData({
     hotspotUsers,
     hotspotUsersLoading,
     hotspotUsersErrorMessage,
+    statsRefetch,
+    hotspotUsersRefetch,
     allPlans,
     plansWithProfileInfo,
     legacyTariffProfiles,
@@ -299,6 +314,7 @@ export function useRouterDetailData({
     totalTariffItems,
     filteredHotspotUsers,
     hotspotComplianceSummary,
+    configChecks,
     liveClients,
     maxBps,
     portalHref,

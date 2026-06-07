@@ -209,6 +209,42 @@ export class TransactionsService {
     };
   }
 
+  async summary(actor: { sub: string; role: UserRole }): Promise<{
+    totalXof: number;
+    completedCount: number;
+    pendingCount: number;
+    processingCount: number;
+    failedCount: number;
+    refundedCount: number;
+  }> {
+    const tenantScope = scopeTransactionToOwner(actor.sub, actor.role);
+
+    const [amountResult, statusGroups] = await Promise.all([
+      this.prisma.transaction.aggregate({
+        where: { ...tenantScope, status: TransactionStatus.COMPLETED },
+        _sum: { amountXof: true },
+      }),
+      this.prisma.transaction.groupBy({
+        by: ["status"],
+        where: tenantScope,
+        _count: { id: true },
+      }),
+    ]);
+
+    const counts = Object.fromEntries(
+      statusGroups.map((g) => [g.status, g._count.id]),
+    ) as Partial<Record<TransactionStatus, number>>;
+
+    return {
+      totalXof: amountResult._sum.amountXof ?? 0,
+      completedCount: counts[TransactionStatus.COMPLETED] ?? 0,
+      pendingCount: counts[TransactionStatus.PENDING] ?? 0,
+      processingCount: counts[TransactionStatus.PROCESSING] ?? 0,
+      failedCount: counts[TransactionStatus.FAILED] ?? 0,
+      refundedCount: counts[TransactionStatus.REFUNDED] ?? 0,
+    };
+  }
+
   async findOne(
     id: string,
     actor: { sub: string; role: string },

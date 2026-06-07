@@ -158,6 +158,38 @@
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
+
+  /* ── Safe-area insets (iPhone notch / home indicator) ────────────────────── */
+  .pb-safe        { padding-bottom: env(safe-area-inset-bottom); }
+  .pt-safe        { padding-top:    env(safe-area-inset-top); }
+  .pl-safe        { padding-left:   env(safe-area-inset-left); }
+  .pr-safe        { padding-right:  env(safe-area-inset-right); }
+  .mb-safe        { margin-bottom:  env(safe-area-inset-bottom); }
+  .bottom-safe    { bottom: env(safe-area-inset-bottom); }
+
+  /* Mobile touch-target minimum (44×44 px Apple HIG) */
+  .touch-target { min-height: 44px; min-width: 44px; }
+
+  /* Prevent overscroll bounce-bg when scrolling a list */
+  .overscroll-contain-y { overscroll-behavior-y: contain; }
+
+  /* Tap-highlight cleanup on iOS */
+  .tap-transparent { -webkit-tap-highlight-color: transparent; }
+}
+
+/* ── iOS-specific: disable input zoom only on mobile widths ───────────────── */
+@supports (-webkit-touch-callout: none) {
+  @media (max-width: 767px) {
+    input[type="text"],
+    input[type="search"],
+    input[type="email"],
+    input[type="tel"],
+    input[type="number"],
+    input[type="password"],
+    input[type="url"],
+    select,
+    textarea { font-size: 16px; }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

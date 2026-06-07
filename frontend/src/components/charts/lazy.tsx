@@ -23,5 +23,13 @@ export const AnalyticsRevenueChartsSection = dynamic(
     import(
       '@/app/(dashboard)/analytics/analytics-revenue-charts-section'
     ).then((m) => ({ default: m.AnalyticsRevenueChartsSection })),
-  { ssr: false, loading: () => <ChartSkeleton rows={12} /> },
+  { ssr: false, loading: () => <div className="grid gap-4 xl:grid-cols-2"><ChartSkeleton rows={12} /><ChartSkeleton rows={12} /></div> },
+);
+
+export const AccountingPeriodBarChart = dynamic(
+  () =>
+    import('./accounting-period-bar-chart').then((m) => ({
+      default: m.AccountingPeriodBarChart,
+    })),
+  { ssr: false, loading: () => <ChartSkeleton rows={6} /> },
 );

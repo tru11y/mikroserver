@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Server } from 'lucide-react';
 import { normalizeIpBindingType } from './router-detail.utils';
@@ -12,7 +11,6 @@ import { HotspotIpBindingModal } from './hotspot-ip-binding-modal';
 import { HotspotProfileChangeModal } from './hotspot-profile-change-modal';
 import { HotspotProfileConfigModal } from './hotspot-profile-config-modal';
 import { HotspotProfilesSection } from './hotspot-profiles-section';
-import { RouterHotspotShortcuts } from './router-hotspot-shortcuts';
 import { HotspotUsersSection } from './hotspot-users-section';
 import { RouterOverviewSection } from './router-overview-section';
 import { RouterSectionNav } from './router-section-nav';
@@ -20,10 +18,15 @@ import { RouterStatsWidget } from './router-stats-widget';
 import { useRouterDetailData } from './use-router-detail-data';
 import { useRouterLiveOperations } from './use-router-live-operations';
 import { useRouterHotspotManagement } from './use-router-hotspot-management';
+import { useRouterConfirmActions } from './use-router-confirm-actions';
 import { RouterMigrationSection } from './router-migration-section';
 import { RouterHistorySection } from './router-history-section';
 import { RouterAccessCard } from './router-access-card';
+import { RouterComplianceSection } from './router-compliance-section';
+import { useAccessToken } from '@/lib/use-access-token';
+import { useState } from 'react';
 import dynamic from 'next/dynamic';
+
 const SshTerminal = dynamic(
   () => import('@/components/ssh-terminal').then((m) => m.SshTerminal),
   { ssr: false },
@@ -33,12 +36,18 @@ export default function RouterDetailPage() {
   const params = useParams<{ id: string | string[] }>();
   const id = Array.isArray(params.id) ? params.id[0] : params.id ?? '';
   const router = useRouter();
-  const [activeSection, setActiveSection] =
-    useState<RouterDetailSection>('users');
+  const [activeSection, setActiveSection] = useState<RouterDetailSection>('users');
   const [hotspotUserSearch, setHotspotUserSearch] = useState('');
-  const [confirmDeleteUsername, setConfirmDeleteUsername] = useState<string | null>(null);
-  const [confirmRemoveProfileId, setConfirmRemoveProfileId] = useState<string | null>(null);
-  const [confirmRemoveBindingId, setConfirmRemoveBindingId] = useState<string | null>(null);
+  const accessToken = useAccessToken();
+
+  const {
+    confirmDeleteUsername,
+    setConfirmDeleteUsername,
+    confirmRemoveProfileId,
+    setConfirmRemoveProfileId,
+    confirmRemoveBindingId,
+    setConfirmRemoveBindingId,
+  } = useRouterConfirmActions();
 
   const {
     isMeLoading,
@@ -55,6 +64,8 @@ export default function RouterDetailPage() {
     statsLoading,
     dataUpdatedAt,
     statsErrorMessage,
+    statsRefetch,
+    hotspotUsersRefetch,
     hotspotProfiles,
     hotspotProfilesLoading,
     hotspotProfilesErrorMessage,
@@ -72,6 +83,7 @@ export default function RouterDetailPage() {
     totalTariffItems,
     filteredHotspotUsers,
     hotspotComplianceSummary,
+    configChecks,
     liveClients,
     maxBps,
     portalHref,
@@ -184,13 +196,14 @@ export default function RouterDetailPage() {
     routerHotspotServer: routerInfo?.hotspotServer,
     availableHotspotProfileNames,
   });
+
   const profilesSectionCount =
     hotspotProfiles.length > 0
       ? hotspotProfiles.length
       : fallbackHotspotProfileNames.length;
   const liveSectionCount =
     stats?.activeClients ?? routerInfo?.metadata?.lastActiveClients ?? 0;
-  const liveUnavailable = Boolean(statsErrorMessage) && !stats;
+  const liveUnavailable = Boolean(statsErrorMessage);
   const profilesUnavailable =
     Boolean(hotspotProfilesErrorMessage) && profilesSectionCount === 0;
   const bindingsUnavailable =
@@ -212,9 +225,9 @@ export default function RouterDetailPage() {
     return (
       <div className="rounded-xl border bg-card p-8 text-center">
         <Server className="mx-auto h-10 w-10 text-muted-foreground" />
-        <h1 className="mt-4 text-xl font-semibold">Acces limite</h1>
+        <h1 className="mt-4 text-xl font-semibold">Accès limité</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Ton profil ne permet pas de consulter les details routeur.
+          Ton profil ne permet pas de consulter les détails routeur.
         </p>
       </div>
     );
@@ -251,19 +264,7 @@ export default function RouterDetailPage() {
         profilesCount={profilesSectionCount}
         bindingsCount={hotspotBindings.length}
         usersCount={hotspotUsers.length}
-        isLiveUnavailable={liveUnavailable}
-        isProfilesUnavailable={profilesUnavailable}
-        isBindingsUnavailable={bindingsUnavailable}
-        isUsersUnavailable={usersUnavailable}
-      />
-
-      <RouterHotspotShortcuts
-        activeSection={activeSection}
-        onSectionChange={setActiveSection}
-        activeClients={liveSectionCount}
-        usersCount={hotspotUsers.length}
-        profilesCount={profilesSectionCount}
-        bindingsCount={hotspotBindings.length}
+        complianceCriticals={configChecks.filter((c) => c.severity === 'critical').length}
         isLiveUnavailable={liveUnavailable}
         isProfilesUnavailable={profilesUnavailable}
         isBindingsUnavailable={bindingsUnavailable}
@@ -287,6 +288,7 @@ export default function RouterDetailPage() {
           isDisconnectPending={disconnectMutation.isPending}
           isDeletePending={deleteMutation.isPending}
           isDisconnectExpiredPending={disconnectExpiredMutation.isPending}
+          onRetry={() => void statsRefetch()}
           onChangeProfile={openProfileChangeModal}
           onDisconnect={(clientId) => {
             setDisconnectingId(clientId);
@@ -306,6 +308,7 @@ export default function RouterDetailPage() {
           isLoading={hotspotUsersLoading}
           users={filteredHotspotUsers}
           complianceSummary={hotspotComplianceSummary}
+          onRetry={() => void hotspotUsersRefetch()}
           onChangeProfile={openProfileChangeModal}
         />
       )}
@@ -361,6 +364,27 @@ export default function RouterDetailPage() {
         />
       )}
 
+      {activeSection === 'conformite' && routerInfo && (
+        <RouterComplianceSection
+          routerInfo={routerInfo}
+          configChecks={configChecks}
+          complianceSummary={hotspotComplianceSummary}
+          hotspotUsers={hotspotUsers}
+          isUsersLoading={hotspotUsersLoading}
+          usersErrorMessage={hotspotUsersErrorMessage}
+          canManage={canManageHotspot}
+          isDisconnectPending={disconnectExpiredMutation.isPending}
+          onAction={(actionId) => {
+            if (actionId === 'health_check') healthCheck();
+            else if (actionId === 'sync') syncMutation.mutate();
+            else if (actionId === 'disconnect_expired') disconnectExpiredMutation.mutate();
+          }}
+          onDisconnectExpired={() => disconnectExpiredMutation.mutate()}
+          onChangeProfile={openProfileChangeModal}
+          onRetryUsers={() => void hotspotUsersRefetch()}
+        />
+      )}
+
       {activeSection === 'migration' && routerInfo && (
         <RouterMigrationSection
           routerId={id}
@@ -378,22 +402,17 @@ export default function RouterDetailPage() {
       )}
 
       {activeSection === 'terminal' && (
-        <div className="rounded-xl border bg-zinc-950 overflow-hidden" style={{ height: '70vh' }}>
+        <div className="h-[70vh] rounded-xl border bg-zinc-950 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-800">
             <span className="text-xs font-medium text-zinc-400">
               Terminal SSH — {routerInfo?.name ?? id} ({routerInfo?.wireguardIp})
             </span>
-            <span className="text-xs text-zinc-600">Connexion via tunnel WireGuard · port 22</span>
+            <span className="text-xs text-zinc-600">
+              Connexion via tunnel WireGuard · port 22
+            </span>
           </div>
           <div className="h-[calc(100%-37px)] p-2">
-            <SshTerminal
-              routerId={id}
-              accessToken={
-                typeof window !== 'undefined'
-                  ? (sessionStorage.getItem('access_token') ?? '')
-                  : ''
-              }
-            />
+            <SshTerminal routerId={id} accessToken={accessToken} />
           </div>
         </div>
       )}
@@ -511,7 +530,7 @@ export default function RouterDetailPage() {
 
       <ConfirmDialog
         open={confirmRemoveProfileId !== null}
-        title={`Supprimer le profil ?`}
+        title="Supprimer le profil ?"
         description={`Supprimer le profil "${hotspotProfiles.find((p) => p.id === confirmRemoveProfileId)?.name ?? confirmRemoveProfileId}" ? Cette action est irréversible.`}
         confirmLabel="Supprimer"
         isLoading={removeHotspotProfileMutation.isPending}
@@ -530,7 +549,9 @@ export default function RouterDetailPage() {
         title="Supprimer l'IP binding ?"
         description={(() => {
           const b = hotspotBindings.find((x) => x.id === confirmRemoveBindingId);
-          const label = b ? (b.address ?? b.macAddress ?? b.id) : confirmRemoveBindingId;
+          const label = b
+            ? (b.address ?? b.macAddress ?? b.id)
+            : confirmRemoveBindingId;
           return `Supprimer le binding ${label} ? Cette action est irréversible.`;
         })()}
         confirmLabel="Supprimer"

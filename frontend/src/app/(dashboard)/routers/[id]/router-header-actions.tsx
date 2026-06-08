@@ -1,6 +1,6 @@
 'use client';
 
-import { Activity, Globe, Monitor, Radio, RefreshCw } from 'lucide-react';
+import { Activity, Radio, RefreshCw } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { RouterDetail } from './router-detail.types';
 
@@ -35,31 +35,6 @@ export function RouterHeaderActions({
           <Radio className="h-3 w-3 text-success" aria-hidden="true" />
           Live · {new Date(dataUpdatedAt).toLocaleTimeString('fr-FR')}
         </span>
-      )}
-
-      {routerInfo?.wireguardIp && (
-        <>
-          <a
-            href={`http://${routerInfo.wireguardIp}/`}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label={`Ouvrir WebFig pour ${routerInfo.name} (IP WireGuard ${routerInfo.wireguardIp})`}
-            title={`WebFig — ${routerInfo.wireguardIp} · Nécessite le tunnel VPN`}
-            className={btnBase}
-          >
-            <Globe className="h-4 w-4" aria-hidden="true" />
-            <span className="hidden sm:inline">WebFig</span>
-          </a>
-          <a
-            href={`winbox://${routerInfo.wireguardIp}`}
-            aria-label={`Ouvrir Winbox pour ${routerInfo.name}`}
-            title={`Winbox — ${routerInfo.wireguardIp} · Nécessite Winbox + tunnel VPN`}
-            className={btnBase}
-          >
-            <Monitor className="h-4 w-4" aria-hidden="true" />
-            <span className="hidden sm:inline">Winbox</span>
-          </a>
-        </>
       )}
 
       {canSyncRouters && (

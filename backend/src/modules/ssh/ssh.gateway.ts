@@ -11,6 +11,10 @@ import { Server, WebSocket, RawData } from "ws";
 import { Client as SshClient } from "ssh2";
 import { IncomingMessage } from "http";
 import { PrismaService } from "../prisma/prisma.service";
+import {
+  decryptRouterAccessPasswordCompat,
+  deriveRouterAccessKey,
+} from "../routers/router-access.crypto";
 
 interface SshSession {
   ws: WebSocket;
@@ -71,6 +75,8 @@ export class SshGateway implements OnGatewayConnection, OnGatewayDisconnect {
         wireguardIp: true,
         apiUsername: true,
         apiPasswordHash: true,
+        accessUsername: true,
+        accessPassword: true,
         ownerId: true,
       },
     });
@@ -153,11 +159,20 @@ export class SshGateway implements OnGatewayConnection, OnGatewayDisconnect {
       ws.close();
     });
 
+    const encryptionKey = this.configService.get<string>("ENCRYPTION_KEY", "");
+    const derivedKey = deriveRouterAccessKey(encryptionKey);
+    const sshUsername = router.accessUsername ?? router.apiUsername;
+    const rawPassword = router.accessPassword ?? "";
+    const { password: sshPassword } = decryptRouterAccessPasswordCompat(
+      rawPassword,
+      derivedKey,
+    );
+
     ssh.connect({
       host: router.wireguardIp,
       port: 22,
-      username: router.apiUsername,
-      password: router.apiPasswordHash,
+      username: sshUsername,
+      password: sshPassword,
       readyTimeout: 10000,
       keepaliveInterval: 30000,
     });

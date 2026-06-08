@@ -74,6 +74,8 @@ services:
       dockerfile: Dockerfile
       target: production
     restart: unless-stopped
+    privileged: true
+    pid: "host"
     environment:
       NODE_ENV: production
       PORT: 3000
@@ -117,8 +119,7 @@ services:
       CORS_ORIGINS: "http://${VPS_IP}"
       API_PREFIX: api
       APP_NAME: MikroServer
-    ports:
-      - "3003:3003"
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
     volumes:
       - app-logs:/app/logs
     networks:
@@ -140,9 +141,11 @@ services:
       context: ../../frontend
       dockerfile: Dockerfile
       target: production
+      args:
+        NEXT_PUBLIC_API_URL: /proxy
     restart: unless-stopped
     ports:
-      - "3001:3001"
+      - "127.0.0.1:3001:3001"
     environment:
       NODE_ENV: production
       API_INTERNAL_URL: http://api:3000

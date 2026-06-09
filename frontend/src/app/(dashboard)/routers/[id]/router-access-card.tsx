@@ -556,9 +556,6 @@ export function RouterAccessCard({ routerId }: { routerId: string }) {
 
   return (
     <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-6 space-y-4">
-      {/* Public port-map section */}
-      <PublicAccessSection routerId={routerId} />
-
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

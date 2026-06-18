@@ -69,7 +69,7 @@ jobs:
           fi
 
       - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.2.0
+        uses: appleboy/ssh-action@v1.2.5
         env:
           # Injected as env vars — never appear in the script text that gets logged
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}

@@ -20,6 +20,7 @@ import {
   GenerateInvoiceDto,
   ListInvoicesQueryDto,
   RevenueByPeriodQueryDto,
+  RevenueByYearQueryDto,
   RevenueRangeQueryDto,
 } from "./dto/accounting.dto";
 
@@ -120,6 +121,20 @@ export class AccountingController {
       user.sub,
       user.role,
       query.months ?? 12,
+    );
+  }
+
+  @Get("revenue/by-year")
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: "Monthly revenue for each month of a given year" })
+  getRevenueByYear(
+    @CurrentUser() user: JwtPayload,
+    @Query() query: RevenueByYearQueryDto,
+  ) {
+    return this.accountingService.getRevenueByYear(
+      user.sub,
+      user.role,
+      query.year ?? new Date().getFullYear(),
     );
   }
 }

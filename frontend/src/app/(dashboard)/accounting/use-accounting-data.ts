@@ -4,11 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import {
   accountingApi,
   type Invoice,
-  type RevenuePeriodRow,
   type RevenueRouterRow,
 } from '@/lib/api/accounting';
-import { api, unwrap } from '@/lib/api';
-import { isAdminUser } from '@/lib/permissions';
 
 const INVOICE_LIMIT = 50;
 
@@ -42,25 +39,6 @@ function deriveKpis(items: Invoice[], total: number): AccountingKpis {
 }
 
 export function useAccountingData() {
-  const { data: meData } = useQuery({
-    queryKey: ['auth', 'me'],
-    queryFn: () => api.auth.me(),
-    staleTime: 5 * 60 * 1000,
-  });
-  const currentUser = meData ? unwrap<Record<string, unknown>>(meData) : null;
-  const canManage = isAdminUser(currentUser);
-
-  const {
-    data: periodRaw,
-    isLoading: isPeriodLoading,
-    isError: isPeriodError,
-    refetch: refetchPeriod,
-  } = useQuery({
-    queryKey: ['accounting', 'revenue-period'],
-    queryFn: () => accountingApi.getRevenueByPeriod({ months: 6 }),
-    staleTime: 5 * 60 * 1000,
-  });
-
   const {
     data: routerRaw,
     isLoading: isRouterLoading,
@@ -91,9 +69,6 @@ export function useAccountingData() {
     staleTime: 60_000,
   });
 
-  const periodData: RevenuePeriodRow[] =
-    (periodRaw?.data as { data: RevenuePeriodRow[] } | undefined)?.data ?? [];
-
   const routerData: RevenueRouterRow[] =
     (routerRaw?.data as { data: RevenueRouterRow[] } | undefined)?.data ?? [];
 
@@ -105,10 +80,6 @@ export function useAccountingData() {
   const kpis = deriveKpis(invoices, invoiceTotal);
 
   return {
-    periodData,
-    isPeriodLoading,
-    isPeriodError,
-    refetchPeriod,
     routerData,
     isRouterLoading,
     isRouterError,
@@ -119,6 +90,5 @@ export function useAccountingData() {
     isInvoicesError,
     refetchInvoices,
     kpis,
-    canManage,
   };
 }

@@ -83,6 +83,20 @@ export class PlansController {
   @Delete(":id")
   @Roles(UserRole.VIEWER)
   @Permissions("plans.manage")
+  @ApiOperation({ summary: "Hard-delete a plan (only if never used)" })
+  delete(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.plansService.delete(id, { sub: user.sub, role: user.role });
+  }
+
+  @Patch(":id/archive")
+  @Roles(UserRole.VIEWER)
+  @Permissions("plans.manage")
+  @ApiOperation({
+    summary: "Soft-archive a plan (usable even if plan has history)",
+  })
   archive(
     @Param("id", ParseUUIDPipe) id: string,
     @CurrentUser() user: JwtPayload,

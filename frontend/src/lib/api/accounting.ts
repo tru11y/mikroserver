@@ -40,6 +40,8 @@ export const accountingApi = {
     apiClient.get('/accounting/revenue/by-router', { params }),
   getRevenueByPeriod: (params?: { months?: number }) =>
     apiClient.get('/accounting/revenue/by-period', { params }),
+  getRevenueByYear: (params?: { year?: number }) =>
+    apiClient.get('/accounting/revenue/by-year', { params }),
   generateInvoice: (data: { periodStart: string; periodEnd: string }) =>
     apiClient.post('/accounting/invoices/generate', data),
 };

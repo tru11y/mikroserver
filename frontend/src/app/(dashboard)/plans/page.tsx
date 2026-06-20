@@ -23,6 +23,7 @@ export default function PlansPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [form, setForm] = useState<PlanFormData>(buildDefaultForm());
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [confirmArchiveId, setConfirmArchiveId] = useState<string | null>(null);
 
   const { data: meData } = useQuery({
@@ -69,6 +70,23 @@ export default function PlansPage() {
     },
     onError: (err) => {
       toast.error(apiError(err, 'Erreur lors de la mise à jour'));
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.plans.delete(id),
+    onSuccess: async () => {
+      await invalidate();
+      setConfirmDeleteId(null);
+      toast.success('Forfait supprimé définitivement');
+    },
+    onError: (err, id) => {
+      setConfirmDeleteId(null);
+      const msg = apiError(err, 'Impossible de supprimer ce forfait');
+      toast.error(msg);
+      if (msg.includes('déjà utilisé')) {
+        setConfirmArchiveId(id);
+      }
     },
   });
 
@@ -174,17 +192,29 @@ export default function PlansPage() {
         canManage={canManage}
         onEdit={openEdit}
         onDuplicate={(plan) => duplicateMutation.mutate(plan)}
-        onArchive={(id) => setConfirmArchiveId(id)}
+        onArchive={(id) => setConfirmDeleteId(id)}
         onRestore={(id) => restoreMutation.mutate(id)}
         isDuplicating={duplicateMutation.isPending}
-        isArchiving={archiveMutation.isPending}
+        isArchiving={deleteMutation.isPending || archiveMutation.isPending}
         isRestoring={restoreMutation.isPending}
+      />
+
+      <ConfirmDialog
+        open={confirmDeleteId !== null}
+        title="Supprimer ce forfait ?"
+        description="Si ce forfait n'a jamais été utilisé, il sera supprimé définitivement. S'il a déjà été utilisé, vous pourrez l'archiver à la place."
+        confirmLabel="Supprimer"
+        isLoading={deleteMutation.isPending}
+        onConfirm={() => {
+          if (confirmDeleteId) deleteMutation.mutate(confirmDeleteId);
+        }}
+        onCancel={() => setConfirmDeleteId(null)}
       />
 
       <ConfirmDialog
         open={confirmArchiveId !== null}
         title="Archiver ce forfait ?"
-        description="Le forfait sera retiré de la liste active. Il restera visible dans les archives et pourra être restauré."
+        description="Ce forfait est déjà utilisé et ne peut pas être supprimé. Il sera archivé et retiré de la liste active. Vous pourrez le restaurer ultérieurement."
         confirmLabel="Archiver"
         isLoading={archiveMutation.isPending}
         onConfirm={() => {

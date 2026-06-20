@@ -31,10 +31,6 @@ export default function AccountingPage() {
     refetchInvoices,
     invoices,
     invoiceTotal,
-    periodData,
-    isPeriodLoading,
-    isPeriodError,
-    refetchPeriod,
     routerData,
     isRouterLoading,
     isRouterError,
@@ -80,7 +76,7 @@ export default function AccountingPage() {
             key={t.key}
             type="button"
             role="tab"
-            aria-selected={tab === t.key ? 'true' : 'false'}
+            aria-selected={tab === t.key}
             onClick={() => setTab(t.key)}
             className={clsx(
               'flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium',
@@ -98,14 +94,7 @@ export default function AccountingPage() {
         ))}
       </div>
 
-      {tab === 'revenue-period' && (
-        <AccountingRevenuePeriodSection
-          data={periodData}
-          isLoading={isPeriodLoading}
-          isError={isPeriodError}
-          onRetry={refetchPeriod}
-        />
-      )}
+      {tab === 'revenue-period' && <AccountingRevenuePeriodSection />}
       {tab === 'revenue-router' && (
         <AccountingRevenueRouterSection
           data={routerData}

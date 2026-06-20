@@ -50,3 +50,13 @@ export class RevenueByPeriodQueryDto {
   @Max(60)
   months?: number = 12;
 }
+
+export class RevenueByYearQueryDto {
+  @ApiPropertyOptional({ default: 2026, minimum: 2020, maximum: 2050 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(2020)
+  @Max(2050)
+  year?: number;
+}

@@ -76,7 +76,7 @@ export function PlanActionBar({
           type="button"
           onClick={() => onArchive(plan.id)}
           disabled={isArchiving}
-          aria-label={`Archiver le forfait ${plan.name}`}
+          aria-label={`Supprimer le forfait ${plan.name}`}
           className={clsx(
             'inline-flex items-center gap-1.5 rounded-lg border border-[hsl(var(--destructive)/0.2)]',
             'px-3 py-1.5 text-xs font-medium text-[hsl(var(--destructive))]',
@@ -92,7 +92,7 @@ export function PlanActionBar({
           ) : (
             <Trash2 className="h-3 w-3" aria-hidden="true" />
           )}
-          Archiver
+          Supprimer
         </button>
       )}
 

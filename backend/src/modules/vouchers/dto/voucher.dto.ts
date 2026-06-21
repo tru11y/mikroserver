@@ -121,6 +121,24 @@ export class GenerateBatchVouchersDto {
   routerId?: string;
 }
 
+export class BulkDeleteUnrecognizedDto {
+  @ApiProperty({
+    type: [String],
+    description: "Voucher UUIDs à supprimer",
+    minItems: 1,
+    maxItems: 500,
+  })
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayMaxSize(500)
+  @IsUUID("all", { each: true })
+  ids!: string[];
+
+  @ApiProperty({ enum: ["SAFE_ONLY"] })
+  @IsIn(["SAFE_ONLY"])
+  mode!: "SAFE_ONLY";
+}
+
 export class DownloadVoucherPdfDto extends VoucherIdsDto {
   @ApiPropertyOptional()
   @IsOptional()

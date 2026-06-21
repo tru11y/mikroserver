@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { clsx } from 'clsx';
-import { Boxes, List, Plus, ShieldCheck, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, Boxes, List, Plus, ShieldCheck, type LucideIcon } from 'lucide-react';
 
 interface Tab {
   href: string;
@@ -19,10 +19,11 @@ export interface VouchersTabBadges {
 }
 
 const TABS: Tab[] = [
-  { href: '/vouchers/stock',    label: 'Stock',    icon: Boxes,       perm: 'view',   badgeKey: 'issues' },
-  { href: '/vouchers',          label: 'Liste',    icon: List,        exact: true,    perm: 'view'   },
-  { href: '/vouchers/generate', label: 'Générer',  icon: Plus,        perm: 'create' },
-  { href: '/vouchers/verify',   label: 'Vérifier', icon: ShieldCheck, perm: 'verify' },
+  { href: '/vouchers/stock',    label: 'Stock',     icon: Boxes,         perm: 'view',   badgeKey: 'issues' },
+  { href: '/vouchers',          label: 'Liste',     icon: List,          exact: true,    perm: 'view'   },
+  { href: '/vouchers/generate', label: 'Générer',   icon: Plus,          perm: 'create' },
+  { href: '/vouchers/verify',   label: 'Vérifier',  icon: ShieldCheck,   perm: 'verify' },
+  { href: '/vouchers/orphans',  label: 'Orphelins', icon: AlertTriangle, perm: 'view'   },
 ];
 
 interface VouchersTabsProps {

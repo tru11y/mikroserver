@@ -143,11 +143,11 @@ export class RouterAccessService implements OnModuleInit {
         }
       } catch (error) {
         this.logger.error(
-          `Unable to decrypt access password for router ${r.id}: ${(error as Error).message}`,
+          `Unable to decrypt access password for router ${r.id}: ${(error as Error).message}. Password will be returned as null — reconfigure via PUT /access.`,
         );
-        throw new InternalServerErrorException(
-          "Mot de passe d'accès routeur invalide",
-        );
+        // Degrade gracefully: return null password so the card loads.
+        // User can reconfigure the password via the "Configurer" button.
+        passwordDecrypted = null;
       }
     }
 

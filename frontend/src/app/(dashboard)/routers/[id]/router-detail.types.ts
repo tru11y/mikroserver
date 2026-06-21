@@ -139,6 +139,7 @@ export interface RouterAccessCredentials {
   routerId: string;
   routerName: string;
   vpnIp: string;
+  rulesActive: boolean;
   winbox: {
     address: string;
     port: number;

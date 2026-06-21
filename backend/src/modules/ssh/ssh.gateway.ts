@@ -159,12 +159,20 @@ export class SshGateway implements OnGatewayConnection, OnGatewayDisconnect {
       ws.close();
     });
 
+    if (!router.accessPassword) {
+      this.send(
+        ws,
+        "\r\n\x1b[31mMot de passe SSH non configuré pour ce routeur.\r\nConfigurez-le dans l'onglet Accès Distant.\x1b[0m\r\n",
+      );
+      ws.close(4001, "SSH password not configured");
+      return;
+    }
+
     const encryptionKey = this.configService.get<string>("ENCRYPTION_KEY", "");
     const derivedKey = deriveRouterAccessKey(encryptionKey);
     const sshUsername = router.accessUsername ?? router.apiUsername;
-    const rawPassword = router.accessPassword ?? "";
     const { password: sshPassword } = decryptRouterAccessPasswordCompat(
-      rawPassword,
+      router.accessPassword,
       derivedKey,
     );
 

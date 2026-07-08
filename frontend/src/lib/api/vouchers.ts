@@ -66,4 +66,8 @@ export const vouchersApi = {
   listUnrecognized: () => apiClient.get('/vouchers/unrecognized'),
   bulkDeleteUnrecognized: (ids: string[]) =>
     apiClient.post('/vouchers/unrecognized/bulk-delete', { ids, mode: 'SAFE_ONLY' }),
+  listBatches: (page = 1, limit = 20) =>
+    apiClient.get(`/vouchers/batches?page=${page}&limit=${limit}`),
+  getBatch: (id: string) => apiClient.get(`/vouchers/batches/${id}`),
+  getBatchIds: (id: string) => apiClient.get(`/vouchers/batches/${id}/ids`),
 };

@@ -4,6 +4,7 @@ import { InjectQueue } from "./decorators/inject-queue.decorator";
 import { QUEUE_NAMES, JOB_NAMES } from "./queue.constants";
 import { ConfigService } from "@nestjs/config";
 import type { RouterProvisionJobData } from "./workers/router-provisioning.worker";
+import type { BatchGenerateJobData } from "./workers/batch-generate.worker";
 
 export interface VoucherDeliveryJobData {
   voucherId: string;
@@ -15,7 +16,7 @@ export interface WebhookProcessJobData {
   provider: string;
 }
 
-export type { RouterProvisionJobData };
+export type { RouterProvisionJobData, BatchGenerateJobData };
 
 export interface BoostRevertJobData {
   boostId: string;
@@ -53,6 +54,9 @@ export class QueueService {
 
     @InjectQueue(QUEUE_NAMES.ROUTER_PROVISION)
     private readonly routerProvisionQueue: Queue,
+
+    @InjectQueue(QUEUE_NAMES.BATCH_GENERATE)
+    private readonly batchGenerateQueue: Queue,
 
     private readonly configService: ConfigService,
   ) {
@@ -126,6 +130,16 @@ export class QueueService {
     this.logger.log(
       `Scheduled boost revert for ${data.boostId} in ${Math.round(delayMs / 60000)} min`,
     );
+  }
+
+  async enqueueBatchGenerate(data: BatchGenerateJobData): Promise<void> {
+    await this.batchGenerateQueue.add(JOB_NAMES.GENERATE_BATCH, data, {
+      jobId: `batch-${data.batchId}`,
+      attempts: 1,
+      removeOnComplete: { count: 500 },
+      removeOnFail: { count: 200 },
+    });
+    this.logger.log(`Enqueued batch generation for batchId=${data.batchId}`);
   }
 
   async getOperationalStats(): Promise<OperationalQueueStats> {

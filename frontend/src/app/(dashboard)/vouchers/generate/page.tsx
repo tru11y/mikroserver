@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import { api, unwrap } from '@/lib/api';
 import { hasPermission } from '@/lib/permissions';
 import type { AxiosError } from 'axios';
@@ -12,6 +13,8 @@ import {
   ChevronUp,
   Download,
   Eye,
+  Layers,
+  Loader2,
   Printer,
   Ticket,
 } from 'lucide-react';
@@ -55,6 +58,30 @@ interface GeneratedVoucher {
   plan: { name: string; priceXof: number; durationMinutes: number };
 }
 
+interface AsyncBatchResponse {
+  async: true;
+  batchId: string;
+  batchNumber: number;
+  quantity: number;
+  status: 'PENDING';
+}
+
+interface SyncBatchResponse {
+  async: false;
+  batchId: string;
+  batchNumber: number;
+  vouchers: GeneratedVoucher[];
+}
+
+type GenerateBulkResponse = AsyncBatchResponse | SyncBatchResponse;
+
+interface BatchStatus {
+  status: 'PENDING' | 'GENERATING' | 'COMPLETED' | 'FAILED';
+  generated: number;
+  quantity: number;
+  batchNumber: number;
+}
+
 const COUNT_PRESETS = [1, 10, 25, 50, 100];
 const CONFIRM_THRESHOLD = 50;
 
@@ -67,12 +94,15 @@ function formatDuration(minutes: number): string {
 type ApiError = AxiosError<{ message?: string }>;
 
 export default function GenerateVouchersPage() {
+  const router = useRouter();
   const [planId, setPlanId] = useState('');
   const [routerId, setRouterId] = useState('');
   const [count, setCount] = useState(10);
   const [businessName, setBusinessName] = useState('MikroServer WiFi');
   const [generated, setGenerated] = useState<GeneratedVoucher[]>([]);
   const [success, setSuccess] = useState(false);
+  const [asyncBatchId, setAsyncBatchId] = useState<string | null>(null);
+  const [asyncBatchNumber, setAsyncBatchNumber] = useState<number | null>(null);
   const [showScreenTickets, setShowScreenTickets] = useState(true);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -152,6 +182,24 @@ export default function GenerateVouchersPage() {
     URL.revokeObjectURL(url);
   };
 
+  // Polling for async batch progress
+  const { data: batchStatusData } = useQuery({
+    queryKey: ['batch-status', asyncBatchId],
+    queryFn: () => api.vouchers.getBatch(asyncBatchId!),
+    enabled: !!asyncBatchId,
+    refetchInterval: (query) => {
+      const batchStatus = query.state.data
+        ? unwrap<BatchStatus>(query.state.data as never)
+        : null;
+      if (!batchStatus) return 3000;
+      return batchStatus.status === 'PENDING' || batchStatus.status === 'GENERATING'
+        ? 3000
+        : false;
+    },
+  });
+
+  const batchStatus = batchStatusData ? unwrap<BatchStatus>(batchStatusData) : null;
+
   const generateMutation = useMutation({
     mutationFn: () => {
       const s = selectedPlan?.ticketSettings;
@@ -166,7 +214,21 @@ export default function GenerateVouchersPage() {
       });
     },
     onSuccess: async (response) => {
-      const vouchers = (response?.data?.data as GeneratedVoucher[]) ?? [];
+      const result = response?.data?.data as GenerateBulkResponse | null;
+      if (!result) return;
+
+      if (result.async) {
+        // Large batch — show async progress UI
+        setAsyncBatchId(result.batchId);
+        setAsyncBatchNumber(result.batchNumber);
+        setSuccess(true);
+        setGenerated([]);
+        return;
+      }
+
+      // Sync path — show tickets immediately
+      setAsyncBatchId(null);
+      const vouchers = (result as SyncBatchResponse).vouchers ?? [];
       setGenerated(vouchers);
       setSuccess(true);
       setShowScreenTickets(outputMode !== 'PDF');
@@ -423,8 +485,52 @@ export default function GenerateVouchersPage() {
           )}
         </div>
 
-        {/* Résultats */}
-        {success && generated.length > 0 && (
+        {/* Résultats async (grand lot en cours) */}
+        {success && asyncBatchId && (
+          <div className="space-y-4 rounded-xl border bg-card p-6">
+            {batchStatus?.status === 'COMPLETED' ? (
+              <div className="flex items-center gap-2 text-success">
+                <CheckCircle2 className="h-5 w-5" />
+                <span className="font-semibold">
+                  Lot #{asyncBatchNumber} — {batchStatus.quantity} tickets générés
+                </span>
+              </div>
+            ) : batchStatus?.status === 'FAILED' ? (
+              <div className="flex items-center gap-2 text-destructive">
+                <AlertCircle className="h-5 w-5" />
+                <span className="font-semibold">Échec de la génération du lot #{asyncBatchNumber}</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-primary">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span className="font-semibold">
+                  Lot #{asyncBatchNumber ?? '...'} en cours — {batchStatus?.generated ?? 0}/{batchStatus?.quantity ?? count} tickets
+                </span>
+              </div>
+            )}
+
+            {batchStatus && batchStatus.quantity > 0 && batchStatus.status !== 'COMPLETED' && (
+              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full bg-primary transition-all duration-500"
+                  style={{ width: `${Math.round((batchStatus.generated / batchStatus.quantity) * 100)}%` }}
+                />
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => router.push('/vouchers/lots')}
+              className="flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition-all duration-200 ease-out hover:bg-muted/50 active:scale-[0.98]"
+            >
+              <Layers className="h-4 w-4" />
+              Voir tous les lots
+            </button>
+          </div>
+        )}
+
+        {/* Résultats sync */}
+        {success && !asyncBatchId && generated.length > 0 && (
           <div className="space-y-4 rounded-xl border bg-card p-6">
             <div className="flex items-center gap-2 text-success">
               <CheckCircle2 className="h-5 w-5" />

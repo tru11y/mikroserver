@@ -6,6 +6,8 @@ export const QUEUE_NAMES = {
   SPEED_BOOST: "speed-boost",
   /** Durable WireGuard provisioning — poll tunnel, rollback on failure */
   ROUTER_PROVISION: "router-provision",
+  /** Async bulk voucher generation for large batches (>100 tickets) */
+  BATCH_GENERATE: "batch-generate",
 } as const;
 
 export const JOB_NAMES = {
@@ -16,6 +18,8 @@ export const JOB_NAMES = {
   REVERT_BOOST: "revert-boost",
   /** Enqueued by RoutersService.create() after WG peer is added on VPS */
   PROVISION_ROUTER: "provision-router",
+  /** Async generation of a large voucher batch */
+  GENERATE_BATCH: "generate-batch",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];

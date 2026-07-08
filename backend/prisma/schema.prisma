@@ -42,6 +42,7 @@ model User {
   subscriptions_subscriptions_user_idTousers                 subscriptions[] @relation("subscriptions_user_idTousers")
   subscriptions_users_current_subscription_idTosubscriptions subscriptions?  @relation("users_current_subscription_idTosubscriptions", fields: [current_subscription_id], references: [id])
   vouchers                                                   Voucher[]       @relation("UserVouchers")
+  voucherBatches                                             VoucherBatch[]  @relation("UserBatches")
   tunnelsOwned     Tunnel[]     @relation("TunnelOwner")
   routersOwned     Router[]     @relation("RouterOwner")
   ownedPlans       Plan[]       @relation("PlanOwner")
@@ -177,6 +178,7 @@ model Router {
   auditLogs       AuditLog[]
   sessions        Session[]
   vouchers        Voucher[]
+  voucherBatches  VoucherBatch[]
   owner            User?        @relation("RouterOwner", fields: [ownerId], references: [id])
   notifications    Notification[]
   provisioningSessions ProvisioningSession[]
@@ -231,6 +233,7 @@ model Plan {
   subscriptions   subscriptions[]
   transactions    Transaction[]
   vouchers        Voucher[]
+  voucherBatches  VoucherBatch[]
 
   @@unique([slug, ownerId])
   @@index([status])
@@ -296,9 +299,11 @@ model Voucher {
   updatedAt         DateTime       @updatedAt @map("updated_at")
   createdById       String?        @map("created_by_id") @db.Uuid
   generationType    GenerationType @default(AUTO) @map("generation_type")
+  batchId           String?        @map("batch_id") @db.Uuid
   ip_bindings       ip_bindings[]
   session           Session?
   subscriptions     subscriptions?
+  batch             VoucherBatch?  @relation(fields: [batchId], references: [id])
   createdBy         User?          @relation("UserVouchers", fields: [createdById], references: [id])
   plan              Plan           @relation(fields: [planId], references: [id])
   router            Router?        @relation(fields: [routerId], references: [id])
@@ -309,8 +314,38 @@ model Voucher {
   @@index([routerId])
   @@index([planId])
   @@index([expiresAt])
+  @@index([batchId])
   @@index([status, routerId])
   @@map("vouchers")
+}
+
+enum VoucherBatchStatus {
+  PENDING
+  GENERATING
+  COMPLETED
+  FAILED
+}
+
+model VoucherBatch {
+  id          String             @id @default(uuid()) @db.Uuid
+  batchNumber Int                @unique @default(autoincrement()) @map("batch_number")
+  planId      String             @map("plan_id") @db.Uuid
+  routerId    String?            @map("router_id") @db.Uuid
+  quantity    Int
+  generated   Int                @default(0)
+  status      VoucherBatchStatus @default(PENDING)
+  createdById String?            @map("created_by_id") @db.Uuid
+  createdAt   DateTime           @default(now()) @map("created_at")
+  completedAt DateTime?          @map("completed_at")
+  plan        Plan               @relation(fields: [planId], references: [id])
+  router      Router?            @relation(fields: [routerId], references: [id])
+  createdBy   User?              @relation("UserBatches", fields: [createdById], references: [id])
+  vouchers    Voucher[]
+
+  @@index([planId])
+  @@index([createdAt])
+  @@index([createdById])
+  @@map("voucher_batches")
 }
 
 model Session {

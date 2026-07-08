@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import type { AxiosError } from 'axios';
-import { Ticket } from 'lucide-react';
+import { Layers, Ticket, X } from 'lucide-react';
 
 import { api, unwrap } from '@/lib/api';
 import { hasPermission } from '@/lib/permissions';
@@ -42,12 +42,29 @@ export default function VouchersPage() {
   const [bulkDeleteSummary, setBulkDeleteSummary] = useState<BulkDeleteSummary | null>(null);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [confirmDeleteVoucherId, setConfirmDeleteVoucherId] = useState<string | null>(null);
+  const [activeBatch, setActiveBatch] = useState<{ id: string; number: number } | null>(null);
 
   useEffect(() => {
     const usageState = searchParams.get('usageState');
     if (usageState && ['ALL', 'UNUSED', 'READY', 'USED', 'ISSUES'].includes(usageState)) {
       setUsageFilter(usageState);
     }
+    const batchId = searchParams.get('batchId');
+    const batchNumber = searchParams.get('batchNumber');
+    if (batchId && batchNumber && batchId !== activeBatch?.id) {
+      const num = parseInt(batchNumber, 10);
+      setActiveBatch({ id: batchId, number: num });
+      api.vouchers.getBatchIds(batchId).then((res) => {
+        const ids = (res?.data?.data as string[]) ?? [];
+        if (ids.length) {
+          setSelectedIds(ids);
+          toast.success(`${ids.length} ticket(s) du lot #${num} sélectionnés`);
+        }
+      }).catch(() => {
+        toast.error('Impossible de charger les tickets du lot');
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   const { data: meData, isLoading: isMeLoading } = useQuery({
@@ -215,6 +232,24 @@ export default function VouchersPage() {
       </div>
 
       <VouchersKpiStrip canView={canView} />
+
+      {activeBatch && (
+        <div className="flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5 text-sm">
+          <div className="flex items-center gap-2">
+            <Layers className="h-4 w-4 text-primary" aria-hidden="true" />
+            <span className="font-medium text-primary">Lot #{activeBatch.number}</span>
+            <span className="text-muted-foreground">— {selectedIds.length} ticket(s) sélectionné(s)</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => { setActiveBatch(null); setSelectedIds([]); }}
+            className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
+            aria-label="Désactiver le filtre lot"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       <VouchersFilterBar
         search={search}

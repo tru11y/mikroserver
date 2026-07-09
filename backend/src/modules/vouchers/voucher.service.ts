@@ -50,6 +50,7 @@ const CODE_CHARSET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const NUMERIC_CHARSET = "0123456789";
 // Batches larger than this threshold are generated asynchronously via BullMQ
 const ASYNC_BATCH_THRESHOLD = 100;
+const ROUTER_CLEANUP_TIMEOUT_MS = 5000;
 
 export type GenerateBulkResult =
   | {
@@ -1275,7 +1276,7 @@ export class VoucherService {
     const deleted: VoucherBulkDeleteResult["deleted"] = [];
     const skipped: VoucherBulkDeleteResult["skipped"] = [];
 
-    for (const voucherId of uniqueVoucherIds) {
+    const processOne = async (voucherId: string) => {
       const voucher = vouchersById.get(voucherId);
 
       if (!voucher) {
@@ -1284,7 +1285,7 @@ export class VoucherService {
           code: null,
           reason: "Ticket introuvable dans la base.",
         });
-        continue;
+        return;
       }
 
       try {
@@ -1301,6 +1302,15 @@ export class VoucherService {
           reason: getBulkDeleteFailureReason(error),
         });
       }
+    };
+
+    // Bounded concurrency: a large selection of tickets tied to a slow/offline
+    // router must still complete well within the client request timeout.
+    const CONCURRENCY = 10;
+    for (let i = 0; i < uniqueVoucherIds.length; i += CONCURRENCY) {
+      await Promise.all(
+        uniqueVoucherIds.slice(i, i + CONCURRENCY).map(processOne),
+      );
     }
 
     return {
@@ -1733,8 +1743,17 @@ export class VoucherService {
       return;
     }
 
+    let timer: NodeJS.Timeout | undefined;
     try {
-      await cleanupFn();
+      await Promise.race([
+        cleanupFn(),
+        new Promise((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error("router cleanup timed out")),
+            ROUTER_CLEANUP_TIMEOUT_MS,
+          );
+        }),
+      ]);
     } catch (error) {
       const reason =
         error instanceof Error && error.message.trim()
@@ -1743,6 +1762,8 @@ export class VoucherService {
       this.logger.warn(
         `Voucher ${code} deleted despite router cleanup failure (${action}) on router ${routerId}: ${reason}`,
       );
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
 }

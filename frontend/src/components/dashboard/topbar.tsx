@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useTheme } from 'next-themes';
-import { Sun, Moon, LogOut, Menu } from 'lucide-react';
+import { Sun, Moon, LogOut, Menu, Minimize2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { clearAccessToken } from '@/lib/api/client';
@@ -10,9 +10,10 @@ import { NotificationBell } from '@/components/notifications/notification-bell';
 
 interface TopBarProps {
   onMenuToggle: () => void;
+  onToggleChrome?: () => void;
 }
 
-export function TopBar({ onMenuToggle }: TopBarProps) {
+export function TopBar({ onMenuToggle, onToggleChrome }: TopBarProps) {
   const { theme, setTheme } = useTheme();
   const router = useRouter();
   const [dateLabel, setDateLabel] = useState('');
@@ -57,6 +58,18 @@ export function TopBar({ onMenuToggle }: TopBarProps) {
 
       {/* Right — actions */}
       <div className="flex items-center gap-0.5 md:gap-1.5">
+        {onToggleChrome && (
+          <button
+            type="button"
+            onClick={onToggleChrome}
+            className="h-11 w-11 md:h-9 md:w-9 inline-flex items-center justify-center rounded-lg tap-transparent active:bg-muted hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+            aria-label="Masquer le menu et la barre"
+            title="Mode plein écran"
+          >
+            <Minimize2 className="h-4 w-4" />
+          </button>
+        )}
+
         <NotificationBell />
 
         <button

@@ -178,10 +178,14 @@ services:
       PORT_MAP_RANGE_START: ${PORT_MAP_RANGE_START:-19000}
       PORT_MAP_RANGE_END: ${PORT_MAP_RANGE_END:-19999}
     # WireGuard + iptables: minimal capabilities instead of full privileged
-    # NET_ADMIN: required for iptables/WireGuard; SYS_PTRACE: required for nsenter into host namespaces
+    # NET_ADMIN: iptables/WireGuard; SYS_ADMIN: setns() for `nsenter -t 1 -n` into host netns (wg on host wg0); SYS_PTRACE: nsenter into host PID/mount ns
     cap_add:
       - NET_ADMIN
+      - SYS_ADMIN
       - SYS_PTRACE
+    # docker-default AppArmor bloque setns() vers les namespaces du PID 1 hôte (non confiné) → unconfined requis pour `nsenter -t 1`
+    security_opt:
+      - apparmor:unconfined
     pid: host
     # Port 3000 exposed on 127.0.0.1 ONLY — never reachable from the public internet.
     # Required by: restore-iptables.sh (systemd), deploy_prod.sh (manual fallback).

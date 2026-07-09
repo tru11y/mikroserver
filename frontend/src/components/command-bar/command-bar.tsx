@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { clsx } from 'clsx';
 import {
-  Search, LayoutDashboard, Wifi, Ticket, Users, BarChart3, Settings,
+  Search, LayoutDashboard, Wifi, Ticket, Users, BarChart3, Settings, Tag,
   Plus, Activity, RefreshCw, Ban, Shield, ChevronRight, Loader2,
 } from 'lucide-react';
 import { api, unwrap } from '@/lib/api';
@@ -34,6 +34,7 @@ function useNavItems(router: ReturnType<typeof useRouter>, onClose: () => void):
     { id: 'nav-dashboard', type: 'nav', label: 'Tableau de bord', icon: <LayoutDashboard className="h-4 w-4" />, onSelect: () => { router.push('/dashboard'); onClose(); } },
     { id: 'nav-routers',   type: 'nav', label: 'Routeurs',        icon: <Wifi className="h-4 w-4" />,           onSelect: () => { router.push('/routers'); onClose(); } },
     { id: 'nav-tickets',   type: 'nav', label: 'Tickets',         icon: <Ticket className="h-4 w-4" />,         onSelect: () => { router.push('/vouchers'); onClose(); } },
+    { id: 'nav-plans',     type: 'nav', label: 'Forfaits',        sublabel: 'Gérer les forfaits WiFi', keywords: 'forfaits plans prix durée quota vouchers', icon: <Tag className="h-4 w-4" />, onSelect: () => { router.push('/plans'); onClose(); } },
     { id: 'nav-clients',   type: 'nav', label: 'Clients',         icon: <Users className="h-4 w-4" />,          onSelect: () => { router.push('/customers'); onClose(); } },
     { id: 'nav-insights',  type: 'nav', label: 'Insights',        icon: <BarChart3 className="h-4 w-4" />,      onSelect: () => { router.push('/analytics'); onClose(); } },
     { id: 'nav-sessions',  type: 'nav', label: 'Sessions actives',icon: <Activity className="h-4 w-4" />,       onSelect: () => { router.push('/sessions'); onClose(); } },

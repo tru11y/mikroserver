@@ -9,7 +9,7 @@ import { api } from '@/lib/api';
 import { apiClient } from '@/lib/api/client';
 import { hasAnyPermission, hasPermission } from '@/lib/permissions';
 import {
-  LayoutDashboard, Wifi, Ticket, Users, BarChart3, Settings,
+  LayoutDashboard, Wifi, Ticket, Users, BarChart3, Settings, BookOpen, Tag,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -100,14 +100,22 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const canViewSettings = user
     ? hasAnyPermission(user, ['settings.view', 'settings.manage'])
     : isFallbackAdmin || fallbackRole === 'VIEWER';
+  const canViewAccounting = user
+    ? hasAnyPermission(user, ['reports.view', 'reports.export'])
+    : isFallbackAdmin;
+  const canViewPlans = user
+    ? hasAnyPermission(user, ['plans.view', 'plans.manage'])
+    : isFallbackAdmin;
 
   const navItems: NavItem[] = [
     { href: '/dashboard', exact: true, icon: LayoutDashboard, label: 'Accueil' },
-    ...(canViewRouters ? [{ href: '/routers',   icon: Wifi,        label: 'Routeurs' }] : []),
-    ...(canViewTickets ? [{ href: '/vouchers',  icon: Ticket,      label: 'Tickets'  }] : []),
-    ...(canViewCustomers ? [{ href: '/customers', icon: Users,     label: 'Clients'  }] : []),
-    ...(canViewInsights ? [{ href: '/analytics', icon: BarChart3,  label: 'Insights' }] : []),
-    ...(canViewSettings ? [{ href: '/settings',  icon: Settings,   label: 'Réglages' }] : []),
+    ...(canViewRouters ? [{ href: '/routers',     icon: Wifi,        label: 'Routeurs'      }] : []),
+    ...(canViewTickets ? [{ href: '/vouchers',    icon: Ticket,      label: 'Tickets'       }] : []),
+    ...(canViewPlans ? [{ href: '/plans',         icon: Tag,         label: 'Forfaits'      }] : []),
+    ...(canViewCustomers ? [{ href: '/customers', icon: Users,       label: 'Clients'       }] : []),
+    ...(canViewInsights ? [{ href: '/analytics',  icon: BarChart3,   label: 'Insights'      }] : []),
+    ...(canViewAccounting ? [{ href: '/accounting', icon: BookOpen,  label: 'Comptabilité'  }] : []),
+    ...(canViewSettings ? [{ href: '/settings',   icon: Settings,    label: 'Réglages'      }] : []),
   ];
 
   const isInsightsPath = (p: string) =>
@@ -116,9 +124,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const isClientsPath = (p: string) =>
     p.startsWith('/customers') || p.startsWith('/resellers') || p.startsWith('/users') || p.startsWith('/operators');
   const isSettingsPath = (p: string) =>
-    p === '/settings' || p.startsWith('/settings/') || p.startsWith('/subscription') || p.startsWith('/accounting');
+    p === '/settings' || p.startsWith('/settings/') || p.startsWith('/subscription');
   const isTicketsPath = (p: string) =>
-    p === '/vouchers' || p.startsWith('/vouchers/') || p.startsWith('/plans');
+    p === '/vouchers' || p.startsWith('/vouchers/');
 
   const isItemActive = (item: NavItem) => {
     if (item.exact) return pathname === item.href;

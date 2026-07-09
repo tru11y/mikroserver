@@ -1,6 +1,6 @@
 'use client';
 
-import { Copy, Loader2, Pencil, RotateCcw, Trash2 } from 'lucide-react';
+import { Archive, Copy, Loader2, Pencil, RotateCcw, Trash2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { Plan } from './plans.types';
 
@@ -8,9 +8,11 @@ interface PlanActionBarProps {
   plan: Plan;
   onEdit: (plan: Plan) => void;
   onDuplicate: (plan: Plan) => void;
+  onDelete: (id: string) => void;
   onArchive: (id: string) => void;
   onRestore: (id: string) => void;
   isDuplicating: boolean;
+  isDeleting: boolean;
   isArchiving: boolean;
   isRestoring: boolean;
 }
@@ -22,9 +24,11 @@ export function PlanActionBar({
   plan,
   onEdit,
   onDuplicate,
+  onDelete,
   onArchive,
   onRestore,
   isDuplicating,
+  isDeleting,
   isArchiving,
   isRestoring,
 }: PlanActionBarProps) {
@@ -76,6 +80,31 @@ export function PlanActionBar({
           type="button"
           onClick={() => onArchive(plan.id)}
           disabled={isArchiving}
+          aria-label={`Archiver le forfait ${plan.name}`}
+          className={clsx(
+            'inline-flex items-center gap-1.5 rounded-lg border border-amber-500/20',
+            'px-3 py-1.5 text-xs font-medium text-amber-500',
+            'transition-all duration-200 ease-out',
+            'hover:bg-amber-500/08',
+            'active:scale-[0.98]',
+            'disabled:cursor-not-allowed disabled:opacity-50',
+            focusRing,
+          )}
+        >
+          {isArchiving ? (
+            <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+          ) : (
+            <Archive className="h-3 w-3" aria-hidden="true" />
+          )}
+          Archiver
+        </button>
+      )}
+
+      {plan.status === 'ACTIVE' && (
+        <button
+          type="button"
+          onClick={() => onDelete(plan.id)}
+          disabled={isDeleting}
           aria-label={`Supprimer le forfait ${plan.name}`}
           className={clsx(
             'inline-flex items-center gap-1.5 rounded-lg border border-[hsl(var(--destructive)/0.2)]',
@@ -87,7 +116,7 @@ export function PlanActionBar({
             focusRing,
           )}
         >
-          {isArchiving ? (
+          {isDeleting ? (
             <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
           ) : (
             <Trash2 className="h-3 w-3" aria-hidden="true" />

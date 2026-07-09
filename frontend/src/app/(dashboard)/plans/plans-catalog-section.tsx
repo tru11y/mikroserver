@@ -13,9 +13,11 @@ interface PlansCatalogSectionProps {
   canManage: boolean;
   onEdit: (plan: Plan) => void;
   onDuplicate: (plan: Plan) => void;
+  onDelete: (id: string) => void;
   onArchive: (id: string) => void;
   onRestore: (id: string) => void;
   isDuplicating: boolean;
+  isDeleting: boolean;
   isArchiving: boolean;
   isRestoring: boolean;
 }
@@ -29,9 +31,11 @@ export function PlansCatalogSection({
   canManage,
   onEdit,
   onDuplicate,
+  onDelete,
   onArchive,
   onRestore,
   isDuplicating,
+  isDeleting,
   isArchiving,
   isRestoring,
 }: PlansCatalogSectionProps) {
@@ -88,9 +92,11 @@ export function PlansCatalogSection({
             canManage={canManage}
             onEdit={onEdit}
             onDuplicate={onDuplicate}
+            onDelete={onDelete}
             onArchive={onArchive}
             onRestore={onRestore}
             isDuplicating={isDuplicating}
+            isDeleting={isDeleting}
             isArchiving={isArchiving}
             isRestoring={isRestoring}
           />

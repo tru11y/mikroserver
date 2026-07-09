@@ -163,7 +163,14 @@ export class RouterAccessService implements OnModuleInit {
       },
     });
 
-    const vpsIp = this.configService.get<string>("VPS_PUBLIC_IP", "");
+    const rawVpsIp = this.configService.get<string>("VPS_PUBLIC_IP", "");
+    // Guard against corrupted env values (e.g. two vars merged without newline)
+    const vpsIp = /^[a-zA-Z0-9.\-]+$/.test(rawVpsIp) ? rawVpsIp : "";
+    if (rawVpsIp && !vpsIp) {
+      this.logger.error(
+        `VPS_PUBLIC_IP invalide ("${rawVpsIp}") — variables .env collées sans retour à la ligne`,
+      );
+    }
     const usePublic = Boolean(portMap?.rulesActive && vpsIp);
     const vpnIp = r.wireguardIp ?? "—";
 

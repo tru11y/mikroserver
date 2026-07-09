@@ -192,10 +192,12 @@ export default function PlansPage() {
         canManage={canManage}
         onEdit={openEdit}
         onDuplicate={(plan) => duplicateMutation.mutate(plan)}
-        onArchive={(id) => setConfirmDeleteId(id)}
+        onDelete={(id) => setConfirmDeleteId(id)}
+        onArchive={(id) => setConfirmArchiveId(id)}
         onRestore={(id) => restoreMutation.mutate(id)}
         isDuplicating={duplicateMutation.isPending}
-        isArchiving={deleteMutation.isPending || archiveMutation.isPending}
+        isDeleting={deleteMutation.isPending}
+        isArchiving={archiveMutation.isPending}
         isRestoring={restoreMutation.isPending}
       />
 

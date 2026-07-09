@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
+import { PanelsTopLeft } from 'lucide-react';
 import { getStoredAccessToken } from '@/lib/api/client';
 import { Sidebar } from '@/components/dashboard/sidebar';
 import { TopBar } from '@/components/dashboard/topbar';
@@ -37,6 +38,7 @@ export default function DashboardLayout({
   const [mounted, setMounted] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [caisseOpen, setCaisseOpen] = useState(false);
+  const [chromeHidden, setChromeHidden] = useState(false);
   const { open: cmdOpen, setOpen: setCmdOpen } = useCommandBar();
   const isMobile = useIsMobile();
 
@@ -46,7 +48,15 @@ export default function DashboardLayout({
     if (!token) {
       router.push('/login');
     }
+    setChromeHidden(localStorage.getItem('chrome-hidden') === '1');
   }, [router]);
+
+  const toggleChrome = () =>
+    setChromeHidden((prev) => {
+      const next = !prev;
+      try { localStorage.setItem('chrome-hidden', next ? '1' : '0'); } catch { /* ignore */ }
+      return next;
+    });
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -56,15 +66,35 @@ export default function DashboardLayout({
 
   return (
     <div className="flex h-[100dvh] bg-background overflow-hidden">
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      {!chromeHidden && <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        <TopBar onMenuToggle={() => setSidebarOpen((prev) => !prev)} />
-        <SubscriptionBanner />
+        {!chromeHidden && (
+          <>
+            <TopBar
+              onMenuToggle={() => setSidebarOpen((prev) => !prev)}
+              onToggleChrome={toggleChrome}
+            />
+            <SubscriptionBanner />
+          </>
+        )}
         <main className="flex-1 overflow-y-auto overscroll-contain-y p-3 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-6 md:p-6">
           {children}
         </main>
       </div>
-      <MobileNav />
+
+      {chromeHidden && (
+        <button
+          type="button"
+          onClick={toggleChrome}
+          className="fixed left-3 top-3 z-50 inline-flex h-10 w-10 items-center justify-center rounded-lg border bg-card/90 backdrop-blur-sm text-muted-foreground shadow-lg transition-colors hover:text-foreground"
+          aria-label="Afficher le menu et la barre"
+          title="Afficher l'interface"
+        >
+          <PanelsTopLeft className="h-5 w-5" />
+        </button>
+      )}
+
+      {!chromeHidden && <MobileNav />}
       <QuickActionFab onOpenCaisse={() => setCaisseOpen(true)} />
       <CommandBar
         open={cmdOpen}

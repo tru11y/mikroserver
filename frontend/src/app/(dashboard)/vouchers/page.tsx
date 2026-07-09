@@ -123,6 +123,7 @@ export default function VouchersPage() {
       }
     },
     onError: (err) => toast.error(apiMsg(err, 'Suppression de lot impossible')),
+    onSettled: () => invalidate(),
   });
 
   const redeliverMutation = useMutation({

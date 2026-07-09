@@ -1,4 +1,4 @@
-import { apiClient } from './client';
+import { apiClient, ROUTER_HEAVY_TIMEOUT_MS } from './client';
 import { withQuery } from './query';
 
 export const vouchersApi = {
@@ -31,7 +31,7 @@ export const vouchersApi = {
   revoke: (id: string) => apiClient.post(`/vouchers/${id}/revoke`),
   remove: (id: string) => apiClient.delete(`/vouchers/${id}`),
   bulkDelete: (voucherIds: string[]) =>
-    apiClient.post('/vouchers/delete/bulk', { voucherIds }),
+    apiClient.post('/vouchers/delete/bulk', { voucherIds }, { timeout: ROUTER_HEAVY_TIMEOUT_MS }),
   redeliver: (id: string) => apiClient.post(`/vouchers/${id}/redeliver`),
   generateBulk: (data: {
     planId: string;

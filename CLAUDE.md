@@ -83,3 +83,16 @@ Avant de finir une tâche :
 1. Signaler les fichiers modifiés
 2. Signaler les risques restants
 3. Proposer amélioration suivante si pertinent
+
+## Garde-fous absolus (anti-régression)
+
+- **Ne jamais casser l'existant.** Avant de modifier un fichier partagé, lister les features qui en dépendent. Une nouvelle feature ne modifie QUE les fichiers strictement nécessaires — zéro refactor opportuniste.
+- **Vérifier avant de dire "terminé".** Toujours lancer le typecheck/build du package touché :
+  - backend : `cd backend && npm run type-check && npm run build`
+  - frontend : `cd frontend && npm run build`
+  Ne pas conclure si ça échoue.
+- **NGINX = interdit.** Ne jamais éditer `infrastructure/nginx/**` ni aucun `*nginx*.conf` (bloqué par settings deny). Si une modif nginx semble nécessaire → le signaler, ne pas la faire.
+- **CI/CD = ne pas déclencher.** Le billing GitHub Actions est coupé : `gh workflow run` est bloqué, les triggers push/workflow_run sont désactivés dans `.github/workflows/`. Ne pas les réactiver sans demande explicite.
+- **Deploy VPS = action confirmée + build vert.** Un déploiement (plink/ssh vers 139.84.241.27) exige : (1) build/typecheck local vert, (2) confirmation explicite. Ne jamais `git reset --hard` ni recréer des conteneurs/identifiants sans le dire. Ne pas toucher aux `.env.prod`, secrets, ou credentials existants.
+- **Commit + push en fin de tâche.** Après une tâche validée, proposer commit + push (branche dédiée si sur `main`). Ne pas laisser de modifs non commitées.
+- **Consigner les solutions.** Après avoir résolu un bug/config non trivial, écrire la cause racine + le chemin de résolution dans la mémoire projet (`skills.md` / fichier mémoire dédié) pour ne pas refaire la recherche la fois suivante.

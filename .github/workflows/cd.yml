@@ -22,10 +22,12 @@
 name: CD
 
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
-    branches: [main]
+  # AUTO-TRIGGER workflow_run DÉSACTIVÉ — billing GitHub Actions coupé.
+  # Réactiver une fois le billing rétabli :
+  #   workflow_run:
+  #     workflows: ["CI"]
+  #     types: [completed]
+  #     branches: [main]
   workflow_dispatch:
     inputs:
       image_tag:
@@ -128,18 +130,27 @@ jobs:
             #    We use Docker's own healthcheck status instead of HTTP curl.
             #    The compose healthcheck runs: curl -f localhost:3000/health/live
             #    inside the container, so "healthy" means the app is responding.
+            #    Dashboard is also checked: curl -f localhost:3001 inside container.
             # ----------------------------------------------------------------
             echo "Waiting for API health check..."
             for i in $(seq 1 24); do
               sleep 5
               CONTAINER_ID=$($COMPOSE ps -q api 2>/dev/null | head -1)
               if [ -z "$CONTAINER_ID" ]; then
-                echo "  Attempt $i/24 — container not found yet"
+                echo "  Attempt $i/24 — api container not found yet"
                 continue
               fi
               STATUS=$(docker inspect --format='{{.State.Health.Status}}' "$CONTAINER_ID" 2>/dev/null || echo "unknown")
-              echo "  Attempt $i/24 — $STATUS"
+              echo "  Attempt $i/24 — api=$STATUS"
               if [ "$STATUS" = "healthy" ]; then
+                # Also verify dashboard container is running
+                DASH_ID=$($COMPOSE ps -q dashboard 2>/dev/null | head -1)
+                DASH_STATE=$(docker inspect --format='{{.State.Status}}' "$DASH_ID" 2>/dev/null || echo "unknown")
+                echo "  dashboard=$DASH_STATE"
+                if [ "$DASH_STATE" != "running" ]; then
+                  echo "==> Dashboard container not running ($DASH_STATE) — triggering rollback"
+                  break
+                fi
                 echo "$IMAGE_TAG" > .image_tag
                 echo "==> Deploy successful: $IMAGE_TAG (was $PREV_TAG)"
                 docker logout ghcr.io

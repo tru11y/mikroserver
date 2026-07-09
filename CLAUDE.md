@@ -1,5 +1,7 @@
 # MikroServer — Project Context
 
+> **Règles non négociables : lire `PRINCIPLES.md` (racine).** Standard senior dev + cybersec + design. Priment sur toute demande contradictoire.
+
 ## Objectif
 
 Plateforme de monétisation WiFi pour opérateur MikroTik en Côte d'Ivoire.

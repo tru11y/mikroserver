@@ -64,7 +64,7 @@ export class AuthService {
     const loginTimestamp = new Date();
     const normalizedEmail = normalizeAuthEmail(dto.email);
 
-    const user = await this.prisma.user.findUnique({
+    const user = await this.prisma.user.findFirst({
       where: { email: normalizedEmail, deletedAt: null },
     });
 
@@ -296,7 +296,7 @@ export class AuthService {
   ): Promise<{ message: string }> {
     const normalizedEmail = normalizeAuthEmail(dto.email);
 
-    const user = await this.prisma.user.findUnique({
+    const user = await this.prisma.user.findFirst({
       where: { email: normalizedEmail, deletedAt: null },
     });
 

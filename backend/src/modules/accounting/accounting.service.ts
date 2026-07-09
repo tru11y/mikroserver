@@ -430,6 +430,52 @@ export class AccountingService {
     return results.sort((a, b) => b.totalXof - a.totalXof);
   }
 
+  async getRevenueByYear(userId: string, userRole: UserRole, year: number) {
+    const isSuperAdmin = userRole === UserRole.SUPER_ADMIN;
+    const results: Array<{
+      month: string;
+      year: number;
+      monthNum: number;
+      totalXof: number;
+      transactionCount: number;
+    }> = [];
+
+    for (let monthNum = 1; monthNum <= 12; monthNum++) {
+      const periodStart = new Date(year, monthNum - 1, 1);
+      const periodEnd = new Date(year, monthNum, 0, 23, 59, 59);
+
+      const agg = await this.prisma.transaction.aggregate({
+        where: {
+          status: "COMPLETED",
+          paidAt: { gte: periodStart, lte: periodEnd },
+          ...(isSuperAdmin
+            ? {}
+            : {
+                plan: {
+                  vouchers: {
+                    some: {
+                      router: { ownerId: userId },
+                    },
+                  },
+                },
+              }),
+        },
+        _sum: { amountXof: true },
+        _count: { id: true },
+      });
+
+      results.push({
+        month: periodStart.toLocaleString("fr-CI", { month: "long" }),
+        year,
+        monthNum,
+        totalXof: agg._sum.amountXof ?? 0,
+        transactionCount: agg._count.id,
+      });
+    }
+
+    return results;
+  }
+
   async getRevenueByPeriod(userId: string, userRole: UserRole, months = 12) {
     const results: Array<{
       month: string;

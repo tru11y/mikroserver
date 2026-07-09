@@ -101,13 +101,25 @@ export class MockProvider implements IPaymentProvider {
       throw new Error("Invalid mock webhook signature");
     }
 
-    const parsed = JSON.parse(input.rawBody) as any;
+    const parsed = JSON.parse(input.rawBody) as {
+      id?: string;
+      externalReference?: string;
+      status?: string;
+      amountXof?: number;
+      customerPhone?: string;
+      paidAt?: string;
+      failureReason?: string;
+    };
 
     return {
-      externalEventId: parsed.id || `mock-event-${Date.now()}`,
-      externalReference: parsed.externalReference || parsed.id || "mock-ref",
-      status: parsed.status || "SUCCESS",
-      amountXof: parsed.amountXof || 0,
+      externalEventId: parsed.id ?? `mock-event-${Date.now()}`,
+      externalReference: parsed.externalReference ?? parsed.id ?? "mock-ref",
+      status: (parsed.status ?? "SUCCESS") as
+        | "PENDING"
+        | "FAILED"
+        | "EXPIRED"
+        | "SUCCESS",
+      amountXof: parsed.amountXof ?? 0,
       customerPhone: parsed.customerPhone,
       paidAt: parsed.paidAt ? new Date(parsed.paidAt) : new Date(),
       failureReason: parsed.failureReason,
@@ -133,7 +145,7 @@ export class MockProvider implements IPaymentProvider {
     };
   }
 
-  isAllowedWebhookIp(ip: string): boolean {
+  isAllowedWebhookIp(_ip: string): boolean {
     // En mode mock, on autorise toutes les IPs (local dev)
     return true;
   }

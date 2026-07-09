@@ -143,37 +143,59 @@ export class RouterAccessService implements OnModuleInit {
         }
       } catch (error) {
         this.logger.error(
-          `Unable to decrypt access password for router ${r.id}: ${(error as Error).message}`,
+          `Unable to decrypt access password for router ${r.id}: ${(error as Error).message}. Password will be returned as null — reconfigure via PUT /access.`,
         );
-        throw new InternalServerErrorException(
-          "Mot de passe d'accès routeur invalide",
-        );
+        // Degrade gracefully: return null password so the card loads.
+        // User can reconfigure the password via the "Configurer" button.
+        passwordDecrypted = null;
       }
     }
 
+    // Use public VPS ports when port-map rules are active, otherwise WG IP
+    const portMap = await this.prisma.routerPortMap.findUnique({
+      where: { routerId },
+      select: {
+        publicWebfigPort: true,
+        publicWinboxPort: true,
+        publicSshPort: true,
+        rulesActive: true,
+        vpnIp: true,
+      },
+    });
+
+    const vpsIp = this.configService.get<string>("VPS_PUBLIC_IP", "");
+    const usePublic = Boolean(portMap?.rulesActive && vpsIp);
     const vpnIp = r.wireguardIp ?? "—";
+
+    const webfigHost = usePublic ? vpsIp : vpnIp;
+    const webfigPort = usePublic ? portMap!.publicWebfigPort : r.webfigPort;
+    const winboxHost = usePublic ? vpsIp : vpnIp;
+    const winboxPort = usePublic ? portMap!.publicWinboxPort : r.winboxPort;
+    const sshHost = usePublic ? vpsIp : vpnIp;
+    const sshPort = usePublic ? portMap!.publicSshPort : r.sshPort;
 
     return {
       routerId: r.id,
       routerName: r.name,
       vpnIp,
+      rulesActive: portMap?.rulesActive ?? false,
       winbox: {
-        address: `${vpnIp}:${r.winboxPort}`,
-        port: r.winboxPort,
+        address: `${winboxHost}:${winboxPort}`,
+        port: winboxPort,
         username: r.accessUsername,
         password: passwordDecrypted,
-        deepLink: `mikrotik://connect?address=${vpnIp}&port=${r.winboxPort}`,
+        deepLink: `mikrotik://connect?address=${winboxHost}&port=${winboxPort}`,
       },
       webfig: {
-        url: `http://${vpnIp}:${r.webfigPort}`,
-        port: r.webfigPort,
+        url: `http://${webfigHost}:${webfigPort}`,
+        port: webfigPort,
         username: r.accessUsername,
         password: passwordDecrypted,
       },
       ssh: {
-        command: `ssh ${r.accessUsername}@${vpnIp} -p ${r.sshPort}`,
-        host: vpnIp,
-        port: r.sshPort,
+        command: `ssh ${r.accessUsername}@${sshHost} -p ${sshPort}`,
+        host: sshHost,
+        port: sshPort,
         username: r.accessUsername,
         password: passwordDecrypted,
       },

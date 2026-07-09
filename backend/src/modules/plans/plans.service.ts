@@ -198,6 +198,38 @@ export class PlansService {
     return this.decoratePlan(updated);
   }
 
+  async delete(
+    id: string,
+    actor: PlanActor,
+  ): Promise<{ hardDeleted: boolean }> {
+    const plan = await this.findOne(id, actor);
+
+    const [voucherCount, transactionCount, subscriptionCount] =
+      await Promise.all([
+        this.prisma.voucher.count({ where: { planId: id } }),
+        this.prisma.transaction.count({ where: { planId: id } }),
+        this.prisma.subscriptions.count({ where: { plan_id: id } }),
+      ]);
+
+    if (voucherCount > 0 || transactionCount > 0 || subscriptionCount > 0) {
+      throw new ConflictException(
+        "Ce forfait est déjà utilisé. Désactivez-le plutôt que de le supprimer.",
+      );
+    }
+
+    await this.prisma.plan.delete({ where: { id } });
+
+    await this.auditService.log({
+      userId: actor.sub,
+      action: AuditAction.DELETE,
+      entityType: "Plan",
+      entityId: id,
+      description: `Plan "${plan.name}" supprimé définitivement (jamais utilisé)`,
+    });
+
+    return { hardDeleted: true };
+  }
+
   async archive(
     id: string,
     actor: PlanActor,
@@ -214,7 +246,7 @@ export class PlansService {
       action: AuditAction.DELETE,
       entityType: "Plan",
       entityId: id,
-      description: `Plan "${plan.name}" archived`,
+      description: `Plan "${plan.name}" archivé`,
     });
 
     return this.decoratePlan(updated);

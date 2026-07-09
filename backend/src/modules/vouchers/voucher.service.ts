@@ -14,9 +14,13 @@ import { QueueService } from "../queue/queue.service";
 import { ConfigService } from "@nestjs/config";
 import {
   VoucherStatus,
+  VoucherBatchStatus,
   Voucher,
+  VoucherBatch,
   GenerationType,
   SessionStatus,
+  TransactionStatus,
+  PlanStatus,
   UserRole,
   Prisma,
   AuditAction,
@@ -44,6 +48,27 @@ const CODE_LENGTH = 12;
 const COLLISION_MAX_RETRIES = 3;
 const CODE_CHARSET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const NUMERIC_CHARSET = "0123456789";
+// Batches larger than this threshold are generated asynchronously via BullMQ
+const ASYNC_BATCH_THRESHOLD = 100;
+
+export type GenerateBulkResult =
+  | {
+      async: false;
+      batchId: string;
+      batchNumber: number;
+      vouchers: Array<
+        Voucher & {
+          plan: { name: string; priceXof: number; durationMinutes: number };
+        }
+      >;
+    }
+  | {
+      async: true;
+      batchId: string;
+      batchNumber: number;
+      quantity: number;
+      status: "PENDING";
+    };
 
 export interface VoucherVerificationResult {
   source: "SAAS" | "LEGACY";
@@ -86,6 +111,58 @@ export interface VoucherBulkDeleteResult {
     code: string | null;
     reason: string;
   }>;
+}
+
+export type OrphanReason =
+  | "ORPHAN_PLAN"
+  | "ORPHAN_ROUTER"
+  | "STALE_GENERATED"
+  | "DELIVERY_FAILED"
+  | "FAILED_TRANSACTION";
+
+const ORPHAN_REASON_LABELS: Record<OrphanReason, string> = {
+  ORPHAN_PLAN: "Forfait supprimé ou archivé",
+  ORPHAN_ROUTER: "Routeur supprimé",
+  STALE_GENERATED: "Généré mais jamais livré (>30 jours)",
+  DELIVERY_FAILED: "Livraison échouée (≥3 tentatives)",
+  FAILED_TRANSACTION: "Transaction échouée ou annulée",
+};
+
+const STALE_DAYS = 30;
+const FAILED_TX_STATUSES: TransactionStatus[] = [
+  TransactionStatus.FAILED,
+  TransactionStatus.CANCELLED,
+  TransactionStatus.EXPIRED,
+  TransactionStatus.REFUNDED,
+];
+const SAFE_ORPHAN_STATUSES: VoucherStatus[] = [
+  VoucherStatus.GENERATED,
+  VoucherStatus.DELIVERY_FAILED,
+  VoucherStatus.PENDING_OFFLINE,
+];
+
+export interface OrphanVoucherItem {
+  id: string;
+  code: string;
+  reason: OrphanReason;
+  reasonLabel: string;
+  routerName?: string;
+  planName?: string;
+  status: VoucherStatus;
+  createdAt: string;
+  safeToDelete: boolean;
+  warning?: string;
+}
+
+export interface UnrecognizedVouchersResult {
+  items: OrphanVoucherItem[];
+  summary: { total: number; safeToDelete: number; risky: number };
+}
+
+export interface BulkDeleteUnrecognizedResult {
+  deleted: string[];
+  skipped: Array<{ id: string; code?: string; reason: string }>;
+  errors: Array<{ id: string; message: string }>;
 }
 
 interface VoucherListFilters {
@@ -710,20 +787,49 @@ export class VoucherService {
     count: number,
     createdById?: string,
     options?: GenerateBulkOptions,
-  ): Promise<
-    Array<
-      Voucher & {
-        plan: { name: string; priceXof: number; durationMinutes: number };
-      }
-    >
-  > {
+  ): Promise<GenerateBulkResult> {
     if (count < 1 || count > 500) {
       throw new Error("Count must be between 1 and 500");
     }
 
-    // Treat empty string as null (routerId is optional in the Prisma schema)
     const resolvedRouterId =
       routerId && routerId.trim() !== "" ? routerId : null;
+
+    // Always create a VoucherBatch record for traceability
+    const batch = await this.prisma.voucherBatch.create({
+      data: {
+        planId,
+        routerId: resolvedRouterId,
+        quantity: count,
+        createdById: createdById ?? null,
+        status: VoucherBatchStatus.PENDING,
+      },
+    });
+
+    // Large batches are generated asynchronously to avoid HTTP timeout
+    if (count > ASYNC_BATCH_THRESHOLD) {
+      await this.queueService.enqueueBatchGenerate({
+        batchId: batch.id,
+      });
+
+      this.logger.log(
+        `Async batch ${batch.batchNumber} created for ${count} vouchers plan="${planId}" by ${createdById ?? "system"}`,
+      );
+
+      return {
+        async: true,
+        batchId: batch.id,
+        batchNumber: batch.batchNumber,
+        quantity: count,
+        status: "PENDING",
+      };
+    }
+
+    // ── Synchronous path (count <= ASYNC_BATCH_THRESHOLD) ──────────────────
+    await this.prisma.voucherBatch.update({
+      where: { id: batch.id },
+      data: { status: VoucherBatchStatus.GENERATING },
+    });
 
     const plan = await this.prisma.plan.findUniqueOrThrow({
       where: { id: planId, status: "ACTIVE" },
@@ -785,6 +891,7 @@ export class VoucherService {
               passwordPlain: password,
               status: VoucherStatus.GENERATED,
               mikrotikComment: `MANUAL Plan:${plan.slug} Type:${ticketType}`,
+              batchId: batch.id,
             },
           });
 
@@ -798,27 +905,222 @@ export class VoucherService {
       ),
     );
 
+    await this.prisma.voucherBatch.update({
+      where: { id: batch.id },
+      data: {
+        status: VoucherBatchStatus.COMPLETED,
+        generated: vouchers.length,
+        completedAt: new Date(),
+      },
+    });
+
     this.logger.log(
-      `Bulk generated ${count} MANUAL vouchers for plan "${plan.slug}" by ${createdById ?? "system"} with code length ${codeLength} router=${resolvedRouterId ?? "none"}`,
+      `Bulk generated ${count} MANUAL vouchers for plan "${plan.slug}" by ${createdById ?? "system"} batch=${batch.batchNumber}`,
     );
 
-    return this.prisma.voucher.findMany({
-      where: {
-        id: {
-          in: vouchers.map((voucher) => voucher.id),
-        },
-      },
+    const result = await this.prisma.voucher.findMany({
+      where: { id: { in: vouchers.map((v) => v.id) } },
       include: {
-        plan: {
-          select: {
-            name: true,
-            priceXof: true,
-            durationMinutes: true,
-          },
-        },
+        plan: { select: { name: true, priceXof: true, durationMinutes: true } },
       },
       orderBy: { createdAt: "asc" },
     });
+
+    return {
+      async: false,
+      batchId: batch.id,
+      batchNumber: batch.batchNumber,
+      vouchers: result,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Async batch generation — called by BatchGenerateWorker
+  // ---------------------------------------------------------------------------
+
+  async executeBatchGeneration(batchId: string): Promise<void> {
+    const batch = await this.prisma.voucherBatch.findUniqueOrThrow({
+      where: { id: batchId },
+      include: {
+        plan: true,
+      },
+    });
+
+    if (batch.status === VoucherBatchStatus.COMPLETED) {
+      this.logger.warn(`Batch ${batchId} already COMPLETED — skipping`);
+      return;
+    }
+
+    await this.prisma.voucherBatch.update({
+      where: { id: batchId },
+      data: { status: VoucherBatchStatus.GENERATING },
+    });
+
+    const plan = batch.plan;
+    const planTicketSettings = getPlanTicketSettings(
+      plan.metadata,
+      this.voucherPrefix,
+      this.defaultCodeLength,
+    );
+    const ticketType = planTicketSettings.ticketType;
+    const codeLength = normalizeCodeLength(
+      planTicketSettings.ticketCodeLength,
+      this.defaultCodeLength,
+    );
+    const passwordLength = normalizeCodeLength(
+      planTicketSettings.ticketPasswordLength,
+      this.defaultCodeLength,
+    );
+    const ticketPrefix = normalizeTicketPrefix(planTicketSettings.ticketPrefix);
+    const ticketNumericOnly = planTicketSettings.ticketNumericOnly;
+    const ticketPasswordNumericOnly =
+      planTicketSettings.ticketPasswordNumericOnly;
+
+    let generated = 0;
+    const chunkSize = 50;
+    const resolvedRouterId = batch.routerId;
+
+    try {
+      while (generated < batch.quantity) {
+        const remaining = batch.quantity - generated;
+        const currentChunk = Math.min(chunkSize, remaining);
+        const limit = pLimit(3);
+
+        await Promise.all(
+          Array.from({ length: currentChunk }, () =>
+            limit(async () => {
+              const code = await this.generateUniqueCode({
+                codeLength,
+                prefix: ticketPrefix,
+                numericOnly: ticketNumericOnly,
+              });
+              const password =
+                ticketType === "PIN"
+                  ? code
+                  : this.generateCredential(
+                      passwordLength,
+                      ticketPasswordNumericOnly,
+                    );
+              const passwordHash = await argon2.hash(password, {
+                type: argon2.argon2id,
+                memoryCost: 19456,
+                timeCost: 2,
+              });
+
+              const voucher = await this.prisma.voucher.create({
+                data: {
+                  planId: batch.planId,
+                  routerId: resolvedRouterId,
+                  createdById: batch.createdById,
+                  generationType: GenerationType.MANUAL,
+                  code,
+                  passwordHash,
+                  passwordPlain: password,
+                  status: VoucherStatus.GENERATED,
+                  mikrotikComment: `MANUAL Plan:${plan.slug} Type:${ticketType}`,
+                  batchId,
+                },
+              });
+
+              await this.queueService.enqueueVoucherDelivery({
+                voucherId: voucher.id,
+                routerId: resolvedRouterId ?? undefined,
+              });
+            }),
+          ),
+        );
+
+        generated += currentChunk;
+
+        await this.prisma.voucherBatch.update({
+          where: { id: batchId },
+          data: { generated },
+        });
+
+        this.logger.log(
+          `Batch ${batch.batchNumber}: ${generated}/${batch.quantity} vouchers generated`,
+        );
+      }
+
+      await this.prisma.voucherBatch.update({
+        where: { id: batchId },
+        data: { status: VoucherBatchStatus.COMPLETED, completedAt: new Date() },
+      });
+
+      this.logger.log(
+        `Batch ${batch.batchNumber} COMPLETED — ${batch.quantity} vouchers for plan "${plan.slug}"`,
+      );
+    } catch (error) {
+      await this.prisma.voucherBatch.update({
+        where: { id: batchId },
+        data: { status: VoucherBatchStatus.FAILED },
+      });
+      throw error;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Batch listing & detail
+  // ---------------------------------------------------------------------------
+
+  async listBatches(
+    user: { sub: string; role: UserRole },
+    page: number,
+    limit: number,
+  ) {
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.VoucherBatchWhereInput =
+      user.role === UserRole.SUPER_ADMIN ? {} : { createdById: user.sub };
+
+    const [items, total] = await Promise.all([
+      this.prisma.voucherBatch.findMany({
+        where,
+        include: {
+          plan: { select: { id: true, name: true, priceXof: true } },
+          router: { select: { id: true, name: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      this.prisma.voucherBatch.count({ where }),
+    ]);
+
+    return { items, total, page, limit };
+  }
+
+  async getBatch(batchId: string, user: { sub: string; role: UserRole }) {
+    const where: Prisma.VoucherBatchWhereUniqueInput = { id: batchId };
+
+    const batch = await this.prisma.voucherBatch.findUniqueOrThrow({
+      where,
+      include: {
+        plan: { select: { id: true, name: true, priceXof: true } },
+        router: { select: { id: true, name: true } },
+      },
+    });
+
+    if (user.role !== UserRole.SUPER_ADMIN && batch.createdById !== user.sub) {
+      throw new ForbiddenException("Access denied to this batch");
+    }
+
+    return batch;
+  }
+
+  async getBatchVoucherIds(
+    batchId: string,
+    user: { sub: string; role: UserRole },
+  ): Promise<string[]> {
+    await this.getBatch(batchId, user);
+
+    const vouchers = await this.prisma.voucher.findMany({
+      where: { batchId },
+      select: { id: true },
+      orderBy: { createdAt: "asc" },
+    });
+
+    return vouchers.map((v) => v.id);
   }
 
   // ---------------------------------------------------------------------------
@@ -832,33 +1134,44 @@ export class VoucherService {
     if (!voucher) throw new NotFoundException(`Voucher ${voucherId} not found`);
     if (voucher.status === VoucherStatus.REVOKED) return voucher;
 
+    // Router cleanup is best-effort — router may be offline or unreachable
     if (voucher.routerId) {
-      await this.routerApiService.disconnectActiveSessionsByUsername(
-        voucher.routerId,
-        voucher.code,
-      );
-      await this.routerApiService.removeHotspotUser(
-        voucher.routerId,
-        voucher.code,
-      );
+      await this.routerApiService
+        .disconnectActiveSessionsByUsername(voucher.routerId, voucher.code)
+        .catch((err) =>
+          this.logger.warn(
+            `revokeVoucher: disconnect failed for ${voucher.code}: ${(err as Error).message}`,
+          ),
+        );
+      await this.routerApiService
+        .removeHotspotUser(voucher.routerId, voucher.code)
+        .catch((err) =>
+          this.logger.warn(
+            `revokeVoucher: removeHotspotUser failed for ${voucher.code}: ${(err as Error).message}`,
+          ),
+        );
     }
 
-    await this.prisma.session.updateMany({
-      where: {
-        voucherId,
-        status: SessionStatus.ACTIVE,
-      },
-      data: {
-        status: SessionStatus.TERMINATED,
-        terminatedAt: new Date(),
-        terminateReason: "voucher_revoked",
-      },
-    });
+    // DB writes are atomic — session termination + voucher revocation commit together
+    const [, updatedVoucher] = await this.prisma.$transaction([
+      this.prisma.session.updateMany({
+        where: {
+          voucherId,
+          status: SessionStatus.ACTIVE,
+        },
+        data: {
+          status: SessionStatus.TERMINATED,
+          terminatedAt: new Date(),
+          terminateReason: "voucher_revoked",
+        },
+      }),
+      this.prisma.voucher.update({
+        where: { id: voucherId },
+        data: { status: VoucherStatus.REVOKED, revokedAt: new Date() },
+      }),
+    ]);
 
-    return this.prisma.voucher.update({
-      where: { id: voucherId },
-      data: { status: VoucherStatus.REVOKED, revokedAt: new Date() },
-    });
+    return updatedVoucher;
   }
 
   async redeliverVoucher(
@@ -997,6 +1310,258 @@ export class VoucherService {
       deleted,
       skipped,
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Orphan / Unrecognized vouchers
+  // ---------------------------------------------------------------------------
+
+  async getUnrecognizedVouchers(actor: {
+    sub: string;
+    role: UserRole;
+  }): Promise<UnrecognizedVouchersResult> {
+    const tenantScope = scopeVoucherToOwner(actor.sub, actor.role);
+    const staleDate = new Date(Date.now() - STALE_DAYS * 24 * 60 * 60 * 1000);
+
+    const vouchers = await this.prisma.voucher.findMany({
+      where: {
+        AND: [
+          tenantScope,
+          {
+            OR: [
+              { plan: { deletedAt: { not: null } } },
+              { plan: { status: PlanStatus.ARCHIVED } },
+              { routerId: { not: null }, router: { deletedAt: { not: null } } },
+              {
+                status: VoucherStatus.GENERATED,
+                generatedAt: { lt: staleDate },
+                transactionId: null,
+              },
+              {
+                status: VoucherStatus.DELIVERY_FAILED,
+                deliveryAttempts: { gte: 3 },
+              },
+              {
+                transactionId: { not: null },
+                transaction: { status: { in: FAILED_TX_STATUSES } },
+              },
+            ],
+          },
+        ],
+      },
+      include: {
+        plan: { select: { name: true, deletedAt: true, status: true } },
+        router: { select: { name: true, deletedAt: true } },
+        transaction: { select: { status: true } },
+        session: { select: { status: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const items: OrphanVoucherItem[] = vouchers.map((v) => {
+      const reason = this.classifyOrphanReason(v, staleDate);
+      const safeToDelete = this.computeOrphanSafeToDelete(v);
+      const warning = this.computeOrphanWarning(v, reason);
+      return {
+        id: v.id,
+        code: v.code,
+        reason,
+        reasonLabel: ORPHAN_REASON_LABELS[reason],
+        routerName: v.router?.name,
+        planName: v.plan.name,
+        status: v.status,
+        createdAt: v.createdAt.toISOString(),
+        safeToDelete,
+        warning,
+      };
+    });
+
+    const safeCount = items.filter((i) => i.safeToDelete).length;
+    return {
+      items,
+      summary: {
+        total: items.length,
+        safeToDelete: safeCount,
+        risky: items.length - safeCount,
+      },
+    };
+  }
+
+  async bulkDeleteUnrecognized(
+    ids: string[],
+    actor: { sub: string; role: UserRole },
+  ): Promise<BulkDeleteUnrecognizedResult> {
+    const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+    if (uniqueIds.length === 0) {
+      return { deleted: [], skipped: [], errors: [] };
+    }
+
+    const tenantScope = scopeVoucherToOwner(actor.sub, actor.role);
+    const staleDate = new Date(Date.now() - STALE_DAYS * 24 * 60 * 60 * 1000);
+
+    const vouchers = await this.prisma.voucher.findMany({
+      where: { id: { in: uniqueIds }, ...tenantScope },
+      include: {
+        plan: { select: { deletedAt: true, status: true } },
+        router: { select: { deletedAt: true } },
+        transaction: { select: { status: true } },
+        session: { select: { status: true } },
+      },
+    });
+
+    const byId = new Map(vouchers.map((v) => [v.id, v]));
+    const deleted: string[] = [];
+    const skipped: BulkDeleteUnrecognizedResult["skipped"] = [];
+    const errors: BulkDeleteUnrecognizedResult["errors"] = [];
+
+    for (const id of uniqueIds) {
+      const v = byId.get(id);
+      if (!v) {
+        skipped.push({ id, reason: "Ticket introuvable ou accès refusé." });
+        continue;
+      }
+      if (!this.computeOrphanSafeToDelete(v)) {
+        skipped.push({
+          id,
+          code: v.code,
+          reason:
+            "Ticket non sûr à supprimer (actif, utilisé ou lié à une transaction valide).",
+        });
+        continue;
+      }
+      if (!this.isVoucherOrphan(v, staleDate)) {
+        skipped.push({
+          id,
+          code: v.code,
+          reason: "Ticket non reconnu comme orphelin.",
+        });
+        continue;
+      }
+      try {
+        await this.performSafeVoucherDelete(v, actor);
+        deleted.push(id);
+      } catch (error) {
+        errors.push({
+          id,
+          message: error instanceof Error ? error.message : "Erreur inconnue.",
+        });
+      }
+    }
+
+    if (deleted.length > 0) {
+      await this.auditService.log({
+        userId: actor.sub,
+        action: AuditAction.DELETE,
+        entityType: "Voucher",
+        description: `Suppression bulk orphelins : ${deleted.length} supprimé(s), ${skipped.length} ignoré(s)`,
+        newValues: {
+          deletedCount: deleted.length,
+          skippedCount: skipped.length,
+          ids: deleted,
+        },
+      });
+    }
+
+    return { deleted, skipped, errors };
+  }
+
+  private classifyOrphanReason(
+    v: {
+      plan: { deletedAt: Date | null; status: string };
+      routerId: string | null;
+      router: { deletedAt: Date | null } | null;
+      status: VoucherStatus;
+      generatedAt: Date;
+      transactionId: string | null;
+      deliveryAttempts: number;
+      transaction: { status: string } | null;
+    },
+    _staleDate: Date,
+  ): OrphanReason {
+    if (v.plan.deletedAt !== null || v.plan.status === PlanStatus.ARCHIVED) {
+      return "ORPHAN_PLAN";
+    }
+    if (v.routerId && v.router?.deletedAt !== null) {
+      return "ORPHAN_ROUTER";
+    }
+    if (v.status === VoucherStatus.DELIVERY_FAILED && v.deliveryAttempts >= 3) {
+      return "DELIVERY_FAILED";
+    }
+    if (
+      v.transactionId &&
+      v.transaction &&
+      FAILED_TX_STATUSES.includes(v.transaction.status as TransactionStatus)
+    ) {
+      return "FAILED_TRANSACTION";
+    }
+    return "STALE_GENERATED";
+  }
+
+  private computeOrphanSafeToDelete(v: {
+    activatedAt: Date | null;
+    status: VoucherStatus;
+    session: { status: string } | null;
+    transaction: { status: string } | null;
+  }): boolean {
+    if (v.activatedAt !== null) return false;
+    if (v.status === VoucherStatus.ACTIVE) return false;
+    if (v.status === VoucherStatus.EXPIRED) return false;
+    if (v.session?.status === SessionStatus.ACTIVE) return false;
+    if (v.transaction?.status === TransactionStatus.COMPLETED) return false;
+    return SAFE_ORPHAN_STATUSES.includes(v.status);
+  }
+
+  private isVoucherOrphan(
+    v: {
+      plan: { deletedAt: Date | null; status: string };
+      routerId: string | null;
+      router: { deletedAt: Date | null } | null;
+      status: VoucherStatus;
+      generatedAt: Date;
+      transactionId: string | null;
+      deliveryAttempts: number;
+      transaction: { status: string } | null;
+    },
+    staleDate: Date,
+  ): boolean {
+    if (v.plan.deletedAt !== null || v.plan.status === PlanStatus.ARCHIVED)
+      return true;
+    if (v.routerId && v.router?.deletedAt !== null) return true;
+    if (v.status === VoucherStatus.DELIVERY_FAILED && v.deliveryAttempts >= 3)
+      return true;
+    if (
+      v.transactionId &&
+      v.transaction &&
+      FAILED_TX_STATUSES.includes(v.transaction.status as TransactionStatus)
+    )
+      return true;
+    if (
+      v.status === VoucherStatus.GENERATED &&
+      v.generatedAt < staleDate &&
+      v.transactionId === null
+    )
+      return true;
+    return false;
+  }
+
+  private computeOrphanWarning(
+    v: {
+      status: VoucherStatus;
+      router: { deletedAt: Date | null } | null;
+      transaction: { status: string } | null;
+    },
+    reason: OrphanReason,
+  ): string | undefined {
+    if (reason === "ORPHAN_ROUTER" && v.status === VoucherStatus.DELIVERED) {
+      return "Ticket livré sur un routeur supprimé. Vérification manuelle recommandée.";
+    }
+    if (
+      reason === "FAILED_TRANSACTION" &&
+      v.transaction?.status === TransactionStatus.REFUNDED
+    ) {
+      return "Paiement remboursé. Vérifier si le ticket a été utilisé avant le remboursement.";
+    }
+    return undefined;
   }
 
   // ---------------------------------------------------------------------------

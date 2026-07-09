@@ -24,6 +24,7 @@ import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { JwtPayload } from "../auth/interfaces/jwt-payload.interface";
 import { UserRole, VoucherStatus } from "@prisma/client";
 import {
+  BulkDeleteUnrecognizedDto,
   DownloadVoucherPdfDto,
   GenerateBatchVouchersDto,
   GenerateBulkVouchersDto,
@@ -155,6 +156,30 @@ export class VouchersController {
   })
   bulkDelete(@Body() body: VoucherIdsDto, @CurrentUser() user: JwtPayload) {
     return this.voucherService.bulkDeleteVouchers(body.voucherIds, user);
+  }
+
+  @Get("unrecognized")
+  @Roles(UserRole.VIEWER)
+  @Permissions("tickets.view")
+  @ApiOperation({
+    summary: "List orphan / unrecognized vouchers (tenant-scoped)",
+  })
+  getUnrecognized(@CurrentUser() user: JwtPayload) {
+    return this.voucherService.getUnrecognizedVouchers(user);
+  }
+
+  @Post("unrecognized/bulk-delete")
+  @Roles(UserRole.VIEWER)
+  @Permissions("tickets.delete")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Bulk-delete safe orphan vouchers (SAFE_ONLY mode)",
+  })
+  bulkDeleteUnrecognized(
+    @Body() body: BulkDeleteUnrecognizedDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.voucherService.bulkDeleteUnrecognized(body.ids, user);
   }
 
   @Get(":id")
@@ -417,5 +442,43 @@ export class VouchersController {
     reply.header("Content-Length", pdf.length.toString());
 
     return new StreamableFile(pdf);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Lot (VoucherBatch) endpoints
+  // ---------------------------------------------------------------------------
+
+  @Get("batches")
+  @Roles(UserRole.VIEWER)
+  @Permissions("tickets.view")
+  @ApiOperation({ summary: "List voucher batches (lots) for the current user" })
+  listBatches(
+    @Query("page", new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query("limit", new DefaultValuePipe(20), ParseIntPipe) limit: number,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.voucherService.listBatches(user, page, Math.min(limit, 100));
+  }
+
+  @Get("batches/:id")
+  @Roles(UserRole.VIEWER)
+  @Permissions("tickets.view")
+  @ApiOperation({ summary: "Get a voucher batch status and details" })
+  getBatch(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.voucherService.getBatch(id, user);
+  }
+
+  @Get("batches/:id/ids")
+  @Roles(UserRole.VIEWER)
+  @Permissions("tickets.view")
+  @ApiOperation({ summary: "Get all voucher IDs in a batch (for bulk select)" })
+  getBatchVoucherIds(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.voucherService.getBatchVoucherIds(id, user);
   }
 }

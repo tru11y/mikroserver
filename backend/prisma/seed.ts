@@ -18,7 +18,7 @@ async function main() {
   const { email: adminEmail, password: adminPassword, firstName, lastName } =
     getSeedAdminConfig(process.env);
 
-  const existingAdmin = await prisma.user.findUnique({
+  const existingAdmin = await prisma.user.findFirst({
     where: { email: adminEmail },
   });
 
@@ -43,7 +43,7 @@ async function main() {
     console.log('→ Updating password to bcrypt hash...');
     const passwordHash = await bcrypt.hash(adminPassword, 10);
     await prisma.user.update({
-      where: { email: adminEmail },
+      where: { id: existingAdmin.id },
       data: { passwordHash, firstName, lastName, passwordChangedAt: new Date() },
     });
     console.log('✓ Password updated to bcrypt');

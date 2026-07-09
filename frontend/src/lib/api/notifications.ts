@@ -1,8 +1,19 @@
 import { apiClient } from './client';
 
+export type NotificationType =
+  | 'NEW_CONNECTION'
+  | 'SESSION_EXPIRED'
+  | 'PAYMENT_RECEIVED'
+  | 'ROUTER_OFFLINE'
+  | 'ROUTER_ONLINE'
+  | 'VOUCHER_EXPIRING'
+  | 'SUBSCRIPTION_EXPIRING'
+  | 'SECURITY_ALERT'
+  | 'SYSTEM';
+
 export interface Notification {
   id: string;
-  type: string;
+  type: NotificationType;
   title: string;
   body: string;
   data: Record<string, unknown>;

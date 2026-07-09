@@ -3,6 +3,8 @@ import type {
   HotspotUserRow,
   LiveClient,
   PlanSummary,
+  RouterComplianceCheck,
+  RouterDetail,
 } from './router-detail.types';
 import { normalizeProfileName, parseRouterUptimeToSeconds } from './router-detail.utils';
 
@@ -194,6 +196,162 @@ export function sortLiveClients(
   });
 }
 
+export function buildRouterConfigChecks(
+  routerInfo: RouterDetail,
+  plansWithProfileInfo: PlanWithProfileInfo[],
+  complianceSummary: HotspotComplianceSummary,
+  now: Date = new Date(),
+): RouterComplianceCheck[] {
+  const checks: RouterComplianceCheck[] = [];
+  const metadata = routerInfo.metadata ?? {};
+
+  checks.push({
+    id: 'wg-ip',
+    category: 'connectivity',
+    severity: routerInfo.wireguardIp ? 'ok' : 'critical',
+    label: 'Tunnel WireGuard',
+    description: routerInfo.wireguardIp
+      ? `Tunnel configuré — ${routerInfo.wireguardIp}`
+      : 'Aucune IP WireGuard configurée — le routeur est inaccessible via le VPN.',
+  });
+
+  const failures = metadata.consecutiveHealthFailures ?? 0;
+  checks.push({
+    id: 'health-failures',
+    category: 'connectivity',
+    severity: failures === 0 ? 'ok' : failures >= 3 ? 'critical' : 'warning',
+    label: 'Connexion API RouterOS',
+    description:
+      failures === 0
+        ? 'Aucun échec consécutif — connexion API stable.'
+        : `${failures} échec${failures > 1 ? 's' : ''} consécutif${failures > 1 ? 's' : ''} — vérifier les identifiants et le port API.`,
+    actionId: failures > 0 ? 'health_check' : undefined,
+    actionLabel: failures > 0 ? 'Lancer health check' : undefined,
+  });
+
+  if (metadata.lastHealthCheckAt) {
+    const diffMin =
+      (now.getTime() - new Date(metadata.lastHealthCheckAt).getTime()) / 60_000;
+    checks.push({
+      id: 'health-recency',
+      category: 'connectivity',
+      severity: diffMin <= 10 ? 'ok' : diffMin <= 30 ? 'warning' : 'critical',
+      label: 'Fraîcheur health check',
+      description:
+        diffMin <= 10
+          ? `Dernier health check il y a ${Math.round(diffMin)} min.`
+          : `Dernier health check il y a ${Math.round(diffMin)} min — trop ancien.`,
+      actionId: diffMin > 10 ? 'health_check' : undefined,
+      actionLabel: diffMin > 10 ? 'Lancer health check' : undefined,
+    });
+  } else {
+    checks.push({
+      id: 'health-recency',
+      category: 'connectivity',
+      severity: 'warning',
+      label: 'Fraîcheur health check',
+      description: 'Aucun health check enregistré pour ce routeur.',
+      actionId: 'health_check',
+      actionLabel: 'Lancer health check',
+    });
+  }
+
+  if (metadata.lastSyncAt) {
+    const diffMin =
+      (now.getTime() - new Date(metadata.lastSyncAt).getTime()) / 60_000;
+    checks.push({
+      id: 'sync-recency',
+      category: 'connectivity',
+      severity: diffMin <= 15 ? 'ok' : diffMin <= 60 ? 'warning' : 'critical',
+      label: 'Fraîcheur synchronisation',
+      description:
+        diffMin <= 15
+          ? `Dernière synchronisation il y a ${Math.round(diffMin)} min.`
+          : `Dernière synchronisation il y a ${Math.round(diffMin)} min — synchroniser pour mettre à jour.`,
+      actionId: diffMin > 15 ? 'sync' : undefined,
+      actionLabel: diffMin > 15 ? 'Synchroniser' : undefined,
+    });
+  } else {
+    checks.push({
+      id: 'sync-recency',
+      category: 'connectivity',
+      severity: 'warning',
+      label: 'Fraîcheur synchronisation',
+      description: 'Aucune synchronisation enregistrée pour ce routeur.',
+      actionId: 'sync',
+      actionLabel: 'Synchroniser',
+    });
+  }
+
+  checks.push({
+    id: 'hotspot-server',
+    category: 'configuration',
+    severity: routerInfo.hotspotServer ? 'ok' : 'critical',
+    label: 'Serveur hotspot',
+    description: routerInfo.hotspotServer
+      ? `Serveur configuré : "${routerInfo.hotspotServer}".`
+      : "Aucun serveur hotspot configuré — les clients ne peuvent pas s'authentifier.",
+  });
+
+  checks.push({
+    id: 'hotspot-profile',
+    category: 'configuration',
+    severity: routerInfo.hotspotProfile ? 'ok' : 'critical',
+    label: 'Profil hotspot par défaut',
+    description: routerInfo.hotspotProfile
+      ? `Profil par défaut : "${routerInfo.hotspotProfile}".`
+      : 'Aucun profil hotspot configuré — les nouveaux clients recevront un profil inconnu.',
+  });
+
+  if (plansWithProfileInfo.length > 0) {
+    const unmappedPlans = plansWithProfileInfo.filter((p) => !p.mappedProfile);
+    checks.push({
+      id: 'plan-profile-mapping',
+      category: 'configuration',
+      severity: unmappedPlans.length === 0 ? 'ok' : 'warning',
+      label: 'Mapping forfaits → profils',
+      description:
+        unmappedPlans.length === 0
+          ? `Tous les forfaits (${plansWithProfileInfo.length}) ont un profil RouterOS mappé.`
+          : `${unmappedPlans.length} forfait${unmappedPlans.length > 1 ? 's' : ''} sans profil RouterOS mappé : ${unmappedPlans.map((p) => p.plan.name).join(', ')}.`,
+    });
+  }
+
+  if (complianceSummary.total > 0) {
+    const expired = complianceSummary.expiredButActive.length;
+    checks.push({
+      id: 'no-expired-active',
+      category: 'sessions',
+      severity: expired === 0 ? 'ok' : 'critical',
+      label: 'Clients expirés actifs',
+      description:
+        expired === 0
+          ? 'Aucun client actif avec forfait expiré détecté.'
+          : `${expired} client${expired > 1 ? 's' : ''} actif${expired > 1 ? 's' : ''} avec forfait expiré — vérifier la politique d'éjection du routeur.`,
+      actionId: expired > 0 ? 'disconnect_expired' : undefined,
+      actionLabel: expired > 0 ? 'Déconnecter les expirés' : undefined,
+    });
+
+    const unmanaged = complianceSummary.unmanaged;
+    const unmanagedPct =
+      complianceSummary.total > 0
+        ? Math.round((unmanaged / complianceSummary.total) * 100)
+        : 0;
+    checks.push({
+      id: 'unmanaged-users',
+      category: 'sessions',
+      severity: unmanaged === 0 ? 'ok' : unmanagedPct > 50 ? 'warning' : 'ok',
+      label: 'Utilisateurs non gérés',
+      description:
+        unmanaged === 0
+          ? 'Tous les utilisateurs actifs sont gérés par MikroServer.'
+          : `${unmanaged} utilisateur${unmanaged > 1 ? 's' : ''} non lié${unmanaged > 1 ? 's' : ''} à un ticket MikroServer (${unmanagedPct} %).`,
+    });
+  }
+
+  return checks;
+}
+
 export function buildHotspotComplianceSummary(
   users: HotspotUserRow[],
 ): HotspotComplianceSummary {
@@ -216,12 +374,12 @@ export function buildHotspotComplianceSummary(
 
   const recommendation =
     expiredButActive.length > 0
-      ? `Alerte: ${expiredButActive.length} client(s) actif(s) semblent depasser la duree autorisee. Verifie la politique d ejection hotspot (scheduler/script) du routeur.`
+      ? `Alerte : ${expiredButActive.length} client(s) actif(s) dépassent la durée autorisée. Vérifiez la politique d'éjection hotspot (scheduler/script) du routeur.`
       : expiringSoon.length > 0
-        ? `Surveillance: ${expiringSoon.length} client(s) actif(s) approchent la fin de forfait dans moins de 30 minutes.`
+        ? `Surveillance : ${expiringSoon.length} client(s) actif(s) approchent la fin de forfait dans moins de 30 minutes.`
         : managed > 0
-          ? 'Conforme: aucun client actif expire detecte sur les forfaits geres par MikroServer.'
-          : 'Information: les utilisateurs affiches ne sont pas lies a des tickets geres par MikroServer.';
+          ? 'Conforme : aucun client actif expiré détecté sur les forfaits gérés par MikroServer.'
+          : 'Information : les utilisateurs affichés ne sont pas liés à des tickets gérés par MikroServer.';
 
   return {
     total,

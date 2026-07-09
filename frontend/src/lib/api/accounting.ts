@@ -1,10 +1,12 @@
 import { apiClient } from './client';
 
+export type InvoiceStatus = 'DRAFT' | 'SENT' | 'PAID' | 'OVERDUE' | 'CANCELLED';
+
 export interface Invoice {
   id: string;
   number: string;
   type: string;
-  status: string;
+  status: InvoiceStatus;
   subtotalXof: number;
   taxXof: number;
   totalXof: number;
@@ -16,6 +18,21 @@ export interface Invoice {
   createdAt: string;
 }
 
+export interface RevenuePeriodRow {
+  month: string;
+  year: number;
+  monthNum: number;
+  totalXof: number;
+  transactionCount: number;
+}
+
+export interface RevenueRouterRow {
+  routerName: string;
+  routerId: string;
+  totalXof: number;
+  transactionCount: number;
+}
+
 export const accountingApi = {
   getInvoices: (params?: { page?: number; limit?: number }) =>
     apiClient.get('/accounting/invoices', { params }),
@@ -23,6 +40,8 @@ export const accountingApi = {
     apiClient.get('/accounting/revenue/by-router', { params }),
   getRevenueByPeriod: (params?: { months?: number }) =>
     apiClient.get('/accounting/revenue/by-period', { params }),
+  getRevenueByYear: (params?: { year?: number }) =>
+    apiClient.get('/accounting/revenue/by-year', { params }),
   generateInvoice: (data: { periodStart: string; periodEnd: string }) =>
     apiClient.post('/accounting/invoices/generate', data),
 };

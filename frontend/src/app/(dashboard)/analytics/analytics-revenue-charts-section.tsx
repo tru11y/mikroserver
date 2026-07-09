@@ -1,6 +1,8 @@
 'use client';
 
-import { BarChart3 } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
+import { fr } from 'date-fns/locale';
+import { BarChart3 as BarChart3Icon } from 'lucide-react';
 import {
   Area,
   AreaChart,
@@ -12,91 +14,202 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { ChartSkeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/states';
+import { PeriodShortcut, DEFAULT_PERIOD_OPTIONS } from '@/components/ui/period-shortcut';
+import type { PeriodOption } from '@/components/ui/period-shortcut';
 import type { FormattedRevenuePoint } from './analytics.types';
 import { formatCurrency } from './analytics.utils';
 
+const CHART_HEIGHT = 220;
+
+const SECTION_ID = 'analytics-charts-heading';
+
+const chartConfig = {
+  revenus:      { label: 'Revenus',      color: 'hsl(var(--primary))'    },
+  transactions: { label: 'Transactions', color: 'hsl(var(--brand-pink))' },
+};
+
+function formatAxisDate(dateStr: string): string {
+  try {
+    return format(parseISO(dateStr), 'dd MMM', { locale: fr });
+  } catch {
+    return dateStr;
+  }
+}
+
+function formatTooltipDate(dateStr: string): string {
+  try {
+    return format(parseISO(dateStr), 'dd MMMM yyyy', { locale: fr });
+  } catch {
+    return dateStr;
+  }
+}
+
+function formatYAxis(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000)     return `${Math.round(value / 1_000)}k`;
+  return String(value);
+}
+
+const tooltipStyle = {
+  backgroundColor: 'hsl(var(--card))',
+  border: '1px solid hsl(var(--border))',
+  borderRadius: '8px',
+  fontSize: 12,
+  color: 'hsl(var(--foreground))',
+};
+
+interface Props {
+  points: FormattedRevenuePoint[];
+  rawPoints: Array<{ date: string; revenus: number; transactions: number }>;
+  isLoading: boolean;
+  periodKey: string;
+  periodDays: number;
+  onPeriodChange: (opt: PeriodOption) => void;
+}
+
 export function AnalyticsRevenueChartsSection({
   points,
-}: {
-  points: FormattedRevenuePoint[];
-}) {
+  rawPoints,
+  isLoading,
+  periodKey,
+  periodDays,
+  onPeriodChange,
+}: Props) {
+  const data = rawPoints.length > 0 ? rawPoints : points;
+
   return (
-    <section id="charts" className="grid gap-6 xl:grid-cols-2">
-      <div className="rounded-xl border bg-card p-5">
-        <h2 className="mb-1 font-semibold">Revenus journaliers - FCFA</h2>
-        <p className="mb-5 text-xs text-muted-foreground">30 derniers jours</p>
-        {points.length === 0 ? (
-          <div className="flex h-48 items-center justify-center">
-            <div className="text-center">
-              <BarChart3 className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">Aucune donnee disponible</p>
-            </div>
-          </div>
-        ) : (
-          <ResponsiveContainer width="100%" height={240}>
-            <AreaChart data={points}>
-              <defs>
-                <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis
-                dataKey="date"
-                tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
-              />
-              <YAxis tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'hsl(var(--card))',
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px',
-                  fontSize: 12,
-                }}
-                formatter={(value: number) => [formatCurrency(value), 'Revenus']}
-              />
-              <Area
-                type="monotone"
-                dataKey="revenus"
-                stroke="hsl(var(--primary))"
-                fill="url(#colorRevenue)"
-                strokeWidth={2}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        )}
+    <section aria-labelledby={SECTION_ID} className="space-y-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2
+            id={SECTION_ID}
+            className="text-sm font-semibold"
+          >
+            Revenus &amp; transactions
+          </h2>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            Historique journalier en FCFA
+          </p>
+        </div>
+        <PeriodShortcut
+          options={DEFAULT_PERIOD_OPTIONS}
+          activeKey={periodKey}
+          onChange={onPeriodChange}
+        />
       </div>
 
-      <div className="rounded-xl border bg-card p-5">
-        <h2 className="mb-1 font-semibold">Transactions par jour</h2>
-        <p className="mb-5 text-xs text-muted-foreground">Nombre de paiements Wave</p>
-        {points.length === 0 ? (
-          <div className="flex h-32 items-center justify-center">
-            <p className="text-sm text-muted-foreground">Aucune donnee disponible</p>
-          </div>
-        ) : (
-          <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={points}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis
-                dataKey="date"
-                tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
-              />
-              <YAxis tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'hsl(var(--card))',
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px',
-                  fontSize: 12,
-                }}
-                formatter={(value: number) => [value, 'Transactions']}
-              />
-              <Bar dataKey="transactions" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        )}
+      <div className="grid gap-4 xl:grid-cols-2">
+        {/* Revenus */}
+        <div className="rounded-xl border bg-card p-5">
+          <h3 className="mb-1 text-sm font-semibold">
+            {chartConfig.revenus.label}
+            <span className="ml-1 text-xs font-normal text-muted-foreground">FCFA</span>
+          </h3>
+
+          {isLoading ? (
+            <ChartSkeleton rows={12} />
+          ) : data.length === 0 ? (
+            <EmptyState
+              icon={<BarChart3Icon className="h-5 w-5" />}
+              title="Aucune donnée"
+              description={`Aucun revenu enregistré sur les ${periodDays} derniers jours.`}
+              className="h-[220px]"
+            />
+          ) : (
+            <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
+              <AreaChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+                <defs>
+                  <linearGradient id="gradRevenue" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%"  stopColor={chartConfig.revenus.color} stopOpacity={0.3} />
+                    <stop offset="95%" stopColor={chartConfig.revenus.color} stopOpacity={0}   />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={formatAxisDate}
+                  tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                  tickLine={false}
+                  axisLine={false}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  tickFormatter={formatYAxis}
+                  tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={40}
+                />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  labelFormatter={(label: string) => formatTooltipDate(label)}
+                  formatter={(value: number) => [formatCurrency(value), chartConfig.revenus.label]}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="revenus"
+                  stroke={chartConfig.revenus.color}
+                  fill="url(#gradRevenue)"
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 4, strokeWidth: 0 }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Transactions */}
+        <div className="rounded-xl border bg-card p-5">
+          <h3 className="mb-1 text-sm font-semibold">
+            {chartConfig.transactions.label}
+            <span className="ml-1 text-xs font-normal text-muted-foreground">paiements Wave</span>
+          </h3>
+
+          {isLoading ? (
+            <ChartSkeleton rows={12} />
+          ) : data.length === 0 ? (
+            <EmptyState
+              title="Aucune donnée"
+              description={`Aucune transaction enregistrée sur les ${periodDays} derniers jours.`}
+              className="h-[220px]"
+            />
+          ) : (
+            <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
+              <BarChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={formatAxisDate}
+                  tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                  tickLine={false}
+                  axisLine={false}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={30}
+                  allowDecimals={false}
+                />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  labelFormatter={(label: string) => formatTooltipDate(label)}
+                  formatter={(value: number) => [value, chartConfig.transactions.label]}
+                />
+                <Bar
+                  dataKey="transactions"
+                  fill={chartConfig.transactions.color}
+                  radius={[3, 3, 0, 0]}
+                  maxBarSize={32}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
       </div>
     </section>
   );

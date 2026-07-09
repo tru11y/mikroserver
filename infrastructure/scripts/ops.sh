@@ -20,7 +20,7 @@ cmd="${1:-}"
 
 case "$cmd" in
   deploy:prod)
-    docker compose -f infrastructure/docker/docker-compose.prod.yml up -d --build api dashboard nginx
+    bash infrastructure/scripts/deploy_prod.sh
     ;;
   deploy:staging)
     bash infrastructure/scripts/deploy_staging.sh

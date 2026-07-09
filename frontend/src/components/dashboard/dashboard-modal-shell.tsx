@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useEffect, useId, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -19,25 +19,37 @@ export function DashboardModalShell({
   children,
   maxWidthClassName = 'max-w-3xl',
 }: DashboardModalShellProps) {
+  const titleId = useId();
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md"
       role="dialog"
       aria-modal="true"
-      aria-label={title}
+      aria-labelledby={titleId}
     >
       <div
         className={clsx(
-          'relative w-full overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))] shadow-2xl',
+          'relative w-full overflow-hidden rounded-[28px] border border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.02] shadow-2xl',
           maxWidthClassName,
         )}
       >
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.16),transparent_34%),radial-gradient(circle_at_bottom_left,rgba(14,165,233,0.08),transparent_30%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,hsl(var(--primary)/0.12),transparent_34%),radial-gradient(circle_at_bottom_left,hsl(var(--primary)/0.06),transparent_30%)]" />
 
         <div className="relative max-h-[92vh] overflow-y-auto p-6 sm:p-7">
           <div className="flex items-start justify-between gap-4">
             <div className="max-w-2xl">
-              <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
+              <h2 id={titleId} className="text-xl font-semibold tracking-tight">
+                {title}
+              </h2>
               {description ? (
                 <p className="mt-1.5 text-sm text-muted-foreground">{description}</p>
               ) : null}
@@ -46,7 +58,7 @@ export function DashboardModalShell({
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-muted-foreground transition-all hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-muted-foreground transition-all hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))]"
               aria-label="Fermer"
             >
               <X className="h-4 w-4" />

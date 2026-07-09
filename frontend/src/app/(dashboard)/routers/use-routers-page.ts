@@ -1,13 +1,15 @@
 'use client';
 
-import { FormEvent, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useDeferredValue, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api, unwrap } from '@/lib/api';
 import { hasPermission } from '@/lib/permissions';
+import { triggerWgBootstrap } from './router-wg-bootstrap';
 import type { BulkAction, RouterFormState, RouterItem, RouterStatus } from './routers.types';
 import {
   EMPTY_FORM,
+  STATUS_PRIORITY,
   getQueryErrorMessage,
   parseTags,
   toFormState,
@@ -37,6 +39,7 @@ export function useRoutersPage() {
   const canRunHealthCheck = hasPermission(currentUser, 'routers.health_check');
   const canSyncRouters = hasPermission(currentUser, 'routers.sync');
 
+  // Always fetch full fleet — filtering is done client-side to keep global summary accurate
   const {
     data,
     isLoading,
@@ -45,70 +48,85 @@ export function useRoutersPage() {
     refetch,
     isRefetching,
   } = useQuery({
-    queryKey: ['routers', statusFilter, siteFilter, tagFilter, deferredSearchFilter],
-    queryFn: () =>
-      api.routers.list({
-        status: statusFilter,
-        site: siteFilter,
-        tag: tagFilter,
-        search: deferredSearchFilter,
-      }),
+    queryKey: ['routers'],
+    queryFn: () => api.routers.list({}),
     enabled: canViewRouters,
   });
 
-  const routers = useMemo<RouterItem[]>(
-    () => (data ? unwrap<RouterItem[]>(data) : []),
-    [data],
-  );
+  const allRouters = useMemo<RouterItem[]>(() => {
+    const raw = data ? unwrap<RouterItem[]>(data) : [];
+    return [...raw].sort((a, b) => STATUS_PRIORITY[a.status] - STATUS_PRIORITY[b.status]);
+  }, [data]);
+
+  const routers = useMemo<RouterItem[]>(() => {
+    let result = allRouters;
+
+    if (statusFilter !== 'ALL') {
+      result = result.filter((r) => r.status === statusFilter);
+    }
+    if (siteFilter) {
+      result = result.filter((r) => r.site === siteFilter);
+    }
+    if (tagFilter) {
+      result = result.filter((r) => r.tags.includes(tagFilter));
+    }
+    if (deferredSearchFilter.trim()) {
+      const q = deferredSearchFilter.toLowerCase().trim();
+      result = result.filter(
+        (r) =>
+          r.name.toLowerCase().includes(q) ||
+          (r.wireguardIp?.includes(q) ?? false) ||
+          (r.site?.toLowerCase().includes(q) ?? false) ||
+          r.tags.some((t) => t.toLowerCase().includes(q)),
+      );
+    }
+
+    return result;
+  }, [allRouters, statusFilter, siteFilter, tagFilter, deferredSearchFilter]);
 
   const routersErrorMessage = isError
     ? getQueryErrorMessage(error, 'Impossible de charger la flotte de routeurs.')
     : null;
 
-  useEffect(() => {
-    setSelectedIds((current) => current.filter((id) => routers.some((router) => router.id === id)));
-  }, [routers]);
-
   const siteOptions = useMemo(
     () =>
       Array.from(
         new Set(
-          routers
-            .map((router) => router.site?.trim())
-            .filter((site): site is string => Boolean(site)),
+          allRouters
+            .map((r) => r.site?.trim())
+            .filter((s): s is string => Boolean(s)),
         ),
       ).sort((a, b) => a.localeCompare(b)),
-    [routers],
+    [allRouters],
   );
 
   const tagOptions = useMemo(
     () =>
       Array.from(
-        new Set(
-          routers.flatMap((router) => (Array.isArray(router.tags) ? router.tags : [])),
-        ),
+        new Set(allRouters.flatMap((r) => (Array.isArray(r.tags) ? r.tags : []))),
       ).sort((a, b) => a.localeCompare(b)),
-    [routers],
+    [allRouters],
   );
 
+  // Summary always reflects the full unfiltered fleet
   const summary = useMemo(() => {
-    const online = routers.filter((router) => router.status === 'ONLINE').length;
-    const degraded = routers.filter((router) => router.status === 'DEGRADED').length;
-    const offline = routers.filter((router) => router.status === 'OFFLINE').length;
-    const maintenance = routers.filter((router) => router.status === 'MAINTENANCE').length;
+    const online = allRouters.filter((r) => r.status === 'ONLINE').length;
+    const degraded = allRouters.filter((r) => r.status === 'DEGRADED').length;
+    const offline = allRouters.filter((r) => r.status === 'OFFLINE').length;
+    const maintenance = allRouters.filter((r) => r.status === 'MAINTENANCE').length;
 
     return {
-      total: routers.length,
+      total: allRouters.length,
       online,
       degraded,
       offline,
       maintenance,
       sites: siteOptions.length,
     };
-  }, [routers, siteOptions.length]);
+  }, [allRouters, siteOptions.length]);
 
   const hasActiveFilters = Boolean(
-    deferredSearchFilter.trim() || siteFilter.trim() || tagFilter.trim() || statusFilter !== 'ALL',
+    deferredSearchFilter.trim() || siteFilter || tagFilter || statusFilter !== 'ALL',
   );
 
   const openCreateForm = () => {
@@ -170,14 +188,18 @@ export function useRoutersPage() {
     },
     onSuccess: async (response) => {
       const wasCreating = !editingRouter;
+      // Capture credentials before closeForm resets formState
+      const capturedUsername = formState.apiUsername;
+      const capturedPassword = formState.apiPassword;
+
       await invalidateRouters();
       closeForm();
-      toast.success(editingRouter ? 'Routeur mis a jour.' : 'Routeur ajoute — configuration WireGuard en cours...');
+      toast.success(editingRouter ? 'Routeur mis à jour.' : 'Routeur ajouté — configuration WireGuard en cours...');
 
       if (wasCreating && response) {
         const created = unwrap<{ id: string }>(response);
         if (created?.id) {
-          void triggerWgBootstrap(created.id);
+          void triggerWgBootstrap(created.id, capturedUsername, capturedPassword);
         }
       }
     },
@@ -192,7 +214,7 @@ export function useRoutersPage() {
     mutationFn: (routerId: string) => api.routers.remove(routerId),
     onSuccess: async () => {
       await invalidateRouters();
-      toast.success('Routeur supprime.');
+      toast.success('Routeur supprimé.');
     },
     onError: (queryError: unknown) => {
       toast.error(getQueryErrorMessage(queryError, 'Suppression impossible.'));
@@ -204,24 +226,18 @@ export function useRoutersPage() {
     mutationFn: async ({ router, action }: { router: RouterItem; action: BulkAction }) => {
       setBusyRouterId(router.id);
 
-      if (action === 'HEALTH_CHECK') {
-        return api.routers.healthCheck(router.id);
-      }
-
-      if (action === 'SYNC') {
-        return api.routers.sync(router.id);
-      }
-
+      if (action === 'HEALTH_CHECK') return api.routers.healthCheck(router.id);
+      if (action === 'SYNC') return api.routers.sync(router.id);
       return api.routers.bulkAction([router.id], action);
     },
     onSuccess: async (_response, variables) => {
       await invalidateRouters();
 
       const messages: Record<BulkAction, string> = {
-        HEALTH_CHECK: 'Health check termine.',
-        SYNC: 'Synchronisation routeur terminee.',
-        ENABLE_MAINTENANCE: 'Routeur passe en maintenance.',
-        DISABLE_MAINTENANCE: 'Routeur retire de la maintenance.',
+        HEALTH_CHECK:        'Health-check terminé.',
+        SYNC:                'Synchronisation routeur terminée.',
+        ENABLE_MAINTENANCE:  'Routeur passé en maintenance.',
+        DISABLE_MAINTENANCE: 'Routeur retiré de la maintenance.',
       };
 
       toast.success(messages[variables.action]);
@@ -238,86 +254,22 @@ export function useRoutersPage() {
     onSuccess: async (response, variables) => {
       await invalidateRouters();
 
-      const result = response ? unwrap<{ processedCount?: number; failedCount?: number }>(response) : undefined;
+      const result = response
+        ? unwrap<{ processedCount?: number; failedCount?: number }>(response)
+        : undefined;
       const processedCount = result?.processedCount ?? variables.routerIds.length;
       const failedCount = result?.failedCount ?? 0;
 
       toast.success(
-        `${processedCount} routeur(s) traite(s)${failedCount ? `, ${failedCount} en echec` : ''}.`,
+        `${processedCount} routeur(s) traité(s)${failedCount ? `, ${failedCount} en échec` : ''}.`,
       );
 
-      if (!failedCount) {
-        setSelectedIds([]);
-      }
+      if (!failedCount) setSelectedIds([]);
     },
     onError: (queryError: unknown) => {
       toast.error(getQueryErrorMessage(queryError, 'Action de masse impossible.'));
     },
   });
-
-  const triggerWgBootstrap = async (routerId: string) => {
-    try {
-      const res = await api.routers.getBootstrap(routerId);
-      const bootstrap = unwrap<{
-        localIp: string | null;
-        wgIp: string | null;
-        privateKey: string | null;
-        vpsPublicKey: string | null;
-        endpoint: string | null;
-        listenPort: number;
-        tunnelReady: boolean;
-        mikrotikCmd: string | null;
-      }>(res);
-
-      if (!bootstrap || bootstrap.tunnelReady) return;
-
-      // Try pushing via MikroTik REST API (browser → local router)
-      // This will fail with CORS/PNA in Chrome — we catch silently
-      if (bootstrap.localIp && bootstrap.mikrotikCmd) {
-        try {
-          await fetch(`http://${bootstrap.localIp}/rest/system/script`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Basic ${btoa(`${formState.apiUsername}:${formState.apiPassword}`)}`,
-            },
-            body: JSON.stringify({
-              name: 'wg-mks-bootstrap',
-              source: bootstrap.mikrotikCmd,
-            }),
-            signal: AbortSignal.timeout(5000),
-          });
-          // If somehow it works (no CORS block), also run the script
-          await fetch(`http://${bootstrap.localIp}/rest/system/script/wg-mks-bootstrap/run`, {
-            method: 'POST',
-            headers: {
-              Authorization: `Basic ${btoa(`${formState.apiUsername}:${formState.apiPassword}`)}`,
-            },
-            signal: AbortSignal.timeout(5000),
-          });
-          toast.success('Configuration WireGuard envoyée au routeur.');
-          return;
-        } catch {
-          // Expected — CORS/PNA blocks this in Chrome
-        }
-      }
-
-      // Fallback: show persistent toast with copy button
-      if (bootstrap.mikrotikCmd) {
-        const cmd = bootstrap.mikrotikCmd;
-        toast('Tunnel WireGuard en attente', {
-          description: `Copiez la commande dans le terminal Winbox ou WebFig du routeur (${bootstrap.localIp ?? ''}).`,
-          duration: 30000,
-          action: {
-            label: 'Copier la commande',
-            onClick: () => void navigator.clipboard.writeText(cmd),
-          },
-        });
-      }
-    } catch {
-      // Bootstrap fetch failed — not critical, router will remain pending
-    }
-  };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -326,27 +278,42 @@ export function useRoutersPage() {
 
   const toggleSelection = (routerId: string) => {
     setSelectedIds((current) =>
-      current.includes(routerId) ? current.filter((id) => id !== routerId) : [...current, routerId],
+      current.includes(routerId)
+        ? current.filter((id) => id !== routerId)
+        : [...current, routerId],
     );
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.length === routers.length) {
+    if (selectedIds.length === routers.length && routers.length > 0) {
       setSelectedIds([]);
       return;
     }
-
-    setSelectedIds(routers.map((router) => router.id));
+    setSelectedIds(routers.map((r) => r.id));
   };
 
   const runBulkAction = (action: BulkAction) => {
-    if (selectedIds.length === 0) {
-      toast.error('Selectionne au moins un routeur.');
+    if (validSelectedIds.length === 0) {
+      toast.error('Sélectionne au moins un routeur.');
       return;
     }
-
-    bulkMutation.mutate({ action, routerIds: selectedIds });
+    bulkMutation.mutate({ action, routerIds: validSelectedIds });
   };
+
+  // IDs that still exist in the full fleet (survives filter changes)
+  const validSelectedIds = useMemo(
+    () => selectedIds.filter((id) => allRouters.some((r) => r.id === id)),
+    [selectedIds, allRouters],
+  );
+
+  // Status of selected routers — drives bulk maintenance UX
+  const selectedStatuses = useMemo<RouterStatus[]>(
+    () =>
+      validSelectedIds
+        .map((id) => allRouters.find((r) => r.id === id)?.status)
+        .filter((s): s is RouterStatus => Boolean(s)),
+    [validSelectedIds, allRouters],
+  );
 
   return {
     currentUser,
@@ -370,7 +337,8 @@ export function useRoutersPage() {
     setTagFilter,
     searchFilter,
     setSearchFilter,
-    selectedIds,
+    selectedIds: validSelectedIds,
+    selectedStatuses,
     isFormOpen,
     editingRouter,
     formState,

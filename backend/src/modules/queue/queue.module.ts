@@ -13,6 +13,7 @@ import { VoucherDeliveryWorker } from "./workers/voucher-delivery.worker";
 import { WebhookProcessorWorker } from "./workers/webhook-processor.worker";
 import { SpeedBoostWorker } from "./workers/speed-boost.worker";
 import { RouterProvisioningWorker } from "./workers/router-provisioning.worker";
+import { BatchGenerateWorker } from "./workers/batch-generate.worker";
 import { OfflineSyncService } from "./offline-sync.service";
 import { getQueueToken } from "./decorators/queue-token";
 import { REDIS_CLIENT } from "./decorators/inject-redis.decorator";
@@ -69,11 +70,13 @@ function createQueueProvider(name: string) {
     createQueueProvider(QUEUE_NAMES.PAYMENT_WEBHOOK),
     createQueueProvider(QUEUE_NAMES.SPEED_BOOST),
     createQueueProvider(QUEUE_NAMES.ROUTER_PROVISION),
+    createQueueProvider(QUEUE_NAMES.BATCH_GENERATE),
     QueueService,
     VoucherDeliveryWorker,
     WebhookProcessorWorker,
     SpeedBoostWorker,
     RouterProvisioningWorker,
+    BatchGenerateWorker,
     OfflineSyncService,
   ],
   exports: [QueueService, RouterProvisioningWorker, REDIS_CLIENT],
@@ -85,6 +88,7 @@ export class QueueModule implements OnModuleInit, OnModuleDestroy {
     private readonly webhookWorker: WebhookProcessorWorker,
     private readonly speedBoostWorker: SpeedBoostWorker,
     private readonly routerProvisioningWorker: RouterProvisioningWorker,
+    private readonly batchGenerateWorker: BatchGenerateWorker,
   ) {}
 
   onModuleInit() {
@@ -97,6 +101,7 @@ export class QueueModule implements OnModuleInit, OnModuleDestroy {
     this.webhookWorker.initialize(redisConfig);
     this.speedBoostWorker.initialize(redisConfig);
     this.routerProvisioningWorker.initialize(redisConfig);
+    this.batchGenerateWorker.initialize(redisConfig);
   }
 
   async onModuleDestroy() {
@@ -105,6 +110,7 @@ export class QueueModule implements OnModuleInit, OnModuleDestroy {
       this.webhookWorker.shutdown(),
       this.speedBoostWorker.shutdown(),
       this.routerProvisioningWorker.shutdown(),
+      this.batchGenerateWorker.shutdown(),
     ]);
   }
 }

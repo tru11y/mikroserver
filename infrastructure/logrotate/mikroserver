@@ -1,0 +1,30 @@
+# /etc/logrotate.d/mikroserver
+# Rotate MikroServer application and Nginx logs
+#
+# INSTALL: sudo cp infrastructure/logrotate/mikroserver /etc/logrotate.d/mikroserver
+# TEST:    sudo logrotate -d /etc/logrotate.d/mikroserver
+
+# Nginx access + error logs (written to named Docker volume mounted at /var/log/nginx)
+/var/lib/docker/volumes/docker_nginx-logs/_data/*.log {
+    daily
+    missingok
+    rotate 14
+    compress
+    delaycompress
+    notifempty
+    sharedscripts
+    postrotate
+        docker kill --signal=USR1 $(docker ps -q --filter name=nginx) 2>/dev/null || true
+    endscript
+}
+
+# NestJS application logs
+/var/lib/docker/volumes/docker_app-logs/_data/*.log {
+    daily
+    missingok
+    rotate 30
+    compress
+    delaycompress
+    notifempty
+    maxsize 100M
+}

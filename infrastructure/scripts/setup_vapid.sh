@@ -7,7 +7,7 @@
 set -Eeuo pipefail
 
 APP_DIR="${APP_DIR:-/root/mikroserver}"
-ENV_FILE="${APP_DIR}/infrastructure/docker/.env.prod"
+ENV_FILE="${APP_DIR}/.env.prod"
 COMPOSE_FILE="${APP_DIR}/infrastructure/docker/docker-compose.prod.yml"
 COMPOSE_PROJECT="${COMPOSE_PROJECT_NAME:-docker}"
 

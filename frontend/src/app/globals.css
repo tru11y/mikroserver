@@ -4,50 +4,100 @@
 
 @layer base {
   :root {
-    --background: 210 40% 98%; /* Soft off-white */
-    --foreground: 222.2 47.4% 11.2%;
+    /* ── Surface — Violet Cosmos Light ──────────────────────────────────── */
+    --background: 270 40% 97%;        /* Lavande très claire */
+    --foreground: 260 45% 10%;        /* Violet-charcoal profond */
     --card: 0 0% 100%;
-    --card-foreground: 222.2 47.4% 11.2%;
+    --card-foreground: 260 45% 10%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 47.4% 11.2%;
-    --primary: 236 82% 64%; /* Soft Indigo */
-    --primary-foreground: 210 40% 98%;
-    --secondary: 214 32% 91%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 214 32% 91%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 214 32% 91%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214 32% 91%; /* Lower contrast borders */
-    --input: 214 32% 91%;
-    --ring: 236 82% 64%;
-    --radius: 1rem; /* Soft rounded corners */
-    --success: 142.1 76.2% 36.3%;
-    --warning: 37.7 92.1% 50.2%;
+    --popover-foreground: 260 45% 10%;
+
+    /* ── Brand ───────────────────────────────────────────────────────────── */
+    --primary: 271 91% 55%;           /* Violet #9333EA — WCAG AA on white */
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 271 91% 47%;
+    --brand-pink: 330 81% 55%;        /* Rose néon #DB2777 */
+
+    /* ── Neutral ─────────────────────────────────────────────────────────── */
+    --secondary: 270 30% 93%;
+    --secondary-foreground: 260 45% 10%;
+    --muted: 270 30% 93%;
+    --muted-foreground: 270 15% 42%;
+    --accent: 270 30% 93%;
+    --accent-foreground: 260 45% 10%;
+
+    /* ── Semantic ─────────────────────────────────────────────────────────── */
+    --destructive: 0 84% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 158 63% 35%;
+    --success-foreground: 0 0% 100%;
+    --warning: 43 96% 46%;
+    --warning-foreground: 0 0% 100%;
+    --info: 213 89% 50%;
+    --info-foreground: 0 0% 100%;
+
+    /* ── Chrome ───────────────────────────────────────────────────────────── */
+    --border: 270 25% 84%;
+    --border-subtle: 270 25% 92%;
+    --input: 270 25% 84%;
+    --ring: 271 91% 55%;
+    --radius: 0.75rem;
+
+    /* ── Elevation ───────────────────────────────────────────────────────── */
+    --shadow-xs: 0 1px 2px 0 hsl(260 45% 10% / 0.05);
+    --shadow-sm: 0 1px 3px 0 hsl(260 45% 10% / 0.08), 0 1px 2px -1px hsl(260 45% 10% / 0.06);
+    --shadow-md: 0 4px 6px -1px hsl(260 45% 10% / 0.08), 0 2px 4px -2px hsl(260 45% 10% / 0.05);
+    --shadow-lg: 0 10px 15px -3px hsl(260 45% 10% / 0.09), 0 4px 6px -4px hsl(260 45% 10% / 0.06);
+    --shadow-xl: 0 20px 25px -5px hsl(260 45% 10% / 0.10), 0 8px 10px -6px hsl(260 45% 10% / 0.06);
+    --shadow-glow: 0 0 0 1px hsl(var(--primary) / 0.15), 0 4px 20px -2px hsl(var(--primary) / 0.25);
   }
 
   .dark {
-    --background: 222.2 47.4% 11.2%; /* Softer dark scale */
-    --foreground: 210 40% 98%;
-    --card: 217.2 32.6% 17.5%; /* Raised card lightness */
-    --card-foreground: 210 40% 98%;
-    --popover: 217.2 32.6% 17.5%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 236 82% 74%; /* Lighter soft indigo */
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 25%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 25%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 25%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 25%; /* Less contrast */
-    --input: 217.2 32.6% 25%;
-    --ring: 236 82% 74%;
+    /* ── Surface — Violet Cosmos Dark ───────────────────────────────────── */
+    --background: 260 59% 5%;         /* #0A0514 — Cosmos noir violet */
+    --foreground: 270 100% 95%;       /* #F3E8FF — Lavande clair */
+    --card: 256 58% 11%;              /* #150C2E — Surface élevée */
+    --card-foreground: 270 100% 95%;
+    --popover: 256 58% 11%;
+    --popover-foreground: 270 100% 95%;
+
+    /* ── Brand ───────────────────────────────────────────────────────────── */
+    --primary: 271 91% 65%;           /* #A855F7 — Violet électrique */
+    --primary-foreground: 260 59% 5%;
+    --primary-hover: 271 91% 73%;
+    --brand-pink: 330 81% 62%;        /* #EC4899 — Rose néon */
+
+    /* ── Neutral ─────────────────────────────────────────────────────────── */
+    --secondary: 253 56% 16%;         /* #1C1240 */
+    --secondary-foreground: 270 100% 95%;
+    --muted: 253 56% 16%;
+    --muted-foreground: 270 25% 62%;  /* Lavande atténuée — WCAG AA ✓ */
+    --accent: 253 56% 16%;
+    --accent-foreground: 270 100% 95%;
+
+    /* ── Semantic ─────────────────────────────────────────────────────────── */
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 270 100% 95%;
+    --success: 158 65% 52%;           /* #34D399 — Émeraude */
+    --success-foreground: 260 59% 5%;
+    --warning: 43 96% 56%;            /* #FBBF24 — Ambre */
+    --warning-foreground: 260 59% 5%;
+    --info: 213 93% 67%;              /* #60A5FA — Bleu ciel */
+    --info-foreground: 260 59% 5%;
+
+    /* ── Chrome ───────────────────────────────────────────────────────────── */
+    --border: 256 40% 22%;
+    --border-subtle: 256 40% 16%;
+    --input: 256 40% 22%;
+    --ring: 271 91% 65%;
+
+    /* ── Elevation (violet glow) ─────────────────────────────────────────── */
+    --shadow-xs: 0 1px 2px 0 hsl(0 0% 0% / 0.35);
+    --shadow-sm: 0 1px 3px 0 hsl(0 0% 0% / 0.40), 0 1px 2px -1px hsl(0 0% 0% / 0.30);
+    --shadow-md: 0 4px 6px -1px hsl(0 0% 0% / 0.40), 0 2px 4px -2px hsl(0 0% 0% / 0.30);
+    --shadow-lg: 0 10px 15px -3px hsl(0 0% 0% / 0.45), 0 4px 6px -4px hsl(0 0% 0% / 0.30);
+    --shadow-xl: 0 20px 25px -5px hsl(0 0% 0% / 0.50), 0 8px 10px -6px hsl(0 0% 0% / 0.35);
+    --shadow-glow: 0 0 0 1px hsl(var(--primary) / 0.25), 0 4px 20px -2px hsl(var(--primary) / 0.45);
   }
 }
 
@@ -58,6 +108,8 @@
     @apply bg-background text-foreground;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   /* Styled scrollbar */
@@ -67,25 +119,82 @@
   ::-webkit-scrollbar-thumb:hover { @apply bg-muted-foreground/40; }
 
   ::selection {
-    background: hsl(var(--primary) / 0.22);
+    background: hsl(var(--primary) / 0.18);
     color: hsl(var(--foreground));
   }
 
   :focus-visible {
     outline: 2px solid hsl(var(--ring));
     outline-offset: 2px;
-    box-shadow: 0 0 0 4px hsl(var(--ring) / 0.18);
+    box-shadow: 0 0 0 4px hsl(var(--ring) / 0.16);
+  }
+}
+
+/* ── Utility classes ──────────────────────────────────────────────────────── */
+@layer utilities {
+  .shadow-xs  { box-shadow: var(--shadow-xs); }
+  .shadow-sm  { box-shadow: var(--shadow-sm); }
+  .shadow-md  { box-shadow: var(--shadow-md); }
+  .shadow-lg  { box-shadow: var(--shadow-lg); }
+  .shadow-xl  { box-shadow: var(--shadow-xl); }
+  .shadow-glow { box-shadow: var(--shadow-glow); }
+
+  /* Glassmorphism surface */
+  .glass {
+    -webkit-backdrop-filter: blur(12px) saturate(180%);
+    backdrop-filter: blur(12px) saturate(180%);
+    background: hsl(var(--card) / 0.72);
+    border: 1px solid hsl(var(--border) / 0.50);
+  }
+  .dark .glass {
+    background: hsl(var(--card) / 0.60);
+    border: 1px solid hsl(255 255% 255% / 0.06);
+  }
+
+  /* Gradient text — violet → rose néon */
+  .text-gradient {
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--brand-pink)));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* ── Safe-area insets (iPhone notch / home indicator) ────────────────────── */
+  .pb-safe        { padding-bottom: env(safe-area-inset-bottom); }
+  .pt-safe        { padding-top:    env(safe-area-inset-top); }
+  .pl-safe        { padding-left:   env(safe-area-inset-left); }
+  .pr-safe        { padding-right:  env(safe-area-inset-right); }
+  .mb-safe        { margin-bottom:  env(safe-area-inset-bottom); }
+  .bottom-safe    { bottom: env(safe-area-inset-bottom); }
+
+  /* Mobile touch-target minimum (44×44 px Apple HIG) */
+  .touch-target { min-height: 44px; min-width: 44px; }
+
+  /* Prevent overscroll bounce-bg when scrolling a list */
+  .overscroll-contain-y { overscroll-behavior-y: contain; }
+
+  /* Tap-highlight cleanup on iOS */
+  .tap-transparent { -webkit-tap-highlight-color: transparent; }
+}
+
+/* ── iOS-specific: disable input zoom only on mobile widths ───────────────── */
+@supports (-webkit-touch-callout: none) {
+  @media (max-width: 767px) {
+    input[type="text"],
+    input[type="search"],
+    input[type="email"],
+    input[type="tel"],
+    input[type="number"],
+    input[type="password"],
+    input[type="url"],
+    select,
+    textarea { font-size: 16px; }
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
-
-  *,
-  *::before,
-  *::after {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;

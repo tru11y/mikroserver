@@ -3,8 +3,9 @@
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { AlertTriangle, ChevronRight, ShieldAlert, Siren, WifiOff } from 'lucide-react';
-import { clsx } from 'clsx';
+import { ChevronRight, ShieldCheck, Siren, AlertTriangle, WifiOff } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { SeverityBadge } from '@/components/ui/priority-badge';
 
 interface IncidentSummary {
   total: number;
@@ -37,13 +38,6 @@ interface IncidentCenterResponse {
   generatedAt: string;
 }
 
-const severityClasses = {
-  CRITICAL: 'bg-red-500/10 text-red-300 border-red-500/20',
-  HIGH: 'bg-amber-500/10 text-amber-300 border-amber-500/20',
-  MEDIUM: 'bg-yellow-500/10 text-yellow-300 border-yellow-500/20',
-  LOW: 'bg-slate-500/10 text-slate-300 border-slate-500/20',
-} as const;
-
 export function IncidentCenterCard() {
   const { data, isLoading } = useQuery({
     queryKey: ['metrics', 'incidents'],
@@ -56,17 +50,15 @@ export function IncidentCenterCard() {
   const incidents = incidentCenter?.incidents ?? [];
 
   return (
-    <div className="rounded-xl border bg-card p-5">
+    <section aria-labelledby="incidents-heading" className="rounded-xl border bg-card p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="font-semibold">Centre d'incidents</h3>
-          <p className="text-sm text-muted-foreground">
-            Supervision routeurs, sync et livraison
-          </p>
+          <h3 id="incidents-heading" className="font-semibold">Centre d&apos;incidents</h3>
+          <p className="text-sm text-muted-foreground">Routeurs, sync, livraison</p>
         </div>
         <Link
           href="/incidents"
-          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))] rounded"
         >
           Voir tout
           <ChevronRight className="h-3 w-3" />
@@ -75,18 +67,18 @@ export function IncidentCenterCard() {
 
       {isLoading ? (
         <div className="mt-4 space-y-3">
-          {[1, 2, 3].map((item) => (
-            <div key={item} className="h-16 rounded-lg bg-muted animate-pulse" />
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-16 rounded-lg" />
           ))}
         </div>
       ) : !summary || summary.total === 0 ? (
-        <div className="mt-6 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm text-emerald-300">
+        <div className="mt-6 rounded-xl border border-success/20 bg-success/10 p-4 text-sm text-success">
           <div className="flex items-center gap-2 font-medium">
-            <ShieldAlert className="h-4 w-4" />
-            Aucun incident critique detecte
+            <ShieldCheck className="h-4 w-4" />
+            Aucun incident critique détecté
           </div>
-          <p className="mt-1 text-emerald-200/80">
-            Les routeurs, la sync et les files d'attente semblent stables pour le moment.
+          <p className="mt-1 text-success/80 text-xs">
+            Routeurs, sync et files d&apos;attente stables.
           </p>
         </div>
       ) : (
@@ -96,23 +88,23 @@ export function IncidentCenterCard() {
               <p className="text-xs text-muted-foreground">Incidents ouverts</p>
               <p className="mt-1 text-2xl font-bold">{summary.total}</p>
             </div>
-            <div className="rounded-lg border bg-muted/30 p-3">
+            <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3">
               <p className="text-xs text-muted-foreground">Critiques + hauts</p>
-              <p className="mt-1 text-2xl font-bold text-red-300">
+              <p className="mt-1 text-2xl font-bold text-destructive">
                 {summary.critical + summary.high}
               </p>
             </div>
           </div>
 
           <div className="grid grid-cols-3 gap-2 text-xs">
-            <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-red-300">
-              {summary.offlineRouters} routeur(s) offline
+            <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-destructive">
+              {summary.offlineRouters} offline
             </div>
-            <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-amber-300">
-              {summary.deliveryFailures} echec(s) delivery
+            <div className="rounded-lg border border-warning/20 bg-warning/10 px-3 py-2 text-warning">
+              {summary.deliveryFailures} échecs
             </div>
-            <div className="rounded-lg border border-blue-500/20 bg-blue-500/10 px-3 py-2 text-blue-300">
-              {summary.voucherQueueBacklog} job(s) en attente
+            <div className="rounded-lg border border-info/20 bg-info/10 px-3 py-2 text-info">
+              {summary.voucherQueueBacklog} en file
             </div>
           </div>
 
@@ -123,9 +115,9 @@ export function IncidentCenterCard() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       {incident.severity === 'CRITICAL' ? (
-                        <Siren className="h-4 w-4 text-red-300" />
+                        <Siren className="h-4 w-4 text-destructive shrink-0" />
                       ) : (
-                        <AlertTriangle className="h-4 w-4 text-amber-300" />
+                        <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
                       )}
                       <p className="font-medium text-sm truncate">{incident.title}</p>
                     </div>
@@ -133,14 +125,7 @@ export function IncidentCenterCard() {
                       {incident.description}
                     </p>
                   </div>
-                  <span
-                    className={clsx(
-                      'rounded-full border px-2 py-0.5 text-[10px] font-semibold',
-                      severityClasses[incident.severity],
-                    )}
-                  >
-                    {incident.severity}
-                  </span>
+                  <SeverityBadge severity={incident.severity} />
                 </div>
                 {incident.routerName && (
                   <div className="mt-2 inline-flex items-center gap-1 text-[11px] text-muted-foreground">
@@ -153,6 +138,6 @@ export function IncidentCenterCard() {
           </div>
         </div>
       )}
-    </div>
+    </section>
   );
 }

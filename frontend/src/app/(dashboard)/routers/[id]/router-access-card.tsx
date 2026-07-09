@@ -552,13 +552,8 @@ export function RouterAccessCard({ routerId }: { routerId: string }) {
     );
   }
 
-  const webfigProxyUrl = `/api/v1/routers/${routerId}/webfig/`;
-
   return (
     <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-6 space-y-4">
-      {/* Public port-map section */}
-      <PublicAccessSection routerId={routerId} />
-
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -615,15 +610,22 @@ export function RouterAccessCard({ routerId }: { routerId: string }) {
           { label: 'Mot de passe', value: data.webfig.password, secret: true, id: 'webfig-pwd' },
         ]}
         action={
-          <a
-            href={webfigProxyUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 rounded-lg bg-violet-500/15 px-3 py-1.5 text-xs font-medium text-violet-300 hover:bg-violet-500/25 transition-colors"
-          >
-            <Globe className="h-3.5 w-3.5" />
-            Accéder WebFig
-          </a>
+          data.rulesActive ? (
+            <a
+              href={data.webfig.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 rounded-lg bg-violet-500/15 px-3 py-1.5 text-xs font-medium text-violet-300 hover:bg-violet-500/25 transition-colors"
+            >
+              <Globe className="h-3.5 w-3.5" />
+              Accéder WebFig
+            </a>
+          ) : (
+            <span className="flex items-center gap-1.5 rounded-lg bg-zinc-800 px-3 py-1.5 text-xs text-zinc-500 cursor-default select-none">
+              <Globe className="h-3.5 w-3.5" />
+              Ports publics requis
+            </span>
+          )
         }
       />
 

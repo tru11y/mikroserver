@@ -70,10 +70,11 @@ export class AuthTokenService {
       tokenId,
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(accessPayload as any, {
         secret: this.configService.getOrThrow<string>("jwt.accessSecret"),
-        expiresIn: accessExpiry as any,
+        expiresIn: accessExpiry as any, // string "15m" / "7d" — ms StringValue
       }),
       this.jwtService.signAsync(refreshPayload as any, {
         secret: this.configService.getOrThrow<string>("jwt.refreshSecret"),

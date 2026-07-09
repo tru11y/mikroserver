@@ -24,7 +24,7 @@ REPO_URL="${REPO_URL:-https://github.com/tru11y/mikroserver.git}"
 BRANCH="${BRANCH:-main}"
 APP_DIR="${APP_DIR:-/root/mikroserver}"
 COMPOSE_FILE="${APP_DIR}/infrastructure/docker/docker-compose.prod.yml"
-ENV_FILE="${APP_DIR}/infrastructure/docker/.env.prod"
+ENV_FILE="${APP_DIR}/.env.prod"
 COMPOSE_PROJECT="${COMPOSE_PROJECT_NAME:-mikroserver}"
 LOCK_FILE="${LOCK_FILE:-/var/lock/mikroserver-deploy.lock}"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/mikroserver}"
@@ -125,13 +125,15 @@ sync_repo() {
       local legacy="${APP_DIR}-legacy-$(date '+%Y%m%d%H%M%S')"
       warn "No git repo in ${APP_DIR} — moving to ${legacy}"
       mv "${APP_DIR}" "${legacy}"
-      # Preserve existing .env.prod if present
-      if [[ -f "${legacy}/infrastructure/docker/.env.prod" ]]; then
-        mkdir -p "$(dirname "${ENV_FILE}")"
-        cp "${legacy}/infrastructure/docker/.env.prod" "${ENV_FILE}"
-        chmod 600 "${ENV_FILE}"
-        log "Restored .env.prod from legacy directory"
-      fi
+      # Preserve existing .env.prod if present (check both old and new locations)
+      for legacy_env in "${legacy}/.env.prod" "${legacy}/infrastructure/docker/.env.prod"; do
+        if [[ -f "${legacy_env}" ]]; then
+          cp "${legacy_env}" "${ENV_FILE}"
+          chmod 600 "${ENV_FILE}"
+          log "Restored .env.prod from ${legacy_env}"
+          break
+        fi
+      done
     fi
     log "Cloning ${REPO_URL} branch=${BRANCH}"
     git clone --branch "${BRANCH}" --single-branch "${REPO_URL}" "${APP_DIR}"
@@ -414,9 +416,12 @@ verify_deployment() {
     ok "All critical routes registered"
   fi
 
-  # 2. No EXPOSE 3000 accessible from outside internal network
+  # 2. Port 3000 is intentionally exposed on 127.0.0.1 only (for restore-iptables.sh).
+  #    Verify it is NOT accessible from the public internet (should time out externally).
   if curl -fsSL --max-time 3 "http://127.0.0.1:3000/api/v1/health/live" >/dev/null 2>&1; then
-    warn "Port 3000 is reachable on localhost — verify it is NOT exposed to the public internet"
+    ok "API reachable on localhost:3000 (expected — VPS-local only)"
+  else
+    warn "API not reachable on localhost:3000 — restore-iptables.sh will fail at startup"
   fi
 
   # 3. Optional admin smoke test

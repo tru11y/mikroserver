@@ -6,6 +6,7 @@ export const plansApi = {
   publicList: () => apiClient.get('/plans/public'),
   create: (data: unknown) => apiClient.post('/plans', data),
   update: (id: string, data: unknown) => apiClient.patch(`/plans/${id}`, data),
-  archive: (id: string) => apiClient.delete(`/plans/${id}`),
+  delete: (id: string) => apiClient.delete(`/plans/${id}`),
+  archive: (id: string) => apiClient.patch(`/plans/${id}/archive`, {}),
   restore: (id: string) => apiClient.patch(`/plans/${id}/restore`, {}),
 };

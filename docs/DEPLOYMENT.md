@@ -364,3 +364,37 @@ curl -sf http://127.0.0.1:3000/api/v1/health/live
 systemctl status hotspotflow-iptables.service
 ```
 Port 3000 est bindé sur `127.0.0.1` uniquement dans `docker-compose.prod.yml` — jamais public.
+
+### ⚠️ Ne JAMAIS builder le frontend sur le VPS (OOM / freeze)
+Le VPS de prod (951 MB RAM + 2.4 GB swap) **ne peut pas exécuter `next build`** en même
+temps que la stack tournante : le build (webpack, ~1 GB) provoque un thrash de swap qui
+**gèle le serveur ~20 min** (load 15-40, sshd injoignable bien que le port 22 reste ouvert,
+`api` OOM-restarté en boucle). Le build n'aboutit jamais.
+
+`docker compose up -d --build dashboard` sur le VPS est donc **interdit**.
+
+**Pattern correct — builder en local puis transférer l'image :**
+```bash
+# 1. Sur la machine locale (récupérer NEXT_PUBLIC_VAPID_PUBLIC_KEY depuis le .env.prod du VPS)
+cd frontend
+docker build --target production \
+  --build-arg NEXT_PUBLIC_API_URL=/proxy \
+  --build-arg NEXT_PUBLIC_VAPID_PUBLIC_KEY=<clé publique VAPID> \
+  -t ghcr.io/tru11y/mikroserver/dashboard:latest -f Dockerfile .
+
+# 2. Transférer l'image (save | gzip | ssh | load)
+docker save ghcr.io/tru11y/mikroserver/dashboard:latest | gzip -6 | \
+  ssh root@139.84.241.27 'gunzip | docker load'
+
+# 3. Sur le VPS — recréer SANS build
+ssh root@139.84.241.27 'cd /root/mikroserver/infrastructure && \
+  docker compose -f docker/docker-compose.prod.yml --env-file docker/.env.prod \
+  up -d --no-deps --no-build --force-recreate dashboard'
+```
+Un nouveau build régénère le `buildId` Next → nouvelle révision du service worker → cache PWA
+busté (les clients se mettent à jour à la visite suivante ; Ctrl+Shift+R force immédiatement).
+
+Vérifier toujours sur la **vraie IP publique** (`curl http://139.84.241.27/login`), pas
+`127.0.0.1:80` (le loopback via docker-proxy donne de faux timeouts `000`).
+
+Le backend (`api`) build OK sur le VPS (~8 min) mais idéalement même traitement (build local + transfert).

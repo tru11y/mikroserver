@@ -104,6 +104,7 @@ function PortTestBadge({ test }: { test?: PortTestResult }) {
 function PublicAccessSection({ routerId }: { routerId: string }) {
   const queryClient = useQueryClient();
   const [allocateError, setAllocateError] = useState<string | null>(null);
+  const [applyError, setApplyError] = useState<string | null>(null);
   const mobile = isMobileDevice();
 
   const { data: portMap, isLoading, error } = useQuery({
@@ -131,6 +132,17 @@ function PublicAccessSection({ routerId }: { routerId: string }) {
     onMutate: () => setAllocateError(null),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['router-port-map', routerId] }),
     onError: (err) => setAllocateError(apiError(err, "Échec de l'allocation des ports")),
+  });
+
+  const applyRulesMutation = useMutation({
+    mutationFn: () => api.routers.applyPortMapRules(routerId),
+    onMutate: () => setApplyError(null),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['router-port-map', routerId] });
+      queryClient.invalidateQueries({ queryKey: ['router-port-map-test', routerId] });
+      queryClient.invalidateQueries({ queryKey: ['router-access', routerId] });
+    },
+    onError: (err) => setApplyError(apiError(err, 'Échec de la réactivation des règles')),
   });
 
   if (isLoading) {
@@ -187,17 +199,36 @@ function PublicAccessSection({ routerId }: { routerId: string }) {
           <Network className="h-4 w-4 text-indigo-400" />
           Accès public (ports DNAT)
         </h4>
-        <span
-          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ${
-            portMap.rulesActive
-              ? 'bg-emerald-500/10 text-emerald-400 ring-emerald-500/20'
-              : 'bg-amber-500/10 text-amber-400 ring-amber-500/20'
-          }`}
-        >
-          <span className={`h-1.5 w-1.5 rounded-full ${portMap.rulesActive ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-          {portMap.rulesActive ? 'Règles actives' : 'Règles inactives'}
-        </span>
+        <div className="flex items-center gap-2">
+          {!portMap.rulesActive && (
+            <button
+              type="button"
+              disabled={applyRulesMutation.isPending}
+              onClick={() => applyRulesMutation.mutate()}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-indigo-500 disabled:opacity-60"
+            >
+              {applyRulesMutation.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Zap className="h-3.5 w-3.5" />
+              )}
+              Réactiver les règles
+            </button>
+          )}
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ${
+              portMap.rulesActive
+                ? 'bg-emerald-500/10 text-emerald-400 ring-emerald-500/20'
+                : 'bg-amber-500/10 text-amber-400 ring-amber-500/20'
+            }`}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${portMap.rulesActive ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+            {portMap.rulesActive ? 'Règles actives' : 'Règles inactives'}
+          </span>
+        </div>
       </div>
+
+      {applyError && <p className="text-xs text-red-400">{applyError}</p>}
 
       <div className="grid gap-3 sm:grid-cols-3">
         {/* Winbox */}

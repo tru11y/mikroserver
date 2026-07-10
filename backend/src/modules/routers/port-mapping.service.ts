@@ -83,21 +83,49 @@ export class PortMappingService {
     return [free[0], free[1], free[2]];
   }
 
-  /** Run a command in the host network namespace via nsenter (array args — no shell injection). */
-  private async sh(args: string[]): Promise<void> {
+  /**
+   * Add `--wait` to iptables calls so they block on the xtables lock instead of
+   * failing when Docker churns iptables at container startup (root cause of
+   * rulesActive flipping to false on boot).
+   */
+  private withLockWait(args: string[]): string[] {
+    if (args[0] !== "iptables") return args;
+    return [args[0], "-w", "5", ...args.slice(1)];
+  }
+
+  /** True only when the binary itself is missing (local dev without nsenter). */
+  private isCommandNotFound(err: unknown): boolean {
+    return (err as { code?: unknown })?.code === "ENOENT";
+  }
+
+  /**
+   * Run in the host network namespace via nsenter. Fall back to running the
+   * command directly ONLY when nsenter is absent (local dev). If nsenter exists
+   * but fails (e.g. missing SYS_ADMIN), throw — never silently apply the rule in
+   * the container netns, which would mark rulesActive=true without forwarding.
+   */
+  private async sh(rawArgs: string[]): Promise<void> {
+    const args = this.withLockWait(rawArgs);
     const nsenterArgs = ["-t", "1", "-n", "-m", "--", ...args];
-    const run = () => execFileAsync("nsenter", nsenterArgs);
-    const fallback = () => execFileAsync(args[0], args.slice(1));
-    const { stderr } = await run().catch(fallback);
-    if (stderr) this.logger.warn(`iptables stderr: ${stderr}`);
+    let result: { stderr: string };
+    try {
+      result = await execFileAsync("nsenter", nsenterArgs);
+    } catch (err) {
+      if (!this.isCommandNotFound(err)) throw err;
+      result = await execFileAsync(args[0], args.slice(1));
+    }
+    if (result.stderr) this.logger.warn(`iptables stderr: ${result.stderr}`);
   }
 
   /** Delete an iptables rule, idempotent (ignores "not found"). */
-  private async shDel(args: string[]): Promise<void> {
+  private async shDel(rawArgs: string[]): Promise<void> {
+    const args = this.withLockWait(rawArgs);
     const nsenterArgs = ["-t", "1", "-n", "-m", "--", ...args];
-    await execFileAsync("nsenter", nsenterArgs)
-      .catch(() => execFileAsync(args[0], args.slice(1)))
-      .catch(() => null);
+    await execFileAsync("nsenter", nsenterArgs).catch((err) =>
+      this.isCommandNotFound(err)
+        ? execFileAsync(args[0], args.slice(1)).catch(() => null)
+        : null,
+    );
   }
 
   // ── allocatePortsForRouter ────────────────────────────────────────────────
@@ -606,13 +634,22 @@ export class PortMappingService {
     );
 
     for (const portMap of activeMaps) {
-      try {
-        await this.applyIptablesRules(portMap);
-      } catch (err) {
-        this.logger.error(
-          `restoreAllRules: failed for router ${portMap.routerId}: ${(err as Error).message}`,
-        );
-        // Continue with next — partial restore is better than full failure
+      // Retry: at boot Docker may still hold the xtables lock past the -w window.
+      // A transient failure here would flip rulesActive=false permanently, so
+      // retry a few times before giving up.
+      const MAX_ATTEMPTS = 3;
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+          await this.applyIptablesRules(portMap);
+          break;
+        } catch (err) {
+          const last = attempt === MAX_ATTEMPTS;
+          this.logger.error(
+            `restoreAllRules: attempt ${attempt}/${MAX_ATTEMPTS} failed for router ${portMap.routerId}: ${(err as Error).message}${last ? "" : " — retrying"}`,
+          );
+          if (last) break; // Continue with next router — partial restore is better than full failure
+          await new Promise((r) => setTimeout(r, 2000 * attempt));
+        }
       }
     }
 

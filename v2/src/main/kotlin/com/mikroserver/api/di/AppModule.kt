@@ -11,8 +11,10 @@ import com.mikroserver.infrastructure.persistence.*
 import com.mikroserver.infrastructure.queue.RedisJobQueue
 import com.mikroserver.infrastructure.queue.VoucherWorker
 import com.mikroserver.infrastructure.resilience.RouterCircuitBreakerRegistry
+import com.mikroserver.infrastructure.routeros.DefaultRouterOsScriptBuilder
 import com.mikroserver.infrastructure.routeros.RouterOsApiClient
 import com.mikroserver.infrastructure.routeros.RouterOsClient
+import com.mikroserver.infrastructure.routeros.RouterOsScriptBuilder
 import com.mikroserver.infrastructure.security.HmacVerifier
 import com.mikroserver.infrastructure.security.JwtService
 import com.mikroserver.infrastructure.security.PasswordService
@@ -61,6 +63,7 @@ fun appModule(config: AppConfig) = module {
 
     // ── Infrastructure: External ─────────────────────────────────────────────
     single<RouterOsClient> { RouterOsApiClient() }
+    single<RouterOsScriptBuilder> { DefaultRouterOsScriptBuilder() }
     single<WireGuardController> { NsenterWireGuardController() }
     single<WireGuardKeyGenerator> { BouncyCastleWireGuardKeyGenerator() }
     single<IpAllocator> { ExposedIpAllocator() }

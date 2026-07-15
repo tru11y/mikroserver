@@ -1,6 +1,7 @@
 package com.mikroserver.infrastructure.persistence
 
 import com.mikroserver.domain.entities.*
+import com.mikroserver.domain.entities.Transaction // explicit: shadows org.jetbrains.exposed.sql.Transaction from the wildcard below
 import com.mikroserver.domain.events.DomainEvent
 import com.mikroserver.domain.repositories.*
 import com.mikroserver.infrastructure.persistence.DatabaseFactory.dbQuery
@@ -46,11 +47,13 @@ private fun ResultRow.toRouter() = Router(
     wgPublicKey = this[RoutersTable.wgPublicKey],
     wgAllowedIp = this[RoutersTable.wgAllowedIp],
     wgEndpoint = this[RoutersTable.wgEndpoint],
+    dnatPortBase = this[RoutersTable.dnatPortBase],
     apiPort = this[RoutersTable.apiPort],
     apiUsername = this[RoutersTable.apiUsername],
     apiPasswordEnc = this[RoutersTable.apiPasswordEnc],
     status = RouterStatus.valueOf(this[RoutersTable.status]),
     lastHandshakeAt = this[RoutersTable.lastHandshakeAt],
+    provisionedAt = this[RoutersTable.provisionedAt],
     createdAt = this[RoutersTable.createdAt],
     updatedAt = this[RoutersTable.updatedAt],
     deletedAt = this[RoutersTable.deletedAt],
@@ -241,7 +244,7 @@ class ExposedRouterRepository : RouterRepository {
     override suspend fun findOnlineRouters(): List<Router> = dbQuery {
         RoutersTable.selectAll()
             .where {
-                (RoutersTable.status inList listOf("ONLINE", "DEGRADED")) and
+                (RoutersTable.status eq "ACTIVE") and
                     RoutersTable.deletedAt.isNull()
             }
             .map { it.toRouter() }
@@ -256,6 +259,15 @@ class ExposedRouterRepository : RouterRepository {
             ?.get(RoutersTable.wgAllowedIp)
     }
 
+    override suspend fun findMaxDnatPortBase(): Int? = dbQuery {
+        RoutersTable.select(RoutersTable.dnatPortBase)
+            .where { RoutersTable.status neq "REVOKED" }
+            .orderBy(RoutersTable.dnatPortBase, SortOrder.DESC)
+            .limit(1)
+            .firstOrNull()
+            ?.get(RoutersTable.dnatPortBase)
+    }
+
     override suspend fun create(router: Router): Router = dbQuery {
         RoutersTable.insert {
             it[id] = router.id
@@ -265,10 +277,12 @@ class ExposedRouterRepository : RouterRepository {
             it[wgPublicKey] = router.wgPublicKey
             it[wgAllowedIp] = router.wgAllowedIp
             it[wgEndpoint] = router.wgEndpoint
+            it[dnatPortBase] = router.dnatPortBase
             it[apiPort] = router.apiPort
             it[apiUsername] = router.apiUsername
             it[apiPasswordEnc] = router.apiPasswordEnc
             it[status] = router.status.name
+            it[provisionedAt] = router.provisionedAt
             it[createdAt] = router.createdAt
             it[updatedAt] = router.updatedAt
         }
@@ -279,8 +293,10 @@ class ExposedRouterRepository : RouterRepository {
         RoutersTable.update({ RoutersTable.id eq router.id }) {
             it[name] = router.name
             it[macAddress] = router.macAddress
+            it[wgPublicKey] = router.wgPublicKey
             it[status] = router.status.name
             it[lastHandshakeAt] = router.lastHandshakeAt
+            it[provisionedAt] = router.provisionedAt
             it[deletedAt] = router.deletedAt
         }
         router

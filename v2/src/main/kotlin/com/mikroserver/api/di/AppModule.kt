@@ -69,6 +69,6 @@ fun appModule(config: AppConfig) = module {
     single { RefreshTokenUseCase(get(), get(), get(), get()) }
     single { OnboardRouterUseCase(get(), get(), get(), get()) }
     single { GenerateVoucherUseCase(get(), get(), get(), get(), get(), get(), get()) }
-    single { ProcessWaveWebhookUseCase(get(), get(), get(), get(), get()) }
+    single { ProcessWaveWebhookUseCase(get(), get(), get(), get(), get(), get()) }
     single { PollSessionsUseCase(get(), get(), get(), get(), get(), get(), get()) }
 }

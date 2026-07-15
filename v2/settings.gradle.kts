@@ -1,9 +1,9 @@
 rootProject.name = "mikroserver"
 
+// `gradle/libs.versions.toml` is auto-imported by Gradle as the `libs` catalog;
+// declaring it again here would call `from` twice and fail catalog validation.
 dependencyResolutionManagement {
-    versionCatalogs {
-        create("libs") {
-            from(files("gradle/libs.versions.toml"))
-        }
+    repositories {
+        mavenCentral()
     }
 }

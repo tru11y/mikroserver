@@ -16,13 +16,14 @@ class PasswordService {
         private const val MEMORY_KB = 19456
         private const val ITERATIONS = 2
         private const val PARALLELISM = 1
-        private const val HASH_LENGTH = 32
-        private const val SALT_LENGTH = 16
     }
 
-    /** Hash a plaintext password. Runs on [Dispatchers.IO] since Argon2 is CPU-bound. */
+    /**
+     * Hash a plaintext password. Runs on [Dispatchers.IO] since Argon2 is CPU-bound.
+     * Salt (16 bytes) and hash length (32 bytes) use the library defaults.
+     */
     suspend fun hash(password: String): String = withContext(Dispatchers.IO) {
-        argon2.hash(ITERATIONS, MEMORY_KB, PARALLELISM, password.toCharArray(), SALT_LENGTH, HASH_LENGTH)
+        argon2.hash(ITERATIONS, MEMORY_KB, PARALLELISM, password.toCharArray())
     }
 
     /** Verify a plaintext password against a stored hash. */

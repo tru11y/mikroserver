@@ -87,6 +87,7 @@ dependencies {
 
     // Kotlinx
     implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.kotlinx.coroutines.slf4j)
     implementation(libs.kotlinx.datetime)
 
     // Test

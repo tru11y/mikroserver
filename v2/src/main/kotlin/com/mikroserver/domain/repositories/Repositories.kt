@@ -27,6 +27,7 @@ interface RouterRepository {
     suspend fun findByOperatorId(operatorId: UUID): List<Router>
     suspend fun findOnlineRouters(): List<Router>
     suspend fun findMaxWgIp(): String?
+    suspend fun findMaxDnatPortBase(): Int?
     suspend fun create(router: Router): Router
     suspend fun update(router: Router): Router
 }

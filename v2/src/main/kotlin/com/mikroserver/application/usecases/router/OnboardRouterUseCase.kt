@@ -45,6 +45,8 @@ class OnboardRouterUseCase(
         // Assign next free WG IP (concurrency-safe via UNIQUE constraint on wg_allowed_ip)
         val nextIp = allocateNextIp()
             ?: return AppResult.err(AppError.InfrastructureError("WireGuard subnet exhausted"))
+        val nextPortBase = allocateNextPortBase()
+            ?: return AppResult.err(AppError.InfrastructureError("DNAT port range exhausted"))
 
         val now = Clock.System.now()
         val routerId = UUID.randomUUID()
@@ -57,11 +59,13 @@ class OnboardRouterUseCase(
             wgPublicKey = keyPair.publicKey,
             wgAllowedIp = nextIp,
             wgEndpoint = null,
+            dnatPortBase = nextPortBase,
             apiPort = 8728,
             apiUsername = "admin",
             apiPasswordEnc = null,
-            status = RouterStatus.OFFLINE,
+            status = RouterStatus.PROVISIONING,
             lastHandshakeAt = null,
+            provisionedAt = now,
             createdAt = now,
             updatedAt = now,
         )
@@ -84,7 +88,7 @@ class OnboardRouterUseCase(
             log.error("WG addPeer failed for router {}, rolling back", routerId)
             // Soft-delete the router row since WG peer wasn't added
             routerRepository.update(router.copy(deletedAt = now))
-            return addResult.map { }
+            return AppResult.err(addResult.errorOrNull()!!)
         }
 
         // Persist WG config to survive reboots
@@ -130,5 +134,17 @@ class OnboardRouterUseCase(
         val nextOctet = lastOctet + 1
         if (nextOctet > 254) return null
         return "10.66.66.$nextOctet"
+    }
+
+    /**
+     * Allocate the next free DNAT port block (blocks of 10 from 19000).
+     * Temporary inline allocator — replaced by [PortAllocator] with a proper
+     * SELECT ... FOR UPDATE lock in the ProvisioningService (step 6).
+     */
+    private suspend fun allocateNextPortBase(): Int? {
+        val maxBase = routerRepository.findMaxDnatPortBase() ?: (19000 - 10)
+        val nextBase = maxBase + 10
+        if (nextBase > 19990) return null
+        return nextBase
     }
 }

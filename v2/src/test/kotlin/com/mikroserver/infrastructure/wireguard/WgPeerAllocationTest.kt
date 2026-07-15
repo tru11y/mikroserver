@@ -65,6 +65,7 @@ class WgPeerAllocationTest {
 
         val routerRepo = object : RouterRepository {
             override suspend fun findMaxWgIp(): String? = maxIpRef.get()
+            override suspend fun findMaxDnatPortBase(): Int? = null
             override suspend fun create(router: Router): Router {
                 // Simulate DB UNIQUE constraint: fail if IP already taken
                 if (allocated.putIfAbsent(router.wgAllowedIp, true) != null) {

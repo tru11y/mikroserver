@@ -81,7 +81,7 @@ class PollSessionsUseCase(
         ) {
             RouterStatus.OFFLINE
         } else {
-            RouterStatus.ONLINE
+            RouterStatus.ACTIVE
         }
 
         if (newStatus != router.status) {

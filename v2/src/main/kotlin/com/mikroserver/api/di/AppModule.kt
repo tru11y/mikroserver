@@ -26,7 +26,9 @@ import com.mikroserver.infrastructure.allocation.ExposedPortAllocator
 import com.mikroserver.infrastructure.allocation.IpAllocator
 import com.mikroserver.infrastructure.allocation.PortAllocator
 import com.mikroserver.infrastructure.wireguard.BouncyCastleWireGuardKeyGenerator
+import com.mikroserver.infrastructure.wireguard.NsenterWgPeerManager
 import com.mikroserver.infrastructure.wireguard.NsenterWireGuardController
+import com.mikroserver.infrastructure.wireguard.WgPeerManager
 import com.mikroserver.infrastructure.wireguard.WireGuardController
 import com.mikroserver.infrastructure.wireguard.WireGuardKeyGenerator
 import com.mikroserver.shared.AppConfig
@@ -65,6 +67,7 @@ fun appModule(config: AppConfig) = module {
     single<RouterOsClient> { RouterOsApiClient() }
     single<RouterOsScriptBuilder> { DefaultRouterOsScriptBuilder() }
     single<WireGuardController> { NsenterWireGuardController() }
+    single<WgPeerManager> { NsenterWgPeerManager(config.wireguard.interfaceName) }
     single<WireGuardKeyGenerator> { BouncyCastleWireGuardKeyGenerator() }
     single<IpAllocator> { ExposedIpAllocator() }
     single<PortAllocator> { ExposedPortAllocator() }

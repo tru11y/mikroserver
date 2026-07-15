@@ -3,7 +3,7 @@ package com.mikroserver.domain.entities
 import kotlinx.serialization.Serializable
 
 @Serializable
-enum class RouterStatus { OFFLINE, ONLINE, DEGRADED }
+enum class RouterStatus { PROVISIONING, ACTIVE, OFFLINE, REVOKED }
 
 @Serializable
 enum class VoucherStatus { PENDING, ACTIVE, CONSUMED, EXPIRED }

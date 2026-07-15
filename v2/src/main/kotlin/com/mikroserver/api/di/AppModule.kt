@@ -2,7 +2,8 @@ package com.mikroserver.api.di
 
 import com.mikroserver.application.usecases.auth.LoginUseCase
 import com.mikroserver.application.usecases.auth.RefreshTokenUseCase
-import com.mikroserver.application.usecases.router.OnboardRouterUseCase
+import com.mikroserver.application.usecases.router.HandshakePoller
+import com.mikroserver.application.usecases.router.ProvisioningService
 import com.mikroserver.application.usecases.session.PollSessionsUseCase
 import com.mikroserver.application.usecases.voucher.GenerateVoucherUseCase
 import com.mikroserver.application.usecases.webhook.ProcessWaveWebhookUseCase
@@ -11,16 +12,27 @@ import com.mikroserver.infrastructure.persistence.*
 import com.mikroserver.infrastructure.queue.RedisJobQueue
 import com.mikroserver.infrastructure.queue.VoucherWorker
 import com.mikroserver.infrastructure.resilience.RouterCircuitBreakerRegistry
+import com.mikroserver.infrastructure.routeros.DefaultRouterOsScriptBuilder
 import com.mikroserver.infrastructure.routeros.RouterOsApiClient
 import com.mikroserver.infrastructure.routeros.RouterOsClient
+import com.mikroserver.infrastructure.routeros.RouterOsScriptBuilder
 import com.mikroserver.infrastructure.security.HmacVerifier
 import com.mikroserver.infrastructure.security.JwtService
 import com.mikroserver.infrastructure.security.PasswordService
+import com.mikroserver.infrastructure.security.RouterTokenService
 import com.mikroserver.infrastructure.wave.SandboxWaveClient
 import com.mikroserver.infrastructure.wave.WavePaymentClient
 import com.mikroserver.infrastructure.wave.WaveWebhookVerifier
+import com.mikroserver.infrastructure.allocation.ExposedIpAllocator
+import com.mikroserver.infrastructure.allocation.ExposedPortAllocator
+import com.mikroserver.infrastructure.allocation.IpAllocator
+import com.mikroserver.infrastructure.allocation.PortAllocator
+import com.mikroserver.infrastructure.wireguard.BouncyCastleWireGuardKeyGenerator
+import com.mikroserver.infrastructure.wireguard.NsenterWgPeerManager
 import com.mikroserver.infrastructure.wireguard.NsenterWireGuardController
+import com.mikroserver.infrastructure.wireguard.WgPeerManager
 import com.mikroserver.infrastructure.wireguard.WireGuardController
+import com.mikroserver.infrastructure.wireguard.WireGuardKeyGenerator
 import com.mikroserver.shared.AppConfig
 import kotlinx.serialization.json.Json
 import org.koin.dsl.module
@@ -40,8 +52,10 @@ fun appModule(config: AppConfig) = module {
     single { JwtService(get()) }
     single { PasswordService() }
     single { HmacVerifier(config.wave.webhookSecret) }
+    single { RouterTokenService(config.wireguard.heartbeatSecret) }
 
     // ── Infrastructure: Persistence ──────────────────────────────────────────
+    single<TransactionRunner> { ExposedTransactionRunner() }
     single<OperatorRepository> { ExposedOperatorRepository() }
     single<UserRepository> { ExposedUserRepository() }
     single<RouterRepository> { ExposedRouterRepository() }
@@ -55,7 +69,12 @@ fun appModule(config: AppConfig) = module {
 
     // ── Infrastructure: External ─────────────────────────────────────────────
     single<RouterOsClient> { RouterOsApiClient() }
+    single<RouterOsScriptBuilder> { DefaultRouterOsScriptBuilder() }
     single<WireGuardController> { NsenterWireGuardController() }
+    single<WgPeerManager> { NsenterWgPeerManager(config.wireguard.interfaceName) }
+    single<WireGuardKeyGenerator> { BouncyCastleWireGuardKeyGenerator() }
+    single<IpAllocator> { ExposedIpAllocator() }
+    single<PortAllocator> { ExposedPortAllocator() }
     single<WavePaymentClient> { SandboxWaveClient() }
     single { WaveWebhookVerifier(get(), get()) }
     single { RouterCircuitBreakerRegistry() }
@@ -67,8 +86,9 @@ fun appModule(config: AppConfig) = module {
     // ── Application: Use Cases ───────────────────────────────────────────────
     single { LoginUseCase(get(), get(), get(), get(), get()) }
     single { RefreshTokenUseCase(get(), get(), get(), get()) }
-    single { OnboardRouterUseCase(get(), get(), get(), get()) }
+    single { ProvisioningService(get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     single { GenerateVoucherUseCase(get(), get(), get(), get(), get(), get(), get()) }
-    single { ProcessWaveWebhookUseCase(get(), get(), get(), get(), get()) }
-    single { PollSessionsUseCase(get(), get(), get(), get(), get(), get(), get()) }
+    single { ProcessWaveWebhookUseCase(get(), get(), get(), get(), get(), get()) }
+    single { PollSessionsUseCase(get(), get(), get(), get(), get(), get()) }
+    single { HandshakePoller(get(), get(), get()) }
 }

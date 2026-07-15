@@ -2,9 +2,6 @@ package com.mikroserver.application.usecases.session
 
 import com.mikroserver.domain.entities.HotspotSession
 import com.mikroserver.domain.entities.Router
-import com.mikroserver.domain.entities.RouterStatus
-import com.mikroserver.domain.events.DomainEvent
-import com.mikroserver.domain.repositories.OutboxRepository
 import com.mikroserver.domain.repositories.RouterRepository
 import com.mikroserver.domain.repositories.SessionRepository
 import com.mikroserver.infrastructure.resilience.RouterCircuitBreakerRegistry
@@ -14,7 +11,6 @@ import com.mikroserver.shared.AppConfig
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException
 import kotlinx.coroutines.*
 import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
 import org.slf4j.LoggerFactory
 import java.util.UUID
 
@@ -26,7 +22,6 @@ import java.util.UUID
 class PollSessionsUseCase(
     private val routerRepository: RouterRepository,
     private val sessionRepository: SessionRepository,
-    private val outboxRepository: OutboxRepository,
     private val routerOsClient: RouterOsClient,
     private val wireGuardController: WireGuardController,
     private val circuitBreakerRegistry: RouterCircuitBreakerRegistry,
@@ -76,27 +71,9 @@ class PollSessionsUseCase(
         val handshakeEpoch = handshakeResult.getOrNull() ?: 0L
         val now = Clock.System.now()
 
-        val newStatus = if (handshakeEpoch == 0L ||
-            (now.epochSeconds - handshakeEpoch) > HANDSHAKE_STALE_SECONDS
-        ) {
-            RouterStatus.OFFLINE
-        } else {
-            RouterStatus.ONLINE
-        }
-
-        if (newStatus != router.status) {
-            routerRepository.update(router.copy(status = newStatus, lastHandshakeAt = Instant.fromEpochSeconds(handshakeEpoch)))
-            outboxRepository.save(
-                DomainEvent.RouterStatusChanged(
-                    aggregateId = router.id,
-                    oldStatus = router.status.name,
-                    newStatus = newStatus.name,
-                ),
-            )
-            log.info("Router {} status changed: {} → {}", router.name, router.status, newStatus)
-        }
-
-        if (newStatus == RouterStatus.OFFLINE) return
+        // HandshakePoller owns status transitions; here we only skip unreachable routers.
+        val stale = handshakeEpoch == 0L || (now.epochSeconds - handshakeEpoch) > HANDSHAKE_STALE_SECONDS
+        if (stale) return
 
         // Fetch active sessions from RouterOS
         val cb = circuitBreakerRegistry.forRouter(router.id)

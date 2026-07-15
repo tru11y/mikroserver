@@ -10,6 +10,7 @@ import io.ktor.server.auth.Authentication
 import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.jwt.jwt
 import io.ktor.server.plugins.cors.routing.CORS
+import io.ktor.server.response.respond
 import org.koin.ktor.ext.inject
 
 fun Application.configureSecurity() {

@@ -6,6 +6,7 @@ import com.mikroserver.api.routes.authRoutes
 import com.mikroserver.api.routes.healthRoutes
 import com.mikroserver.api.routes.routerRoutes
 import com.mikroserver.api.routes.webhookRoutes
+import com.mikroserver.application.usecases.router.HandshakePoller
 import com.mikroserver.application.usecases.session.PollSessionsUseCase
 import com.mikroserver.infrastructure.persistence.DatabaseFactory
 import com.mikroserver.infrastructure.queue.RedisJobQueue
@@ -75,6 +76,9 @@ fun Application.module() {
 
     val pollSessionsUseCase by inject<PollSessionsUseCase>()
     pollSessionsUseCase.start(workerScope)
+
+    val handshakePoller by inject<HandshakePoller>()
+    handshakePoller.start(workerScope)
 
     log.info("MikroServer v2 started on port {}", config.environment)
 }

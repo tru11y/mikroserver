@@ -52,6 +52,25 @@ data class WgProvisionResponse(
     val vpsEndpoint: String,
 )
 
+@Serializable
+data class ProvisionRequest(val name: String)
+
+/** Returned once per (re)provision — [provisioningScript] carries the ephemeral private key. */
+@Serializable
+data class ProvisionResponse(
+    val routerId: String,
+    val provisioningScript: String,
+    val expectedIp: String,
+    val dnatPortBase: Int,
+    val publicManagementUrl: String,
+)
+
+@Serializable
+data class RouterStatusResponse(
+    val status: String,
+    val lastHandshakeAt: String?,
+)
+
 // ── Webhooks ─────────────────────────────────────────────────────────────────
 
 @Serializable

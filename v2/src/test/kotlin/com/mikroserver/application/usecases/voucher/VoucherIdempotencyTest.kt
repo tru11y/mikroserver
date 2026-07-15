@@ -30,8 +30,8 @@ class VoucherIdempotencyTest {
     private val testRouter = Router(
         id = routerId, operatorId = operatorId, name = "TestRouter",
         macAddress = null, wgPublicKey = "pubkey", wgAllowedIp = "10.66.66.2",
-        wgEndpoint = null, apiPort = 8728, apiUsername = "admin", apiPasswordEnc = null,
-        status = RouterStatus.ONLINE, lastHandshakeAt = now, createdAt = now, updatedAt = now,
+        wgEndpoint = null, dnatPortBase = 19000, apiPort = 8728, apiUsername = "admin", apiPasswordEnc = null,
+        status = RouterStatus.ACTIVE, lastHandshakeAt = now, provisionedAt = now, createdAt = now, updatedAt = now,
     )
 
     private val existingVoucher = Voucher(
@@ -62,7 +62,9 @@ class VoucherIdempotencyTest {
             override suspend fun findById(id: UUID) = testRouter
             override suspend fun findByOperatorId(operatorId: UUID) = emptyList<Router>()
             override suspend fun findOnlineRouters() = emptyList<Router>()
+            override suspend fun findManaged() = emptyList<Router>()
             override suspend fun findMaxWgIp() = null
+            override suspend fun findMaxDnatPortBase() = null
             override suspend fun create(router: Router) = router
             override suspend fun update(router: Router) = router
         }

@@ -49,6 +49,9 @@ data class WireGuardConfig(
     val serverPort: Int,
     val serverEndpoint: String,
     val serverPublicKey: String?,
+    /** HMAC secret used to derive per-router heartbeat tokens. Last field: defaulted
+     *  so positional test constructors keep compiling. */
+    val heartbeatSecret: String = "",
 )
 
 data class CorsConfig(
@@ -88,6 +91,7 @@ fun ApplicationEnvironment.loadAppConfig(): AppConfig {
             serverPort = c.property("wireguard.serverPort").getString().toInt(),
             serverEndpoint = c.property("wireguard.serverEndpoint").getString(),
             serverPublicKey = c.propertyOrNull("wireguard.serverPublicKey")?.getString(),
+            heartbeatSecret = c.propertyOrNull("wireguard.heartbeatSecret")?.getString().orEmpty(),
         ),
         cors = CorsConfig(
             allowedOrigins = c.property("cors.allowedOrigins").getString()

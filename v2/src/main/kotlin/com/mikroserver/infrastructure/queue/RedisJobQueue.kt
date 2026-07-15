@@ -1,9 +1,11 @@
 package com.mikroserver.infrastructure.queue
 
+import io.lettuce.core.ExperimentalLettuceCoroutinesApi
 import io.lettuce.core.RedisClient
 import io.lettuce.core.api.coroutines
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.toList
 import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -15,6 +17,7 @@ import java.util.UUID
  * Minimal BullMQ-equivalent job queue backed by Redis (Lettuce).
  * Supports delayed jobs, retries with exponential backoff, and DLQ.
  */
+@OptIn(ExperimentalLettuceCoroutinesApi::class)
 class RedisJobQueue(
     redisUrl: String,
     private val json: Json,
@@ -103,8 +106,7 @@ class RedisJobQueue(
             while (isActive) {
                 try {
                     val now = Clock.System.now().toEpochMilliseconds().toDouble()
-                    val ready = redis.zrangebyscore(DELAYED_KEY, io.lettuce.core.Range.create(0.0, now))
-                        ?.toList() ?: emptyList()
+                    val ready = redis.zrangebyscore(DELAYED_KEY, io.lettuce.core.Range.create(0.0, now)).toList()
 
                     for (serialized in ready) {
                         val job = json.decodeFromString(Job.serializer(), serialized)

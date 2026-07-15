@@ -13,7 +13,7 @@ logback = "1.5.12"
 logstash-logback = "8.0"
 argon2 = "2.11"
 bouncycastle = "1.79"
-lettuce = "6.4.1"
+lettuce = "6.4.1.RELEASE"
 postgresql = "42.7.4"
 hikari = "6.1.0"
 konform = "0.7.0"
@@ -81,6 +81,7 @@ logstash-logback = { module = "net.logstash.logback:logstash-logback-encoder", v
 
 # Kotlinx
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
+kotlinx-coroutines-slf4j = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-slf4j", version.ref = "kotlinx-coroutines" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
 
 # Test

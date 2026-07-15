@@ -191,6 +191,8 @@ private class InMemoryRouterRepository : RouterRepository {
     override suspend fun findByOperatorId(operatorId: UUID): List<Router> =
         byId.values.filter { it.operatorId == operatorId && it.deletedAt == null }
     override suspend fun findOnlineRouters(): List<Router> = emptyList()
+    override suspend fun findManaged(): List<Router> =
+        byId.values.filter { it.status != RouterStatus.REVOKED && it.deletedAt == null }
     override suspend fun findMaxWgIp(): String? = null
     override suspend fun findMaxDnatPortBase(): Int? = null
     override suspend fun create(router: Router): Router { byId[router.id] = router; return router }

@@ -26,6 +26,8 @@ interface RouterRepository {
     suspend fun findById(id: UUID): Router?
     suspend fun findByOperatorId(operatorId: UUID): List<Router>
     suspend fun findOnlineRouters(): List<Router>
+    /** Non-revoked, non-deleted routers (candidates for handshake reconciliation). */
+    suspend fun findManaged(): List<Router>
     suspend fun findMaxWgIp(): String?
     suspend fun findMaxDnatPortBase(): Int?
     suspend fun create(router: Router): Router

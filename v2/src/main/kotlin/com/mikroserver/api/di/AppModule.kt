@@ -2,6 +2,7 @@ package com.mikroserver.api.di
 
 import com.mikroserver.application.usecases.auth.LoginUseCase
 import com.mikroserver.application.usecases.auth.RefreshTokenUseCase
+import com.mikroserver.application.usecases.router.HandshakePoller
 import com.mikroserver.application.usecases.router.ProvisioningService
 import com.mikroserver.application.usecases.session.PollSessionsUseCase
 import com.mikroserver.application.usecases.voucher.GenerateVoucherUseCase
@@ -88,5 +89,6 @@ fun appModule(config: AppConfig) = module {
     single { ProvisioningService(get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     single { GenerateVoucherUseCase(get(), get(), get(), get(), get(), get(), get()) }
     single { ProcessWaveWebhookUseCase(get(), get(), get(), get(), get(), get()) }
-    single { PollSessionsUseCase(get(), get(), get(), get(), get(), get(), get()) }
+    single { PollSessionsUseCase(get(), get(), get(), get(), get(), get()) }
+    single { HandshakePoller(get(), get(), get()) }
 }

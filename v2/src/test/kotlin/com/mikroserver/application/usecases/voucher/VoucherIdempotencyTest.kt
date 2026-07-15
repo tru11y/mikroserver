@@ -62,6 +62,7 @@ class VoucherIdempotencyTest {
             override suspend fun findById(id: UUID) = testRouter
             override suspend fun findByOperatorId(operatorId: UUID) = emptyList<Router>()
             override suspend fun findOnlineRouters() = emptyList<Router>()
+            override suspend fun findManaged() = emptyList<Router>()
             override suspend fun findMaxWgIp() = null
             override suspend fun findMaxDnatPortBase() = null
             override suspend fun create(router: Router) = router

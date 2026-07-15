@@ -250,6 +250,12 @@ class ExposedRouterRepository : RouterRepository {
             .map { it.toRouter() }
     }
 
+    override suspend fun findManaged(): List<Router> = dbQuery {
+        RoutersTable.selectAll()
+            .where { (RoutersTable.status neq "REVOKED") and RoutersTable.deletedAt.isNull() }
+            .map { it.toRouter() }
+    }
+
     override suspend fun findMaxWgIp(): String? = dbQuery {
         RoutersTable.select(RoutersTable.wgAllowedIp)
             .where { RoutersTable.deletedAt.isNull() }

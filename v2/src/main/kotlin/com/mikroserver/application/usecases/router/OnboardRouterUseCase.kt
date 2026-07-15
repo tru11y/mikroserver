@@ -6,8 +6,8 @@ import com.mikroserver.domain.events.DomainEvent
 import com.mikroserver.domain.repositories.OutboxRepository
 import com.mikroserver.domain.repositories.RouterRepository
 import com.mikroserver.domain.values.WgProvision
-import com.mikroserver.infrastructure.wireguard.CryptoKeyGenerator
 import com.mikroserver.infrastructure.wireguard.WireGuardController
+import com.mikroserver.infrastructure.wireguard.WireGuardKeyGenerator
 import com.mikroserver.shared.AppConfig
 import com.mikroserver.shared.AppError
 import com.mikroserver.shared.AppResult
@@ -23,6 +23,7 @@ class OnboardRouterUseCase(
     private val routerRepository: RouterRepository,
     private val outboxRepository: OutboxRepository,
     private val wireGuardController: WireGuardController,
+    private val keyGenerator: WireGuardKeyGenerator,
     private val config: AppConfig,
 ) {
     private val log = LoggerFactory.getLogger(OnboardRouterUseCase::class.java)
@@ -39,8 +40,8 @@ class OnboardRouterUseCase(
     )
 
     suspend fun execute(command: Command): AppResult<Result> {
-        // Generate X25519 keypair
-        val keyPair = CryptoKeyGenerator.generateX25519KeyPair()
+        // Generate X25519 keypair (private key stays ephemeral, never persisted)
+        val keyPair = keyGenerator.generate()
 
         // Assign next free WG IP (concurrency-safe via UNIQUE constraint on wg_allowed_ip)
         val nextIp = allocateNextIp()

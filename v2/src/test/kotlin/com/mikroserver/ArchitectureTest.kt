@@ -20,7 +20,7 @@ class ArchitectureTest {
     fun `domain layer does not depend on api layer`() {
         noClasses()
             .that().resideInAPackage("..domain..")
-            .should().dependOnClassesThat().resideInAPackage("..api..")
+            .should().dependOnClassesThat().resideInAPackage("com.mikroserver.api..")
             .check(classes)
     }
 
@@ -36,7 +36,7 @@ class ArchitectureTest {
     fun `application layer does not depend on api layer`() {
         noClasses()
             .that().resideInAPackage("..application..")
-            .should().dependOnClassesThat().resideInAPackage("..api..")
+            .should().dependOnClassesThat().resideInAPackage("com.mikroserver.api..")
             .check(classes)
     }
 
@@ -44,7 +44,7 @@ class ArchitectureTest {
     fun `infrastructure does not depend on api layer`() {
         noClasses()
             .that().resideInAPackage("..infrastructure..")
-            .should().dependOnClassesThat().resideInAPackage("..api..")
+            .should().dependOnClassesThat().resideInAPackage("com.mikroserver.api..")
             .check(classes)
     }
 }

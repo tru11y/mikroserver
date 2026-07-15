@@ -19,8 +19,14 @@ import com.mikroserver.infrastructure.security.PasswordService
 import com.mikroserver.infrastructure.wave.SandboxWaveClient
 import com.mikroserver.infrastructure.wave.WavePaymentClient
 import com.mikroserver.infrastructure.wave.WaveWebhookVerifier
+import com.mikroserver.infrastructure.allocation.ExposedIpAllocator
+import com.mikroserver.infrastructure.allocation.ExposedPortAllocator
+import com.mikroserver.infrastructure.allocation.IpAllocator
+import com.mikroserver.infrastructure.allocation.PortAllocator
+import com.mikroserver.infrastructure.wireguard.BouncyCastleWireGuardKeyGenerator
 import com.mikroserver.infrastructure.wireguard.NsenterWireGuardController
 import com.mikroserver.infrastructure.wireguard.WireGuardController
+import com.mikroserver.infrastructure.wireguard.WireGuardKeyGenerator
 import com.mikroserver.shared.AppConfig
 import kotlinx.serialization.json.Json
 import org.koin.dsl.module
@@ -56,6 +62,9 @@ fun appModule(config: AppConfig) = module {
     // ── Infrastructure: External ─────────────────────────────────────────────
     single<RouterOsClient> { RouterOsApiClient() }
     single<WireGuardController> { NsenterWireGuardController() }
+    single<WireGuardKeyGenerator> { BouncyCastleWireGuardKeyGenerator() }
+    single<IpAllocator> { ExposedIpAllocator() }
+    single<PortAllocator> { ExposedPortAllocator() }
     single<WavePaymentClient> { SandboxWaveClient() }
     single { WaveWebhookVerifier(get(), get()) }
     single { RouterCircuitBreakerRegistry() }
@@ -67,7 +76,7 @@ fun appModule(config: AppConfig) = module {
     // ── Application: Use Cases ───────────────────────────────────────────────
     single { LoginUseCase(get(), get(), get(), get(), get()) }
     single { RefreshTokenUseCase(get(), get(), get(), get()) }
-    single { OnboardRouterUseCase(get(), get(), get(), get()) }
+    single { OnboardRouterUseCase(get(), get(), get(), get(), get()) }
     single { GenerateVoucherUseCase(get(), get(), get(), get(), get(), get(), get()) }
     single { ProcessWaveWebhookUseCase(get(), get(), get(), get(), get(), get()) }
     single { PollSessionsUseCase(get(), get(), get(), get(), get(), get(), get()) }

@@ -87,7 +87,7 @@ class WgPeerAllocationTest {
         }
 
         val wg = InMemoryWireGuardController()
-        val useCase = OnboardRouterUseCase(routerRepo, outbox, wg, testConfig)
+        val useCase = OnboardRouterUseCase(routerRepo, outbox, wg, BouncyCastleWireGuardKeyGenerator(), testConfig)
 
         // Allocate 5 routers sequentially
         val results = (1..5).map { i ->

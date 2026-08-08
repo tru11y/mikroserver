@@ -19,7 +19,7 @@
     "expo-clipboard": "~7.0.0",
     "expo-constants": "~18.0.13",
     "expo-file-system": "~19.0.21",
-    "expo-linking": "~8.0.11",
+    "expo-linking": "~55.0.14",
     "expo-router": "~6.0.0",
     "expo-secure-store": "~15.0.0",
     "expo-sharing": "~14.0.8",

@@ -42,6 +42,7 @@ describe("router hotspot delivery operations", () => {
       {
         prisma: prisma as never,
         getOrCreateBreaker: jest.fn(() => breaker as never),
+        decryptApiPassword: jest.fn((hash: string) => hash),
         logger,
       },
     );
@@ -106,6 +107,7 @@ describe("router hotspot delivery operations", () => {
         {
           prisma: prisma as never,
           getOrCreateBreaker: jest.fn(() => breaker as never),
+        decryptApiPassword: jest.fn((hash: string) => hash),
           logger,
         },
       ),

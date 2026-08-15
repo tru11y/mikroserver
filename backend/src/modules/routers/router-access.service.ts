@@ -14,8 +14,11 @@ import { UserRole } from "@prisma/client";
 import {
   decryptRouterAccessPasswordCompat,
   deriveRouterAccessKey,
+  deriveRouterApiKey,
   encryptRouterAccessPassword,
+  encryptRouterApiPassword,
   isRouterAccessPasswordEncrypted,
+  isRouterApiPasswordEncrypted,
 } from "./router-access.crypto";
 
 // ─── Service ────────────────────────────────────────────────────────────────
@@ -24,6 +27,7 @@ import {
 export class RouterAccessService implements OnModuleInit {
   private readonly logger = new Logger(RouterAccessService.name);
   private readonly encKey: Buffer;
+  private readonly apiKey: Buffer;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -32,6 +36,7 @@ export class RouterAccessService implements OnModuleInit {
     const raw = this.configService.get<string>("ENCRYPTION_KEY");
     if (!raw) throw new Error("ENCRYPTION_KEY env var is not set");
     this.encKey = deriveRouterAccessKey(raw);
+    this.apiKey = deriveRouterApiKey(raw);
   }
 
   async onModuleInit(): Promise<void> {
@@ -42,6 +47,48 @@ export class RouterAccessService implements OnModuleInit {
         `Failed to migrate legacy router access passwords: ${(error as Error).message}`,
       );
     }
+    try {
+      await this.reEncryptLegacyPlaintextApiPasswords();
+    } catch (error) {
+      this.logger.error(
+        `Failed to migrate legacy router API passwords: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  private async reEncryptLegacyPlaintextApiPasswords(): Promise<void> {
+    const routers = await this.prisma.router.findMany({
+      where: { deletedAt: null },
+      select: { id: true, apiPasswordHash: true },
+    });
+
+    const legacy = routers.filter(
+      (router) =>
+        router.apiPasswordHash &&
+        !isRouterApiPasswordEncrypted(router.apiPasswordHash),
+    );
+
+    if (legacy.length === 0) {
+      return;
+    }
+
+    await this.prisma.$transaction(
+      legacy.map((router) =>
+        this.prisma.router.update({
+          where: { id: router.id },
+          data: {
+            apiPasswordHash: encryptRouterApiPassword(
+              router.apiPasswordHash,
+              this.apiKey,
+            ),
+          },
+        }),
+      ),
+    );
+
+    this.logger.warn(
+      `[Security] Migrated ${legacy.length} router API password(s) from plaintext to AES-256-GCM`,
+    );
   }
 
   private async reEncryptLegacyPlaintextPasswords(): Promise<void> {

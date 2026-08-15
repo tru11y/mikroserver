@@ -115,10 +115,7 @@ export class MockProvider implements IPaymentProvider {
       externalEventId: parsed.id ?? `mock-event-${Date.now()}`,
       externalReference: parsed.externalReference ?? parsed.id ?? "mock-ref",
       status: (parsed.status ?? "SUCCESS") as
-        | "PENDING"
-        | "FAILED"
-        | "EXPIRED"
-        | "SUCCESS",
+        "PENDING" | "FAILED" | "EXPIRED" | "SUCCESS",
       amountXof: parsed.amountXof ?? 0,
       customerPhone: parsed.customerPhone,
       paidAt: parsed.paidAt ? new Date(parsed.paidAt) : new Date(),

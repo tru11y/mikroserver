@@ -44,35 +44,6 @@ export const jwtConfig = registerAs("jwt", () => {
   };
 });
 
-export const waveConfig = registerAs("wave", () => {
-  const cfg = getConfig();
-  return {
-    apiUrl: cfg.WAVE_API_URL,
-    apiKey: cfg.WAVE_API_KEY,
-    webhookSecret: cfg.WAVE_WEBHOOK_SECRET,
-    currency: cfg.WAVE_CURRENCY,
-    checkoutUrl: cfg.WAVE_CHECKOUT_URL,
-    successUrl: cfg.WAVE_SUCCESS_URL,
-    errorUrl: cfg.WAVE_ERROR_URL,
-    allowedIps: cfg.WAVE_ALLOWED_IPS,
-  };
-});
-
-export const cinetpayConfig = registerAs("cinetpay", () => {
-  const cfg = getConfig();
-  return {
-    apiUrl: cfg.CINETPAY_API_URL,
-    siteId: cfg.CINETPAY_SITE_ID,
-    apiKey: cfg.CINETPAY_API_KEY,
-    webhookSecret: cfg.CINETPAY_WEBHOOK_SECRET,
-    currency: cfg.CINETPAY_CURRENCY,
-    defaultChannel: cfg.CINETPAY_DEFAULT_CHANNEL,
-    notifyUrl: cfg.CINETPAY_NOTIFY_URL,
-    returnUrl: cfg.CINETPAY_RETURN_URL,
-    allowedIps: cfg.CINETPAY_ALLOWED_IPS,
-  };
-});
-
 export const mikrotikConfig = registerAs("mikrotik", () => {
   const cfg = getConfig();
   return {
@@ -108,7 +79,6 @@ export const securityConfig = registerAs("security", () => {
     argon2Memory: cfg.ARGON2_MEMORY,
     argon2Iterations: cfg.ARGON2_ITERATIONS,
     argon2Parallelism: cfg.ARGON2_PARALLELISM,
-    waveAllowedIps: cfg.WAVE_ALLOWED_IPS,
     transactionExpiryMinutes: cfg.TRANSACTION_EXPIRY_MINUTES,
   };
 });

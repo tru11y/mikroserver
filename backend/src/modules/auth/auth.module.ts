@@ -12,12 +12,17 @@ import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { RolesGuard } from "./guards/roles.guard";
 import { PermissionsGuard } from "./guards/permissions.guard";
 import { AuditModule } from "../audit/audit.module";
+import { SaasModule } from "../saas/saas.module";
+import { SubscriptionActiveGuard } from "../saas/subscription-active.guard";
+import { NotificationsModule } from "../notifications/notifications.module";
 
 @Module({
   imports: [
     PassportModule.register({ defaultStrategy: "jwt" }),
     JwtModule.register({}), // Secrets injected per-call via ConfigService
     AuditModule,
+    SaasModule,
+    NotificationsModule,
   ],
   controllers: [AuthController],
   providers: [
@@ -26,10 +31,11 @@ import { AuditModule } from "../audit/audit.module";
     TwoFactorService,
     AuthService,
     JwtStrategy,
-    // Guards applied globally — opt-out with @Public() / @Roles() / @Permissions()
+    // Guards applied globally — opt-out with @Public() / @Roles() / @Permissions() / @SkipSubscriptionCheck()
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
+    { provide: APP_GUARD, useClass: SubscriptionActiveGuard },
   ],
   exports: [AuthService, AuthPasswordService, TwoFactorService, JwtModule],
 })

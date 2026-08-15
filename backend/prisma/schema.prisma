@@ -7,15 +7,40 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Tenant {
+  id        String       @id @default(uuid()) @db.Uuid
+  name      String       @db.VarChar(255)
+  slug      String       @unique @db.VarChar(255)
+  status    TenantStatus @default(ACTIVE)
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+  deletedAt DateTime?    @map("deleted_at")
+  users     User[]
+
+  @@index([status])
+  @@index([slug])
+  @@map("tenants")
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
 model User {
   id                                                         String          @id @default(uuid()) @db.Uuid
-  // Uniqueness enforced by partial indexes (see migration 20260524000000) — allows soft-deleted reuse
-  email                                                      String          @db.VarChar(255)
-  passwordHash                                               String          @map("password_hash") @db.VarChar(255)
+  email                                                      String          @unique @db.VarChar(255)
+  passwordHash                                               String?         @map("password_hash") @db.VarChar(255)
   firstName                                                  String          @map("first_name") @db.VarChar(100)
   lastName                                                   String          @map("last_name") @db.VarChar(100)
-  phone                                                      String?         @db.VarChar(20)
-  role                                                       UserRole        @default(ADMIN)
+  phone                                                      String?         @unique @db.VarChar(20)
+  role                                                       UserRole        @default(OWNER)
+  tenantId                                                   String?         @map("tenant_id") @db.Uuid
+  tenant                                                     Tenant?         @relation(fields: [tenantId], references: [id])
+  googleId                                                   String?         @unique @map("google_id") @db.VarChar(255)
+  country                                                    String?         @db.VarChar(10)
+  notificationsEnabled                                       Boolean         @default(true) @map("notifications_enabled")
   status                                                     UserStatus      @default(PENDING_VERIFICATION)
   emailVerifiedAt                                            DateTime?       @map("email_verified_at")
   twoFactorSecret                                            String?         @map("two_factor_secret") @db.VarChar(255)
@@ -63,6 +88,7 @@ model User {
   @@index([deletedAt])
   @@index([current_subscription_id])
   @@index([customer_id])
+  @@index([tenantId])
   @@map("users")
 }
 
@@ -303,18 +329,17 @@ model Voucher {
   ip_bindings       ip_bindings[]
   session           Session?
   subscriptions     subscriptions?
-  batch             VoucherBatch?  @relation(fields: [batchId], references: [id])
   createdBy         User?          @relation("UserVouchers", fields: [createdById], references: [id])
   plan              Plan           @relation(fields: [planId], references: [id])
   router            Router?        @relation(fields: [routerId], references: [id])
   transaction       Transaction?   @relation(fields: [transactionId], references: [id])
+  batch             VoucherBatch?  @relation(fields: [batchId], references: [id])
 
   @@index([status])
   @@index([code])
   @@index([routerId])
   @@index([planId])
   @@index([expiresAt])
-  @@index([batchId])
   @@index([status, routerId])
   @@map("vouchers")
 }
@@ -784,7 +809,9 @@ enum InvoiceStatus {
 
 enum UserRole {
   SUPER_ADMIN
+  OWNER
   ADMIN
+  MEMBER
   VIEWER
   RESELLER
 }

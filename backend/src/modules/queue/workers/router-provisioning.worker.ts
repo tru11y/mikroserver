@@ -9,6 +9,10 @@ import { QUEUE_NAMES, JOB_NAMES } from "../queue.constants";
 import { removeWireGuardPeer } from "../../provisioning/wireguard.utils";
 import { sleep } from "../../../common/helpers/sleep";
 import { RouterStatus } from "@prisma/client";
+import {
+  decryptRouterApiPasswordCompat,
+  deriveRouterApiKey,
+} from "../../routers/router-access.crypto";
 
 /**
  * Job payload — intentionally minimal.
@@ -61,6 +65,7 @@ export class RouterProvisioningWorker {
 
   private readonly POLL_INTERVAL_MS = 5_000;
   private readonly POLL_MAX_ATTEMPTS = 36; // 3 min
+  private routerApiKey: Buffer | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -69,6 +74,18 @@ export class RouterProvisioningWorker {
     private readonly safeOnboarding: RouterSafeOnboardingService,
     private readonly configService: ConfigService,
   ) {}
+
+  private getRouterApiKey(): Buffer {
+    if (this.routerApiKey) {
+      return this.routerApiKey;
+    }
+    const raw = this.configService.get<string>("ENCRYPTION_KEY");
+    if (!raw) {
+      throw new Error("ENCRYPTION_KEY env var is not set");
+    }
+    this.routerApiKey = deriveRouterApiKey(raw);
+    return this.routerApiKey;
+  }
 
   initialize(redisConnection: {
     host: string;
@@ -176,7 +193,10 @@ export class RouterProvisioningWorker {
       routerIp: localIp,
       apiPort: router.apiPort,
       apiUsername: router.apiUsername,
-      apiPassword: router.apiPasswordHash,
+      apiPassword: decryptRouterApiPasswordCompat(
+        router.apiPasswordHash,
+        this.getRouterApiKey(),
+      ).password,
       wgIp,
       wgPrivateKey: wg.privateKey,
       vpsPublicKey: wg.vpsPublicKey,

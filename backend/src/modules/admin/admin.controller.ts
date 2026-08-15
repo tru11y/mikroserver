@@ -1,35 +1,22 @@
 import {
   Controller,
   Get,
-  Post,
   Patch,
-  Delete,
   Param,
   Body,
   Query,
   ParseUUIDPipe,
-  ParseIntPipe,
-  DefaultValuePipe,
   UseGuards,
-  HttpCode,
-  HttpStatus,
 } from "@nestjs/common";
-import {
-  ApiTags,
-  ApiOperation,
-  ApiBearerAuth,
-  ApiParam,
-  ApiQuery,
-} from "@nestjs/swagger";
+import { ApiTags, ApiOperation, ApiBearerAuth } from "@nestjs/swagger";
 import { AdminService } from "./admin.service";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { UserRole } from "@prisma/client";
 import {
-  AssignSubscriptionDto,
-  CancelSubscriptionDto,
-  ProvisionOperatorDto,
-  RenewSubscriptionDto,
+  SetTenantStatusDto,
+  SetUserStatusDto,
+  UpdateTierDto,
 } from "./dto/admin.dto";
 
 @ApiTags("admin")
@@ -40,137 +27,106 @@ import {
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
-  // ---------------------------------------------------------------------------
-  // Operator listing & detail
-  // ---------------------------------------------------------------------------
+  @Get("metrics")
+  @ApiOperation({ summary: "Métriques plateforme (MRR, tenants, routeurs)" })
+  getMetrics() {
+    return this.adminService.getMetrics();
+  }
 
-  @Get("operators")
-  @ApiOperation({
-    summary: "Lister tous les opérateurs avec tier SaaS et stats d'usage",
-    description:
-      "Retourne chaque utilisateur ADMIN avec son tier actuel, " +
-      "le nombre de routeurs, de vouchers et le revenu mensuel/total. " +
-      "Accès : SUPER_ADMIN uniquement.",
-  })
-  @ApiQuery({ name: "page", required: false, type: Number })
-  @ApiQuery({ name: "limit", required: false, type: Number })
-  listOperators(
-    @Query("page", new DefaultValuePipe(1), ParseIntPipe) page: number,
-    @Query("limit", new DefaultValuePipe(25), ParseIntPipe) limit: number,
+  @Get("tenants")
+  @ApiOperation({ summary: "Lister les tenants (paginé, recherche par nom)" })
+  listTenants(
+    @Query("q") q?: string,
+    @Query("cursor") cursor?: string,
+    @Query("limit") limit?: string,
   ) {
-    return this.adminService.listOperators(page, Math.min(limit, 100));
+    return this.adminService.listTenants({
+      q,
+      cursor,
+      limit: limit ? Number(limit) : undefined,
+    });
   }
 
-  @Get("operators/:id")
-  @ApiOperation({ summary: "Détail d'un opérateur avec stats complètes" })
-  @ApiParam({ name: "id", description: "UUID de l'opérateur" })
-  getOperator(@Param("id", ParseUUIDPipe) id: string) {
-    return this.adminService.getOperator(id);
+  @Get("tenants/:id")
+  @ApiOperation({ summary: "Détail d'un tenant" })
+  getTenant(@Param("id", ParseUUIDPipe) id: string) {
+    return this.adminService.getTenant(id);
   }
 
-  // ---------------------------------------------------------------------------
-  // Operator provisioning
-  // ---------------------------------------------------------------------------
-
-  @Post("operators")
-  @ApiOperation({
-    summary: "Provisionner un nouvel opérateur (compte + abonnement optionnel)",
-    description:
-      "Crée un compte ADMIN actif et, si tierId est fourni, lui assigne immédiatement " +
-      "un abonnement SaaS. Retourne le mot de passe temporaire en clair — " +
-      "à transmettre à l'opérateur par canal sécurisé.",
-  })
-  provisionOperator(@Body() dto: ProvisionOperatorDto) {
-    return this.adminService.provisionOperator(dto);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Subscription management
-  // ---------------------------------------------------------------------------
-
-  @Get("subscriptions")
-  @ApiOperation({
-    summary: "Lister tous les abonnements opérateurs",
-    description:
-      "Retourne tous les OperatorSubscription avec tier, dates et statut. " +
-      "Utile pour avoir un tableau de bord de la facturation.",
-  })
-  @ApiQuery({ name: "page", required: false, type: Number })
-  @ApiQuery({ name: "limit", required: false, type: Number })
-  listSubscriptions(
-    @Query("page", new DefaultValuePipe(1), ParseIntPipe) page: number,
-    @Query("limit", new DefaultValuePipe(25), ParseIntPipe) limit: number,
-  ) {
-    return this.adminService.listSubscriptions(page, Math.min(limit, 100));
-  }
-
-  @Get("operators/:id/subscription")
-  @ApiOperation({ summary: "Voir l'abonnement d'un opérateur" })
-  @ApiParam({ name: "id", description: "UUID de l'opérateur" })
-  getOperatorSubscription(@Param("id", ParseUUIDPipe) id: string) {
-    return this.adminService.getOperatorSubscription(id);
-  }
-
-  @Post("operators/:id/subscription")
-  @ApiOperation({
-    summary: "Assigner ou changer le tier SaaS d'un opérateur",
-    description:
-      "Crée ou remplace l'abonnement de l'opérateur (upsert). " +
-      "Calcule automatiquement la date de fin selon le billing cycle. " +
-      "Utilise POST /operators/:id/subscription/renew pour prolonger sans changer de tier.",
-  })
-  @ApiParam({ name: "id", description: "UUID de l'opérateur" })
-  assignSubscription(
+  @Patch("tenants/:id/status")
+  @ApiOperation({ summary: "Activer/suspendre un tenant" })
+  setTenantStatus(
     @Param("id", ParseUUIDPipe) id: string,
-    @Body() dto: AssignSubscriptionDto,
+    @Body() dto: SetTenantStatusDto,
   ) {
-    return this.adminService.assignSubscription(id, dto);
+    return this.adminService.setTenantStatus(id, dto.status);
   }
 
-  @Post("operators/:id/subscription/renew")
-  @ApiOperation({
-    summary:
-      "Renouveler l'abonnement d'un opérateur (prolonger la date de fin)",
-    description:
-      "Étend la date de fin de l'abonnement actuel. " +
-      "Si months n'est pas fourni, applique 1 mois (mensuel) ou 12 mois (annuel).",
-  })
-  @ApiParam({ name: "id", description: "UUID de l'opérateur" })
-  renewSubscription(
+  @Get("users")
+  @ApiOperation({ summary: "Lister les utilisateurs (paginé)" })
+  listUsers(
+    @Query("q") q?: string,
+    @Query("tenantId") tenantId?: string,
+    @Query("cursor") cursor?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.adminService.listUsers({
+      q,
+      tenantId,
+      cursor,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  @Patch("users/:id/status")
+  @ApiOperation({ summary: "Activer/suspendre un utilisateur" })
+  setUserStatus(
     @Param("id", ParseUUIDPipe) id: string,
-    @Body() dto: RenewSubscriptionDto,
+    @Body() dto: SetUserStatusDto,
   ) {
-    return this.adminService.renewSubscription(id, dto);
+    return this.adminService.setUserStatus(id, dto.status);
   }
 
-  @Delete("operators/:id/subscription")
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: "Résilier l'abonnement d'un opérateur",
-    description:
-      "Passe le statut à CANCELLED. L'opérateur garde accès jusqu'à la date de fin " +
-      "(grace period géré par SubscriptionActiveGuard).",
-  })
-  @ApiParam({ name: "id", description: "UUID de l'opérateur" })
-  cancelSubscription(
-    @Param("id", ParseUUIDPipe) id: string,
-    @Body() dto: CancelSubscriptionDto,
+  @Get("invoices")
+  @ApiOperation({ summary: "Lister les factures plateforme" })
+  listInvoices(
+    @Query("status") status?: string,
+    @Query("cursor") cursor?: string,
+    @Query("limit") limit?: string,
   ) {
-    return this.adminService.cancelSubscription(id, dto);
+    return this.adminService.listInvoices({
+      status,
+      cursor,
+      limit: limit ? Number(limit) : undefined,
+    });
   }
-
-  // ---------------------------------------------------------------------------
-  // SaaS Tier management
-  // ---------------------------------------------------------------------------
 
   @Get("tiers")
-  @ApiOperation({
-    summary: "Lister tous les tiers SaaS (y compris inactifs)",
-    description:
-      "Vue SUPER_ADMIN : retourne tous les tiers, actifs et inactifs. " +
-      "Le endpoint public GET /saas/tiers ne retourne que les tiers actifs.",
-  })
+  @ApiOperation({ summary: "Lister les tiers SaaS (y compris inactifs)" })
   listTiers() {
-    return this.adminService.listAllTiers();
+    return this.adminService.listTiers();
+  }
+
+  @Patch("tiers/:id")
+  @ApiOperation({ summary: "Modifier un tier SaaS" })
+  updateTier(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: UpdateTierDto,
+  ) {
+    return this.adminService.updateTier(id, dto);
+  }
+
+  @Get("audit")
+  @ApiOperation({ summary: "Journal d'audit plateforme" })
+  listAudit(
+    @Query("tenantId") tenantId?: string,
+    @Query("cursor") cursor?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.adminService.listAudit({
+      tenantId,
+      cursor,
+      limit: limit ? Number(limit) : undefined,
+    });
   }
 }

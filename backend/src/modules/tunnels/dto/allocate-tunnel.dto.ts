@@ -15,6 +15,6 @@ export class AllocateTunnelResponseDto {
   @ApiProperty()
   serverPublicKey!: string;
 
-  @ApiProperty({ example: "vps.hotspotflow.ci:51820" })
+  @ApiProperty({ example: "vps.mikrolan.net:51820" })
   serverEndpoint!: string;
 }

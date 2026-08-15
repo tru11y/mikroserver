@@ -6,10 +6,10 @@ services:
     environment:
       NODE_ENV: staging
       LOG_LEVEL: ${LOG_LEVEL:-debug}
-      CORS_ORIGINS: ${CORS_ORIGINS:-https://staging-dashboard.mikroserver.ci}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://staging-dashboard.mikrolan.net}
       SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}
       OTEL_ENABLED: ${OTEL_ENABLED:-true}
-      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-mikroserver-api-staging}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-mikrolan-api-staging}
     ports:
       - "3100:3000"
 

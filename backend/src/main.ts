@@ -17,6 +17,7 @@ import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { RequestIdInterceptor } from "./common/interceptors/request-id.interceptor";
 import { TransformInterceptor } from "./common/interceptors/transform.interceptor";
 import { initializeOpenTelemetry } from "./common/observability/otel";
+import { initializeSentry } from "./common/observability/sentry";
 
 // Fastify's JSON serializer does not support BigInt natively.
 // Patch globally so all BigInt values serialize as strings (safe for JS clients via Number()).
@@ -27,6 +28,11 @@ import { initializeOpenTelemetry } from "./common/observability/otel";
 async function bootstrap(): Promise<void> {
   // Validate environment variables BEFORE anything else
   const config = loadAndValidateConfig();
+  initializeSentry({
+    dsn: config.SENTRY_DSN,
+    environment: process.env.NODE_ENV ?? "development",
+    tracesSampleRate: config.SENTRY_TRACES_SAMPLE_RATE,
+  });
   await initializeOpenTelemetry({
     enabled: config.OTEL_ENABLED,
     serviceName: config.OTEL_SERVICE_NAME,
@@ -159,7 +165,7 @@ async function bootstrap(): Promise<void> {
     const swaggerJsonPath = config.SWAGGER_JSON_PATH.replace(/^\/+/, "");
 
     const swaggerConfig = new DocumentBuilder()
-      .setTitle("MikroServer API")
+      .setTitle("MikroLan API")
       .setDescription("WiFi Monetization Platform API")
       .setVersion("1.0")
       .addBearerAuth()
@@ -191,7 +197,7 @@ async function bootstrap(): Promise<void> {
   await app.listen(config.PORT, "0.0.0.0");
 
   const logger = app.get(Logger);
-  logger.log(`MikroServer API listening on port ${config.PORT}`, "Bootstrap");
+  logger.log(`MikroLan API listening on port ${config.PORT}`, "Bootstrap");
   logger.log(`Environment: ${config.NODE_ENV}`, "Bootstrap");
 }
 

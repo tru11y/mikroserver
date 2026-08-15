@@ -32,12 +32,17 @@ describe("CustomersController", () => {
   });
 
   it("delegates block/unblock action", () => {
-    controller.block("f17ff8de-6fd2-4488-b3c9-d45864553f99", {
-      isBlocked: true,
-    });
+    const user = { sub: "operator-1", role: "ADMIN" } as any;
+    controller.block(
+      "f17ff8de-6fd2-4488-b3c9-d45864553f99",
+      { isBlocked: true },
+      user,
+    );
     expect(customersService.block).toHaveBeenCalledWith(
       "f17ff8de-6fd2-4488-b3c9-d45864553f99",
       true,
+      "operator-1",
+      "ADMIN",
     );
   });
 });

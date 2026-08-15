@@ -79,8 +79,11 @@ export class ResellersController {
   @Get(":id")
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: "Get reseller" })
-  findOne(@Param("id", ParseUUIDPipe) id: string) {
-    return this.resellersService.findOne(id);
+  findOne(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.resellersService.findOne(id, user.sub, user.role);
   }
 
   @Post()
@@ -96,8 +99,9 @@ export class ResellersController {
   update(
     @Param("id", ParseUUIDPipe) id: string,
     @Body() body: UpdateResellerDto,
+    @CurrentUser() user: JwtPayload,
   ) {
-    return this.resellersService.update(id, body);
+    return this.resellersService.update(id, body, user.sub, user.role);
   }
 
   @Post(":id/credit")
@@ -106,16 +110,30 @@ export class ResellersController {
   addCredit(
     @Param("id", ParseUUIDPipe) id: string,
     @Body() body: AddCreditDto,
+    @CurrentUser() user: JwtPayload,
   ) {
-    return this.resellersService.addCredit(id, body.amountXof);
+    return this.resellersService.addCredit(
+      id,
+      body.amountXof,
+      user.sub,
+      user.role,
+    );
   }
 
   @Delete(":id")
   @Roles(UserRole.ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: "Deactivate reseller" })
-  deactivate(@Param("id", ParseUUIDPipe) id: string) {
-    return this.resellersService.update(id, { isActive: false });
+  deactivate(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.resellersService.update(
+      id,
+      { isActive: false },
+      user.sub,
+      user.role,
+    );
   }
 
   // --- Commission dashboard ---
@@ -172,7 +190,7 @@ export class ResellersController {
 
   @Patch("payouts/:id/approve")
   @Roles(UserRole.SUPER_ADMIN)
-  @ApiOperation({ summary: "Approve payout + record Wave reference" })
+  @ApiOperation({ summary: "Approve payout + record payment reference" })
   approvePayout(
     @Param("id", ParseUUIDPipe) id: string,
     @Body() body: ApprovePayoutDto,
@@ -180,7 +198,7 @@ export class ResellersController {
     return this.resellersService.processPayout(
       id,
       "approve",
-      body.waveReference,
+      body.paymentReference,
       body.notes,
     );
   }

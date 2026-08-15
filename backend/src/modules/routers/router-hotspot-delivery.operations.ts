@@ -33,6 +33,7 @@ interface RouterHotspotDeliveryDeps {
   getOrCreateBreaker: (
     routerId: string,
   ) => CircuitBreaker<[RouterCredentials, HotspotUserConfig], void>;
+  decryptApiPassword: (storedApiPasswordHash: string) => string;
   logger: {
     log: (message: string) => void;
     error: (message: string) => void;
@@ -58,7 +59,7 @@ export async function pushHotspotUserToRouter(
     wireguardIp: router.wireguardIp,
     apiPort: router.apiPort,
     apiUsername: router.apiUsername,
-    apiPasswordHash: router.apiPasswordHash,
+    apiPasswordHash: deps.decryptApiPassword(router.apiPasswordHash),
   };
 
   const breaker = deps.getOrCreateBreaker(routerId);

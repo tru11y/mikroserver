@@ -1,4 +1,4 @@
-const DEFAULT_SUPER_ADMIN_EMAIL = 'admin@mikroserver.com';
+const DEFAULT_SUPER_ADMIN_EMAIL = 'admin@mikrolan.net';
 const DEFAULT_SUPER_ADMIN_PASSWORD = '12345678';
 const DEFAULT_SUPER_ADMIN_FIRST_NAME = 'Super';
 const DEFAULT_SUPER_ADMIN_LAST_NAME = 'Admin';

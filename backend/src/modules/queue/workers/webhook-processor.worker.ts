@@ -21,9 +21,13 @@ import {
  * 1. Webhook receipt and processing are DECOUPLED:
  *    - Webhook controller stores raw event immediately (< 5ms)
  *    - This worker processes it asynchronously (1-2s for voucher generation)
- *    - Wave's webhook timeout is satisfied; customer gets instant response
+ *    - The payment aggregator's webhook timeout is satisfied; customer gets instant response
  * 2. Idempotency: job ID = "webhook-{eventId}" + DB check prevent double-processing
  * 3. Full transaction: payment update + voucher creation in one Prisma transaction
+ *
+ * No payment provider is wired up yet (MOCK only), so this worker currently has
+ * no producer. extractEventFields is a generic placeholder for the first real
+ * aggregator integration.
  */
 
 @Injectable()
@@ -89,11 +93,11 @@ export class WebhookProcessorWorker {
 
   /**
    * Normalize raw webhook payload to a provider-agnostic structure.
-   * Wave embeds its data under a `data` key; CinetPay uses flat `cpm_*` fields.
+   * Placeholder shape until a real payment aggregator is integrated.
    */
   private extractEventFields(
     payload: Record<string, unknown>,
-    provider: string,
+    _provider: string,
   ): {
     clientReference: string | undefined;
     paymentStatus: "succeeded" | "failed" | "expired" | "unknown";
@@ -101,55 +105,20 @@ export class WebhookProcessorWorker {
     paidAt: Date | undefined;
     failureReason: string | undefined;
   } {
-    if (provider === "CINETPAY") {
-      const cpmTransId = payload["cpm_trans_id"] as string | undefined;
-      const cpmStatus = payload["cpm_trans_status"] as string | undefined;
-      const payDate = payload["cpm_payment_date"] as string | undefined;
-      const payTime = payload["cpm_payment_time"] as string | undefined;
-
-      let paymentStatus: "succeeded" | "failed" | "expired" | "unknown";
-      if (cpmStatus === "ACCEPTED") paymentStatus = "succeeded";
-      else if (cpmStatus === "REFUSED" || cpmStatus === "CANCELLED")
-        paymentStatus = "failed";
-      else if (cpmStatus === "EXPIRED") paymentStatus = "expired";
-      else paymentStatus = "unknown";
-
-      let paidAt: Date | undefined;
-      if (payDate && payTime && paymentStatus === "succeeded") {
-        try {
-          paidAt = new Date(`${payDate} ${payTime}`);
-        } catch {
-          paidAt = new Date();
-        }
-      }
-
-      return {
-        clientReference: cpmTransId,
-        paymentStatus,
-        externalId: cpmTransId,
-        paidAt,
-        failureReason: payload["cpm_error_message"] as string | undefined,
-      };
-    }
-
-    // Wave (default)
-    const waveData = (payload["data"] as Record<string, unknown>) ?? payload;
-    const waveStatus = waveData["payment_status"] as string | undefined;
+    const status = payload["payment_status"] as string | undefined;
 
     let paymentStatus: "succeeded" | "failed" | "expired" | "unknown";
-    if (waveStatus === "succeeded") paymentStatus = "succeeded";
-    else if (waveStatus === "failed") paymentStatus = "failed";
-    else if (waveStatus === "expired") paymentStatus = "expired";
+    if (status === "succeeded") paymentStatus = "succeeded";
+    else if (status === "failed") paymentStatus = "failed";
+    else if (status === "expired") paymentStatus = "expired";
     else paymentStatus = "unknown";
 
-    const whenCompleted = waveData["when_completed"] as string | undefined;
-
     return {
-      clientReference: waveData["client_reference"] as string | undefined,
+      clientReference: payload["client_reference"] as string | undefined,
       paymentStatus,
-      externalId: waveData["id"] as string | undefined,
-      paidAt: whenCompleted ? new Date(whenCompleted) : new Date(),
-      failureReason: waveData["error_message"] as string | undefined,
+      externalId: payload["id"] as string | undefined,
+      paidAt: new Date(),
+      failureReason: payload["error_message"] as string | undefined,
     };
   }
 

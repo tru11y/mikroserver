@@ -10,21 +10,16 @@ import { FastifyRequest, FastifyReply } from "fastify";
 /**
  * Webhook IP Allowlist Middleware
  *
- * Only allows requests from Wave's known webhook IP ranges.
- * This is a defense-in-depth measure on top of HMAC verification.
- * If WAVE_ALLOWED_IPS is empty, all IPs are permitted (dev only).
+ * Only allows requests from the active payment aggregator's known webhook IP
+ * ranges. This is a defense-in-depth measure on top of HMAC verification.
+ * No provider is wired up yet, so the allowlist is empty (all IPs permitted).
  */
 @Injectable()
 export class WebhookIpAllowlistMiddleware implements NestMiddleware {
   private readonly logger = new Logger(WebhookIpAllowlistMiddleware.name);
-  private readonly allowedIps: string[];
+  private readonly allowedIps: string[] = [];
 
-  constructor(private readonly configService: ConfigService) {
-    this.allowedIps = this.configService.get<string[]>(
-      "security.waveAllowedIps",
-      [],
-    );
-  }
+  constructor(private readonly configService: ConfigService) {}
 
   use(
     req: FastifyRequest["raw"] & { ip?: string; ips?: string[] },

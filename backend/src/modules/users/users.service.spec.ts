@@ -135,12 +135,12 @@ describe("UsersService", () => {
     prisma.user.findUnique
       .mockResolvedValueOnce({
         id: "super-1",
-        email: "super@mikroserver.com",
+        email: "super@mikrolan.net",
         role: UserRole.SUPER_ADMIN,
       })
       .mockResolvedValueOnce({
         id: "admin-1",
-        email: "admin@mikroserver.com",
+        email: "admin@mikrolan.net",
         role: UserRole.ADMIN,
       });
 
@@ -156,7 +156,7 @@ describe("UsersService", () => {
     const { service, prisma } = createService();
     prisma.user.findUnique.mockResolvedValue({
       id: "super-1",
-      email: "super@mikroserver.local",
+      email: "super@mikrolan.local",
       role: UserRole.SUPER_ADMIN,
       permissionProfile: null,
       permissions: [],

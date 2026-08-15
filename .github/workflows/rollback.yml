@@ -1,5 +1,5 @@
 # =============================================================================
-# Rollback — Mikroserver
+# Rollback — MikroLan
 #
 # Manual-only workflow. Reverts api + dashboard to a specific image tag.
 # Safe to run at any time — never touches postgres, redis, nginx, or wg0.
@@ -57,8 +57,8 @@ jobs:
           script: |
             set -euo pipefail
 
-            COMPOSE="docker compose -f $HOME/mikroserver/infrastructure/docker/docker-compose.prod.yml --env-file $HOME/mikroserver/.env.prod"
-            DEPLOY_DIR="$HOME/mikroserver"
+            COMPOSE="docker compose -f $HOME/mikrolan/infrastructure/docker/docker-compose.prod.yml --env-file $HOME/mikrolan/.env.prod"
+            DEPLOY_DIR="$HOME/mikrolan"
 
             echo "==> ROLLBACK initiated by $ACTOR"
             echo "==> Target tag: $IMAGE_TAG"

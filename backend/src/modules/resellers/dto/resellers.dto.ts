@@ -167,7 +167,7 @@ export class ApprovePayoutDto {
   @IsOptional()
   @IsString()
   @MaxLength(255)
-  waveReference?: string;
+  paymentReference?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

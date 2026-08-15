@@ -1,6 +1,12 @@
 import { UserRole, Prisma } from "@prisma/client";
 
 /**
+ * Any service method that does `findUnique`/`update`/`delete` by raw `id` on
+ * a tenant-scoped model MUST apply one of these scope helpers first (e.g. via
+ * `findFirstOrThrow({ where: { id, ...scope } })` before the mutation) —
+ * Prisma's unique `where` can't carry extra filters, so the ownership check
+ * has to happen as a separate lookup.
+ *
  * Returns a Prisma `where` fragment that scopes a query to the operator's
  * own resources.  SUPER_ADMIN receives an empty fragment (sees everything).
  *
@@ -80,4 +86,38 @@ export function scopeTransactionToOwner(
     return {};
   }
   return { voucher: { router: { ownerId: userId } } };
+}
+
+/**
+ * Returns a Prisma `where` fragment for CustomerProfile queries scoped to
+ * the router's owner.
+ *
+ * SUPER_ADMIN: {}
+ * Others:      { router: { ownerId: userId } }
+ */
+export function scopeCustomerProfileToOwner(
+  userId: string,
+  role: UserRole,
+): Prisma.CustomerProfileWhereInput {
+  if (role === UserRole.SUPER_ADMIN) {
+    return {};
+  }
+  return { router: { ownerId: userId } };
+}
+
+/**
+ * Returns a Prisma `where` fragment for ResellerConfig queries scoped to the
+ * ADMIN/OWNER that manages the reseller (ResellerConfig.parentId).
+ *
+ * SUPER_ADMIN: {}
+ * Others:      { parentId: userId }
+ */
+export function scopeResellerConfigToOwner(
+  userId: string,
+  role: UserRole,
+): Prisma.ResellerConfigWhereInput {
+  if (role === UserRole.SUPER_ADMIN) {
+    return {};
+  }
+  return { parentId: userId };
 }

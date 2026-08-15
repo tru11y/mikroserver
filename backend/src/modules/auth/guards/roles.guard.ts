@@ -11,9 +11,11 @@ import { JwtPayload } from "../interfaces/jwt-payload.interface";
 import { FastifyRequest } from "fastify";
 
 const ROLE_HIERARCHY: Record<UserRole, number> = {
-  [UserRole.SUPER_ADMIN]: 4,
-  [UserRole.ADMIN]: 3,
-  [UserRole.RESELLER]: 2,
+  [UserRole.SUPER_ADMIN]: 6,
+  [UserRole.OWNER]: 5,
+  [UserRole.ADMIN]: 4,
+  [UserRole.RESELLER]: 3,
+  [UserRole.MEMBER]: 2,
   [UserRole.VIEWER]: 1,
 };
 

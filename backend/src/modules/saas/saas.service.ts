@@ -241,6 +241,43 @@ export class SaasService {
     });
   }
 
+  /**
+   * Auto-assigned at signup: puts a brand-new tenant on a 14-day trial of the
+   * first paid tier (no card required). `autoRenew: false` so the cron job
+   * (`expireSubscriptions`) marks it EXPIRED — not silently billed — once the
+   * trial ends; the tenant must explicitly `subscribe()` to keep going.
+   */
+  async startTrial(userId: string) {
+    const tier = await this.prisma.saasTier.findFirst({
+      where: { isFree: false, trialDays: { gt: 0 } },
+      orderBy: { displayOrder: "asc" },
+    });
+    if (!tier) {
+      this.logger.warn(
+        `No trial-eligible SaasTier found — skipping trial assignment for user ${userId}`,
+      );
+      return null;
+    }
+
+    const startDate = new Date();
+    const endDate = new Date(
+      startDate.getTime() + tier.trialDays * 24 * 60 * 60 * 1000,
+    );
+
+    return this.prisma.operatorSubscription.create({
+      data: {
+        userId,
+        tierId: tier.id,
+        billingCycle: BillingCycle.MONTHLY,
+        priceXof: tier.priceXofMonthly,
+        startDate,
+        endDate,
+        trialEndsAt: endDate,
+        autoRenew: false,
+      },
+    });
+  }
+
   async cancel(userId: string, reason?: string) {
     return this.prisma.operatorSubscription.update({
       where: { userId },

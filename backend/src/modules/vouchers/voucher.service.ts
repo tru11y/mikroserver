@@ -71,6 +71,17 @@ export type GenerateBulkResult =
       status: "PENDING";
     };
 
+export interface VoucherSessionInfo {
+  status: "ACTIVE" | "TERMINATED" | "EXPIRED";
+  startedAt: string;
+  lastSeenAt: string | null;
+  terminatedAt: string | null;
+  bytesIn: string;
+  bytesOut: string;
+  macAddress: string | null;
+  ipAddress: string | null;
+}
+
 export interface VoucherVerificationResult {
   source: "SAAS" | "LEGACY";
   voucherId: string | null;
@@ -85,6 +96,7 @@ export interface VoucherVerificationResult {
   deliveredAt: Date | null;
   activatedAt: Date | null;
   expiresAt: Date | null;
+  session: VoucherSessionInfo | null;
   message: string;
   advice: string;
 }
@@ -396,6 +408,18 @@ export class VoucherService {
             name: true,
           },
         },
+        session: {
+          select: {
+            status: true,
+            startedAt: true,
+            lastSeenAt: true,
+            terminatedAt: true,
+            bytesIn: true,
+            bytesOut: true,
+            macAddress: true,
+            ipAddress: true,
+          },
+        },
       },
     });
 
@@ -444,10 +468,27 @@ export class VoucherService {
         deliveredAt: legacyTicket.deliveredAt,
         activatedAt: legacyTicket.activatedAt,
         expiresAt: legacyTicket.expiresAt,
+        session: null,
         message,
         advice,
       };
     }
+
+    const formatSession = (
+      s: typeof voucher.session,
+    ): VoucherSessionInfo | null => {
+      if (!s) return null;
+      return {
+        status: s.status as VoucherSessionInfo["status"],
+        startedAt: s.startedAt.toISOString(),
+        lastSeenAt: s.lastSeenAt?.toISOString() ?? null,
+        terminatedAt: s.terminatedAt?.toISOString() ?? null,
+        bytesIn: s.bytesIn.toString(),
+        bytesOut: s.bytesOut.toString(),
+        macAddress: s.macAddress ?? null,
+        ipAddress: s.ipAddress ?? null,
+      };
+    };
 
     const shouldValidatePassword = Boolean(password?.trim());
     if (!shouldValidatePassword) {
@@ -484,6 +525,7 @@ export class VoucherService {
         deliveredAt: voucher.deliveredAt ?? null,
         activatedAt: voucher.activatedAt ?? null,
         expiresAt: voucher.expiresAt ?? null,
+        session: formatSession(voucher.session),
         message: statusInfo.message,
         advice: `${statusInfo.advice} Verification effectuee avec le meme ticket comme code et mot de passe.`,
       };
@@ -517,6 +559,7 @@ export class VoucherService {
       deliveredAt: voucher.deliveredAt ?? null,
       activatedAt: voucher.activatedAt ?? null,
       expiresAt: voucher.expiresAt ?? null,
+      session: formatSession(voucher.session),
       message: statusInfo.message,
       advice: statusInfo.advice,
     };

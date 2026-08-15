@@ -11,12 +11,9 @@
 name: CI
 
 on:
-  # AUTO-TRIGGERS DÉSACTIVÉS — billing GitHub Actions coupé.
-  # push/pull_request retirés pour ne plus faire échouer chaque push.
-  # Réactiver ci-dessous une fois le billing rétabli :
-  #   pull_request:
-  #   push:
-  #     branches: [main]
+  pull_request:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:

@@ -17,6 +17,7 @@ describe("AuthService - password reset flow", () => {
       ),
       user: {
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
         update: jest.fn(),
       },
       refreshToken: {
@@ -89,7 +90,7 @@ describe("AuthService - password reset flow", () => {
 
   it("returns a generic success message when account is unknown", async () => {
     const { service, prisma } = createService();
-    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.user.findFirst.mockResolvedValue(null);
 
     const result = await service.requestPasswordReset(
       { email: "unknown@example.com" },
@@ -103,7 +104,7 @@ describe("AuthService - password reset flow", () => {
 
   it("creates reset token + otp for active account and logs audit event", async () => {
     const { service, prisma, auditService } = createService();
-    prisma.user.findUnique.mockResolvedValue({
+    prisma.user.findFirst.mockResolvedValue({
       id: "user-1",
       email: "admin@mikrolan.net",
       firstName: "Admin",

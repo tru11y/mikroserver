@@ -11,3 +11,18 @@ CVE-2026-59874
 
 # sigstore — npm internal dep, not in our app dependencies
 CVE-2026-48815
+
+# brace-expansion — lockfile has patched versions (1.1.18/2.1.4/5.0.9)
+# Trivy false positive on phantom 2.0.2 from CI Docker cache
+CVE-2026-13149
+CVE-2026-14257
+CVE-2026-69152
+
+# ip-address — not in our deps, detected in npm/Docker internals
+CVE-2026-69192
+
+# picomatch — overridden to 4.0.4 in package.json, Trivy cache mismatch
+CVE-2026-33671
+
+# js-yaml — overridden to 5.2.2
+CVE-2026-73643

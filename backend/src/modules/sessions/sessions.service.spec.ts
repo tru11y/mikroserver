@@ -8,6 +8,7 @@ describe("SessionsService", () => {
         findMany: jest.fn(),
       },
       session: {
+        findMany: jest.fn().mockResolvedValue([]),
         updateMany: jest.fn(),
       },
     };

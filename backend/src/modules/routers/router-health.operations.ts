@@ -66,6 +66,7 @@ interface RouterHealthDeps {
     password: string;
     timeoutMs: number;
   }) => Promise<void>;
+  tcpProbe?: (host: string, port: number) => Promise<boolean>;
 }
 
 export async function checkRouterHealthStatus(
@@ -76,7 +77,8 @@ export async function checkRouterHealthStatus(
   // Test TCP reachability before attempting RouterOS auth.
   // If the tunnel is down this returns fast without generating a login-failure
   // entry in the MikroTik router's log (which happens on auth attempt).
-  const apiReachable = await tcpProbe(router.wireguardIp, router.apiPort);
+  const probe = deps.tcpProbe ?? tcpProbe;
+  const apiReachable = await probe(router.wireguardIp, router.apiPort);
 
   if (!apiReachable) {
     const errMsg = `API port ${router.apiPort} unreachable on ${router.wireguardIp} (TCP probe timed out)`;

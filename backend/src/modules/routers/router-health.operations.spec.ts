@@ -24,6 +24,7 @@ describe("router health operations", () => {
         mikroNode: { getConnection: jest.fn(), parseItems: jest.fn() } as never,
         timeoutMs: 10000,
         runIdentityCheck: jest.fn().mockResolvedValue(undefined),
+        tcpProbe: jest.fn().mockResolvedValue(true),
       },
     );
 
@@ -63,6 +64,7 @@ describe("router health operations", () => {
         runIdentityCheck: jest
           .fn()
           .mockRejectedValue(new Error("Socket Timeout")),
+        tcpProbe: jest.fn().mockResolvedValue(true),
       },
     );
 

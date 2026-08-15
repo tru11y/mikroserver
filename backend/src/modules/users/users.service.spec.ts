@@ -66,8 +66,8 @@ describe("UsersService", () => {
       { sub: "admin-1", role: UserRole.ADMIN },
     );
 
-    expect(prisma.user.findUnique).toHaveBeenCalledWith({
-      where: { email: "reseller@example.com" },
+    expect(prisma.user.findFirst).toHaveBeenCalledWith({
+      where: { email: "reseller@example.com", deletedAt: null },
     });
     expect(prisma.user.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -213,8 +213,8 @@ describe("UsersService", () => {
       { sub: "admin-1", role: UserRole.ADMIN },
     );
 
-    expect(prisma.user.findUnique).toHaveBeenNthCalledWith(2, {
-      where: { email: "new.reseller@example.com" },
+    expect(prisma.user.findFirst).toHaveBeenCalledWith({
+      where: { email: "new.reseller@example.com", deletedAt: null },
     });
     expect(prisma.user.update).toHaveBeenCalledWith(
       expect.objectContaining({

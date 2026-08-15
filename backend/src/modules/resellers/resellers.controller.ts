@@ -66,14 +66,14 @@ export class ResellersController {
     @CurrentUser() user: JwtPayload,
     @Query() query: ListResellersQueryDto,
   ) {
-    return this.resellersService.findAll(user.sub, query.page, query.limit);
+    return this.resellersService.findAll(user.sub, user.role, query.page, query.limit);
   }
 
   @Get("stats")
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: "Reseller aggregate stats" })
   getStats(@CurrentUser() user: JwtPayload) {
-    return this.resellersService.getStats(user.sub);
+    return this.resellersService.getStats(user.sub, user.role);
   }
 
   @Get(":id")

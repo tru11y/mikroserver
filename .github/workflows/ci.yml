@@ -118,7 +118,9 @@ jobs:
           printf "ENCRYPTION_KEY=%s\n"     "$(openssl rand -hex 32)" >> $GITHUB_ENV
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm install -g npm@11
+          npm ci
 
       - name: Generate Prisma client
         run: npm run prisma:generate

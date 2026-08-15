@@ -22,7 +22,7 @@ export interface InitiatePaymentInput {
   planId: string;
   customerPhone: string;
   customerName?: string;
-  provider?: string; // Optionnel : 'MOCK' ou 'WAVE'
+  provider?: string; // Optionnel : 'MOCK'
   idempotencyKey?: string;
 }
 
@@ -53,17 +53,15 @@ export class TransactionsService {
 
   private resolveSuccessUrl(): string {
     return (
-      this.configService.get<string>("wave.successUrl") ??
-      this.configService.get<string>("cinetpay.returnUrl") ??
-      "http://localhost:3001/portal/payment/success"
+      this.configService.get<string>("app.frontendUrl", "") +
+      "/portal/payment/success"
     );
   }
 
   private resolveErrorUrl(): string {
     return (
-      this.configService.get<string>("wave.errorUrl") ??
-      this.configService.get<string>("cinetpay.returnUrl") ??
-      "http://localhost:3001/portal/payment/error"
+      this.configService.get<string>("app.frontendUrl", "") +
+      "/portal/payment/error"
     );
   }
 
@@ -87,11 +85,11 @@ export class TransactionsService {
     const idempotencyKey = input.idempotencyKey ?? uuidv4();
     const expiresAt = addMinutes(new Date(), this.expiryMinutes);
 
-    // Déterminer le provider (celui passé en paramètre, ou celui par défaut dans la config)
+    // Aucun agrégateur de paiement actif — seul MOCK est câblé pour l'instant.
     const providerType =
       (input.provider?.toUpperCase() as PaymentProvider) ||
-      PaymentProvider.WAVE;
-    const provider = this.paymentRegistry.getProvider(providerType);
+      PaymentProvider.MANUAL;
+    const provider = this.paymentRegistry.getProvider("MOCK");
 
     // Créer l'enregistrement de transaction AVANT d'appeler le provider
     const transaction = await this.prisma.transaction.create({

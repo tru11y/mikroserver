@@ -13,11 +13,7 @@ const emptyToUndefined = (value: unknown) => {
 };
 
 const optionalText = z.preprocess(emptyToUndefined, z.string().optional());
-const optionalMinText = (min: number) =>
-  z.preprocess(emptyToUndefined, z.string().min(min).optional());
 const optionalUrl = z.preprocess(emptyToUndefined, z.string().url().optional());
-const urlWithDefault = (defaultUrl: string) =>
-  z.preprocess(emptyToUndefined, z.string().url().default(defaultUrl));
 
 const envSchema = z
   .object({
@@ -27,7 +23,7 @@ const envSchema = z
       .default("development"),
     PORT: z.string().default("3000").transform(Number),
     API_PREFIX: z.string().default("api/v1"),
-    APP_NAME: z.string().default("MikroServer"),
+    APP_NAME: z.string().default("MikroLan"),
     CORS_ORIGINS: z.string().default("http://localhost:3001"),
     SWAGGER_ENABLED: z
       .string()
@@ -56,43 +52,6 @@ const envSchema = z
     JWT_ACCESS_EXPIRY: z.string().default("15m"),
     JWT_REFRESH_SECRET: z.string().min(64),
     JWT_REFRESH_EXPIRY: z.string().default("30d"),
-
-    // --- Wave Payment ---
-    WAVE_API_URL: urlWithDefault("https://api.wave.com/v1"),
-    WAVE_API_KEY: optionalMinText(10),
-    WAVE_WEBHOOK_SECRET: optionalMinText(32),
-    WAVE_CURRENCY: z.string().default("XOF"),
-    WAVE_CHECKOUT_URL: z.string().url().default("https://pay.wave.com"),
-    WAVE_SUCCESS_URL: optionalUrl,
-    WAVE_ERROR_URL: optionalUrl,
-    WAVE_ALLOWED_IPS: z
-      .string()
-      .default("")
-      .transform((v) =>
-        v
-          .split(",")
-          .map((ip) => ip.trim())
-          .filter(Boolean),
-      ),
-
-    // --- CinetPay Payment ---
-    CINETPAY_API_URL: urlWithDefault("https://api-checkout.cinetpay.com"),
-    CINETPAY_SITE_ID: optionalText,
-    CINETPAY_API_KEY: optionalText,
-    CINETPAY_WEBHOOK_SECRET: optionalText,
-    CINETPAY_CURRENCY: z.string().default("XOF"),
-    CINETPAY_DEFAULT_CHANNEL: optionalText,
-    CINETPAY_NOTIFY_URL: optionalUrl,
-    CINETPAY_RETURN_URL: optionalUrl,
-    CINETPAY_ALLOWED_IPS: z
-      .string()
-      .default("")
-      .transform((v) =>
-        v
-          .split(",")
-          .map((ip) => ip.trim())
-          .filter(Boolean),
-      ),
 
     // --- MikroTik / RouterOS ---
     MIKROTIK_API_TIMEOUT_MS: z.string().default("10000").transform(Number),
@@ -166,7 +125,7 @@ const envSchema = z
       .string()
       .default("false")
       .transform((v) => v === "true"),
-    OTEL_SERVICE_NAME: z.string().default("mikroserver-api"),
+    OTEL_SERVICE_NAME: z.string().default("mikrolan-api"),
     OTEL_EXPORTER_OTLP_ENDPOINT: optionalUrl,
     OTEL_SAMPLE_RATIO: z.string().default("1").transform(Number),
 
@@ -184,91 +143,6 @@ const envSchema = z
         path: ["OTEL_SAMPLE_RATIO"],
         message: "OTEL_SAMPLE_RATIO must be between 0 and 1",
       });
-    }
-
-    const waveEnabled = Boolean(
-      cfg.WAVE_API_KEY ||
-      cfg.WAVE_WEBHOOK_SECRET ||
-      cfg.WAVE_SUCCESS_URL ||
-      cfg.WAVE_ERROR_URL,
-    );
-
-    if (waveEnabled) {
-      if (!cfg.WAVE_API_KEY) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["WAVE_API_KEY"],
-          message: "WAVE_API_KEY is required when Wave is enabled",
-        });
-      }
-      if (!cfg.WAVE_WEBHOOK_SECRET) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["WAVE_WEBHOOK_SECRET"],
-          message: "WAVE_WEBHOOK_SECRET is required when Wave is enabled",
-        });
-      }
-      if (!cfg.WAVE_SUCCESS_URL) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["WAVE_SUCCESS_URL"],
-          message: "WAVE_SUCCESS_URL is required when Wave is enabled",
-        });
-      }
-      if (!cfg.WAVE_ERROR_URL) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["WAVE_ERROR_URL"],
-          message: "WAVE_ERROR_URL is required when Wave is enabled",
-        });
-      }
-    }
-
-    const cinetpayEnabled = Boolean(
-      cfg.CINETPAY_SITE_ID ||
-      cfg.CINETPAY_API_KEY ||
-      cfg.CINETPAY_WEBHOOK_SECRET ||
-      cfg.CINETPAY_NOTIFY_URL ||
-      cfg.CINETPAY_RETURN_URL,
-    );
-
-    if (cinetpayEnabled) {
-      if (!cfg.CINETPAY_SITE_ID) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["CINETPAY_SITE_ID"],
-          message: "CINETPAY_SITE_ID is required when CinetPay is enabled",
-        });
-      }
-      if (!cfg.CINETPAY_API_KEY) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["CINETPAY_API_KEY"],
-          message: "CINETPAY_API_KEY is required when CinetPay is enabled",
-        });
-      }
-      if (!cfg.CINETPAY_WEBHOOK_SECRET) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["CINETPAY_WEBHOOK_SECRET"],
-          message:
-            "CINETPAY_WEBHOOK_SECRET is required when CinetPay is enabled",
-        });
-      }
-      if (!cfg.CINETPAY_NOTIFY_URL) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["CINETPAY_NOTIFY_URL"],
-          message: "CINETPAY_NOTIFY_URL is required when CinetPay is enabled",
-        });
-      }
-      if (!cfg.CINETPAY_RETURN_URL) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["CINETPAY_RETURN_URL"],
-          message: "CINETPAY_RETURN_URL is required when CinetPay is enabled",
-        });
-      }
     }
   });
 

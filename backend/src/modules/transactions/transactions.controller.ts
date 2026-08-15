@@ -26,7 +26,10 @@ class InitiatePaymentDto {
   @ApiProperty() @IsUUID() planId!: string;
   @ApiProperty() @IsString() customerPhone!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() customerName?: string;
-  @ApiPropertyOptional({ enum: PaymentProvider, default: PaymentProvider.WAVE })
+  @ApiPropertyOptional({
+    enum: PaymentProvider,
+    default: PaymentProvider.MANUAL,
+  })
   @IsOptional()
   @IsEnum(PaymentProvider)
   provider?: PaymentProvider;

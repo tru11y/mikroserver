@@ -37,7 +37,7 @@ export class NotificationsService implements OnModuleDestroy {
     const vapidPrivate = this.configService.get<string>("VAPID_PRIVATE_KEY");
     const vapidEmail = this.configService.get<string>(
       "VAPID_EMAIL",
-      "mailto:admin@mikroserver.ci",
+      "mailto:admin@mikrolan.net",
     );
 
     if (vapidPublic && vapidPrivate) {

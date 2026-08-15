@@ -33,7 +33,9 @@ describeE2E("Auth E2E — signup, login, me (Testcontainers)", () => {
     );
     app.enableVersioning({ type: 1 } as never);
     app.setGlobalPrefix("api");
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, transform: true }),
+    );
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
   }, 180_000);

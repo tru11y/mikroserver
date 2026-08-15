@@ -79,7 +79,10 @@ export class ResellersController {
   @Get(":id")
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: "Get reseller" })
-  findOne(@Param("id", ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload) {
+  findOne(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
     return this.resellersService.findOne(id, user.sub, user.role);
   }
 
@@ -109,15 +112,28 @@ export class ResellersController {
     @Body() body: AddCreditDto,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.resellersService.addCredit(id, body.amountXof, user.sub, user.role);
+    return this.resellersService.addCredit(
+      id,
+      body.amountXof,
+      user.sub,
+      user.role,
+    );
   }
 
   @Delete(":id")
   @Roles(UserRole.ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: "Deactivate reseller" })
-  deactivate(@Param("id", ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload) {
-    return this.resellersService.update(id, { isActive: false }, user.sub, user.role);
+  deactivate(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.resellersService.update(
+      id,
+      { isActive: false },
+      user.sub,
+      user.role,
+    );
   }
 
   // --- Commission dashboard ---
@@ -174,7 +190,7 @@ export class ResellersController {
 
   @Patch("payouts/:id/approve")
   @Roles(UserRole.SUPER_ADMIN)
-  @ApiOperation({ summary: "Approve payout + record Wave reference" })
+  @ApiOperation({ summary: "Approve payout + record payment reference" })
   approvePayout(
     @Param("id", ParseUUIDPipe) id: string,
     @Body() body: ApprovePayoutDto,
@@ -182,7 +198,7 @@ export class ResellersController {
     return this.resellersService.processPayout(
       id,
       "approve",
-      body.waveReference,
+      body.paymentReference,
       body.notes,
     );
   }

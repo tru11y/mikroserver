@@ -105,9 +105,16 @@ export class ResellersService {
     return { items, total, page, limit };
   }
 
-  async findOne(id: string, requestingUserId: string, requestingUserRole: UserRole) {
+  async findOne(
+    id: string,
+    requestingUserId: string,
+    requestingUserRole: UserRole,
+  ) {
     const config = await this.prisma.resellerConfig.findFirstOrThrow({
-      where: { id, ...scopeResellerConfigToOwner(requestingUserId, requestingUserRole) },
+      where: {
+        id,
+        ...scopeResellerConfigToOwner(requestingUserId, requestingUserRole),
+      },
       include: {
         user: {
           select: {
@@ -140,7 +147,10 @@ export class ResellersService {
     requestingUserRole: UserRole,
   ) {
     await this.prisma.resellerConfig.findFirstOrThrow({
-      where: { id, ...scopeResellerConfigToOwner(requestingUserId, requestingUserRole) },
+      where: {
+        id,
+        ...scopeResellerConfigToOwner(requestingUserId, requestingUserRole),
+      },
     });
     return this.prisma.resellerConfig.update({
       where: { id },
@@ -173,7 +183,10 @@ export class ResellersService {
     if (amountXof <= 0)
       throw new BadRequestException("Le montant doit être positif.");
     await this.prisma.resellerConfig.findFirstOrThrow({
-      where: { id, ...scopeResellerConfigToOwner(requestingUserId, requestingUserRole) },
+      where: {
+        id,
+        ...scopeResellerConfigToOwner(requestingUserId, requestingUserRole),
+      },
     });
     return this.prisma.resellerConfig.update({
       where: { id },
@@ -470,7 +483,7 @@ export class ResellersService {
   async processPayout(
     payoutId: string,
     action: "approve" | "reject",
-    waveReference?: string,
+    paymentReference?: string,
     notes?: string,
   ) {
     const payout = await this.prisma.commissionPayout.findUniqueOrThrow({
@@ -491,7 +504,7 @@ export class ResellersService {
         data: {
           status: PayoutStatus.COMPLETED,
           processedAt: new Date(),
-          waveReference: waveReference ?? null,
+          waveReference: paymentReference ?? null,
           notes: notes ?? null,
         },
       });

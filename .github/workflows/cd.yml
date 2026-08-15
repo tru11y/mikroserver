@@ -1,5 +1,5 @@
 # =============================================================================
-# CD — Mikroserver Production Deployment
+# CD — MikroLan Production Deployment
 #
 # Triggers:
 #   - Automatically when CI completes successfully on main
@@ -89,8 +89,8 @@ jobs:
           script: |
             set -euo pipefail
 
-            COMPOSE="docker compose -f $HOME/mikroserver/infrastructure/docker/docker-compose.prod.yml --env-file $HOME/mikroserver/.env.prod"
-            DEPLOY_DIR="$HOME/mikroserver"
+            COMPOSE="docker compose -f $HOME/mikrolan/infrastructure/docker/docker-compose.prod.yml --env-file $HOME/mikrolan/.env.prod"
+            DEPLOY_DIR="$HOME/mikrolan"
 
             echo "==> Deploying image tag: $IMAGE_TAG"
 

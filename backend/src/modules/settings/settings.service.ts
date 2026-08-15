@@ -22,17 +22,6 @@ const DEFAULTS: Record<
     description: "Pays (code ISO)",
     isSecret: false,
   },
-  "wave.api_key": { value: "", description: "Clé API Wave CI", isSecret: true },
-  "wave.webhook_secret": {
-    value: "",
-    description: "Secret webhook Wave HMAC-SHA256",
-    isSecret: true,
-  },
-  "wave.merchant_name": {
-    value: "",
-    description: "Nom marchand Wave",
-    isSecret: false,
-  },
   "hotspot.default_profile": {
     value: "default",
     description: "Profil hotspot par défaut",

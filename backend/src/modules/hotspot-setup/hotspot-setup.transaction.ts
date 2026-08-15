@@ -124,11 +124,10 @@ export class HotspotSetupTransaction {
         );
       });
 
-      // Step 9: Walled garden — Wave Money + captive portal detection
+      // Step 9: Walled garden — CinetPay + captive portal detection
       const walledGardenHosts = [
-        "*.wave.com",
-        "*.wavemoney.io",
-        "api.hotspotflow.ci",
+        "*.cinetpay.com",
+        "api.mikrolan.net",
         "captive.apple.com",
         "connectivitycheck.gstatic.com",
         "www.msftconnecttest.com",

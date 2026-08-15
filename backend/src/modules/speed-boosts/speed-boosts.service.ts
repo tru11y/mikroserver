@@ -123,10 +123,10 @@ export class SpeedBoostsService {
       voucher.plan?.uploadKbps,
     );
 
-    // Generate Wave transaction reference
+    // Generate transaction reference
     const reference = `MS-${randomBytes(6).toString("hex").toUpperCase().slice(0, 12)}`;
     const idempotencyKey = `boost-${voucher.session.id}-${dto.tierId}`;
-    const expiresAt = addMinutes(new Date(), 30); // Wave payment expires in 30 min
+    const expiresAt = addMinutes(new Date(), 30); // payment expires in 30 min
 
     // Create transaction + boost atomically
     const [transaction, boost] = await this.prisma.$transaction(async (tx) => {
@@ -138,7 +138,7 @@ export class SpeedBoostsService {
           customerName: dto.customerName ?? null,
           amountXof: tier.priceXof,
           status: TransactionStatus.PENDING,
-          provider: PaymentProvider.WAVE,
+          provider: PaymentProvider.MANUAL,
           expiresAt,
           idempotencyKey,
           metadata: { type: "BOOST", sessionId: voucher.session!.id },
@@ -160,8 +160,8 @@ export class SpeedBoostsService {
       return [t, b];
     });
 
-    // Initiate Wave payment
-    const provider = this.paymentRegistry.getProvider("WAVE");
+    // Initiate payment
+    const provider = this.paymentRegistry.getProvider("MOCK");
     const successUrl =
       this.configService.get<string>("app.frontendUrl", "") + "/boost/success";
     const errorUrl =

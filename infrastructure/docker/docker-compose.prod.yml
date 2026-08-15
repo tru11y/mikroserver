@@ -1,5 +1,5 @@
 # =============================================================================
-# MikroServer - Production Docker Compose
+# MikroLan - Production Docker Compose
 #
 # ARCHITECTURAL DECISIONS:
 # 1. Three-tier network segmentation: db-net / app-net keep DB unreachable from Nginx
@@ -48,8 +48,8 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-mikroserver}
-      POSTGRES_USER: ${POSTGRES_USER:-mikroserver}
+      POSTGRES_DB: ${POSTGRES_DB:-mikrolan}
+      POSTGRES_USER: ${POSTGRES_USER:-mikrolan}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
@@ -58,7 +58,7 @@ services:
     networks:
       - db-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mikroserver} -d ${POSTGRES_DB:-mikroserver}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mikrolan} -d ${POSTGRES_DB:-mikrolan}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -120,7 +120,7 @@ services:
     # IMAGE_TAG is set by the deploy script (7-char git SHA).
     # Local dev: `docker compose build api` still works — image: tag is used
     # as the local image name when building.
-    image: ghcr.io/${GITHUB_REPOSITORY:-tru11y/mikroserver}/api:${IMAGE_TAG:-latest}
+    image: ghcr.io/${GITHUB_REPOSITORY:-tru11y/mikrolan}/api:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile
@@ -130,8 +130,8 @@ services:
       NODE_ENV: production
       PORT: 3000
       API_PREFIX: api
-      APP_NAME: MikroServer
-      CORS_ORIGINS: ${CORS_ORIGINS:-https://dashboard.mikroserver.ci,https://mikroserver.ci}
+      APP_NAME: MikroLan
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://dashboard.mikrolan.net,https://mikrolan.net}
       SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
       SWAGGER_PATH: ${SWAGGER_PATH:-docs}
       SWAGGER_JSON_PATH: ${SWAGGER_JSON_PATH:-docs-json}
@@ -161,7 +161,7 @@ services:
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
-      SMTP_FROM: ${SMTP_FROM:-MikroServer <noreply@mikroserver.app>}
+      SMTP_FROM: ${SMTP_FROM:-MikroLan <noreply@mikrolan.net>}
       # Security hardening — explicit values prevent silent defaults
       BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-12}
       RATE_LIMIT_TTL_MS: ${RATE_LIMIT_TTL_MS:-60000}
@@ -171,7 +171,7 @@ services:
       LOG_PRETTY: "false"
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
-      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-mikroserver-api}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-mikrolan-api}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       OTEL_SAMPLE_RATIO: ${OTEL_SAMPLE_RATIO:-1}
       VPS_PUBLIC_IP: ${VPS_PUBLIC_IP:-139.84.241.27}
@@ -231,7 +231,7 @@ services:
   # Next.js Dashboard
   # ---------------------------------------------------------------------------
   dashboard:
-    image: ghcr.io/${GITHUB_REPOSITORY:-tru11y/mikroserver}/dashboard:${IMAGE_TAG:-latest}
+    image: ghcr.io/${GITHUB_REPOSITORY:-tru11y/mikrolan}/dashboard:${IMAGE_TAG:-latest}
     build:
       context: ../../frontend
       dockerfile: Dockerfile
@@ -318,7 +318,7 @@ services:
   # Database migrations (runs once then exits)
   # ---------------------------------------------------------------------------
   db-migrate:
-    image: ghcr.io/${GITHUB_REPOSITORY:-tru11y/mikroserver}/migrations:${IMAGE_TAG:-latest}
+    image: ghcr.io/${GITHUB_REPOSITORY:-tru11y/mikrolan}/migrations:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile

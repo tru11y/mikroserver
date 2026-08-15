@@ -6,8 +6,8 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: mikroserver_dev
-      POSTGRES_USER: mikroserver
+      POSTGRES_DB: mikrolan_dev
+      POSTGRES_USER: mikrolan
       POSTGRES_PASSWORD: devpassword123
     ports:
       - "5433:5432"
@@ -26,7 +26,7 @@ services:
     image: dpage/pgadmin4:latest
     restart: unless-stopped
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@mikroserver.local
+      PGADMIN_DEFAULT_EMAIL: admin@mikrolan.local
       PGADMIN_DEFAULT_PASSWORD: admin123
     ports:
       - "5050:80"

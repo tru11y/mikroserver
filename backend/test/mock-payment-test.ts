@@ -17,8 +17,8 @@ async function main() {
   // 1. Setup ConfigService with default values
   const config = new ConfigService({
     PAYMENT_PROVIDER: "MOCK",
-    WAVE_SUCCESS_URL: "http://localhost:3001/payment/success",
-    WAVE_ERROR_URL: "http://localhost:3001/payment/error",
+    APP_SUCCESS_URL: "http://localhost:3001/payment/success",
+    APP_ERROR_URL: "http://localhost:3001/payment/error",
     SECURITY_TRANSACTION_EXPIRY_MINUTES: 30,
   });
 
@@ -26,14 +26,9 @@ async function main() {
   const mockProvider = new MockProvider(config);
   console.log("✅ MockProvider instantiated");
 
-  // 3. Instantiate PaymentProviderRegistry with mock provider (cast to satisfy constructor)
+  // 3. Instantiate PaymentProviderRegistry with mock provider
   const prisma = new PrismaClient();
-  const registry = new PaymentProviderRegistry(
-    mockProvider as any, // WaveProvider
-    mockProvider, // MockProvider
-    mockProvider as any, // CinetPayProvider
-    config,
-  );
+  const registry = new PaymentProviderRegistry(mockProvider, config);
   console.log("✅ PaymentProviderRegistry ready");
 
   // 4. Get a plan from database (or create a dummy one)
@@ -89,9 +84,9 @@ async function main() {
       amountXof: plan.priceXof,
       customerPhone,
       customerName,
-      description: `MikroServer - ${plan.name}`,
-      successUrl: config.getOrThrow<string>("WAVE_SUCCESS_URL"),
-      errorUrl: config.getOrThrow<string>("WAVE_ERROR_URL"),
+      description: `MikroLan - ${plan.name}`,
+      successUrl: config.getOrThrow<string>("APP_SUCCESS_URL"),
+      errorUrl: config.getOrThrow<string>("APP_ERROR_URL"),
     });
 
     console.log("\n✅ Mock payment created successfully!");

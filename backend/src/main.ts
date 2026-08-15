@@ -165,7 +165,7 @@ async function bootstrap(): Promise<void> {
     const swaggerJsonPath = config.SWAGGER_JSON_PATH.replace(/^\/+/, "");
 
     const swaggerConfig = new DocumentBuilder()
-      .setTitle("MikroServer API")
+      .setTitle("MikroLan API")
       .setDescription("WiFi Monetization Platform API")
       .setVersion("1.0")
       .addBearerAuth()
@@ -197,7 +197,7 @@ async function bootstrap(): Promise<void> {
   await app.listen(config.PORT, "0.0.0.0");
 
   const logger = app.get(Logger);
-  logger.log(`MikroServer API listening on port ${config.PORT}`, "Bootstrap");
+  logger.log(`MikroLan API listening on port ${config.PORT}`, "Bootstrap");
   logger.log(`Environment: ${config.NODE_ENV}`, "Bootstrap");
 }
 

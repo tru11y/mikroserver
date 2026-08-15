@@ -1,5 +1,5 @@
 # =============================================================================
-# CI — Mikroserver
+# CI — MikroLan
 #
 # Runs on every PR and push to main.
 # Gates: secret-scan → lint/type-check/test (parallel) → docker-build+push
@@ -65,14 +65,14 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: mikroserver
-          POSTGRES_PASSWORD: mikroserver
-          POSTGRES_DB: mikroserver_test
+          POSTGRES_USER: mikrolan
+          POSTGRES_PASSWORD: mikrolan
+          POSTGRES_DB: mikrolan_test
         # ports: required — job runs directly on the runner (no container: directive),
         # so service containers are only reachable via localhost when ports are mapped.
         ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U mikroserver"
+          --health-cmd "pg_isready -U mikrolan"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -89,7 +89,7 @@ jobs:
     env:
       CI: "true"
       NODE_ENV: test
-      DATABASE_URL: postgresql://mikroserver:mikroserver@localhost:5432/mikroserver_test
+      DATABASE_URL: postgresql://mikrolan:mikrolan@localhost:5432/mikrolan_test
       REDIS_HOST: localhost
       REDIS_PORT: "6379"
       REDIS_PASSWORD: ""
@@ -203,7 +203,7 @@ jobs:
           target: production
           load: true
           push: false
-          tags: mikroserver-backend:ci
+          tags: mikrolan-backend:ci
           cache-from: type=gha,scope=trivy-backend
           cache-to: type=gha,mode=max,scope=trivy-backend
 
@@ -212,7 +212,7 @@ jobs:
         # coverage. Pin to this tag; bump deliberately after testing.
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: mikroserver-backend:ci
+          image-ref: mikrolan-backend:ci
           format: table
           ignore-unfixed: true
           severity: HIGH,CRITICAL
@@ -229,7 +229,7 @@ jobs:
             NEXT_PUBLIC_VAPID_PUBLIC_KEY=
           load: true
           push: false
-          tags: mikroserver-frontend:ci
+          tags: mikrolan-frontend:ci
           cache-from: type=gha,scope=trivy-frontend
           cache-to: type=gha,mode=max,scope=trivy-frontend
 
@@ -238,7 +238,7 @@ jobs:
         # coverage. Pin to this tag; bump deliberately after testing.
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: mikroserver-frontend:ci
+          image-ref: mikrolan-frontend:ci
           format: table
           ignore-unfixed: true
           severity: HIGH,CRITICAL

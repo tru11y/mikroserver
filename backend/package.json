@@ -1,7 +1,7 @@
 {
-  "name": "@mikroserver/backend",
+  "name": "@mikrolan/backend",
   "version": "1.0.0",
-  "description": "MikroServer - WiFi Monetization Platform API",
+  "description": "MikroLan - WiFi Monetization Platform API",
   "private": true,
   "license": "UNLICENSED",
   "scripts": {

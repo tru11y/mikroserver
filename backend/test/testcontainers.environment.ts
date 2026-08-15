@@ -9,7 +9,11 @@ import { GenericContainer, StartedTestContainer, Wait } from "testcontainers";
  * Windows). Poll the raw TCP port before handing off to `prisma migrate
  * deploy`, instead of racing it.
  */
-function waitForPort(host: string, port: number, timeoutMs = 15_000): Promise<void> {
+function waitForPort(
+  host: string,
+  port: number,
+  timeoutMs = 15_000,
+): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   return new Promise((resolvePromise, reject) => {
     const attempt = () => {

@@ -278,7 +278,7 @@ model Transaction {
   customerName      String?           @map("customer_name") @db.VarChar(200)
   amountXof         Int               @map("amount_xof")
   status            TransactionStatus @default(PENDING)
-  provider          PaymentProvider   @default(WAVE)
+  provider          PaymentProvider   @default(MANUAL)
   paymentUrl        String?           @map("payment_url") @db.VarChar(1000)
   paidAt            DateTime?         @map("paid_at")
   failedAt          DateTime?         @map("failed_at")
@@ -846,10 +846,6 @@ enum TransactionStatus {
 }
 
 enum PaymentProvider {
-  WAVE
-  CINETPAY
-  ORANGE_MONEY
-  MTN_MOMO
   MANUAL
 }
 
@@ -1007,7 +1003,7 @@ model CommissionPayout {
   status        PayoutStatus   @default(REQUESTED)
   requestedAt   DateTime       @default(now()) @map("requested_at")
   processedAt   DateTime?      @map("processed_at")
-  waveReference String?        @map("wave_reference") @db.VarChar(255)
+  paymentReference String?     @map("payment_reference") @db.VarChar(255)
   notes         String?        @db.VarChar(1000)
   createdAt     DateTime       @default(now()) @map("created_at")
   updatedAt     DateTime       @updatedAt @map("updated_at")

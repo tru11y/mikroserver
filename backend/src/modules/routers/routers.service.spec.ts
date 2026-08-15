@@ -29,11 +29,30 @@ describe("RoutersService", () => {
     const auditService = {
       log: jest.fn(),
     };
+    const configService = {
+      get: jest.fn(),
+      getOrThrow: jest.fn(),
+    };
+    const credentialsService = {
+      encrypt: jest.fn(),
+      decrypt: jest.fn(),
+    };
+    const wgIpPool = {
+      allocate: jest.fn(),
+      release: jest.fn(),
+    };
+    const queueService = {
+      addJob: jest.fn(),
+    };
 
     const service = new RoutersService(
       prisma as never,
       routerApiService as never,
       auditService as never,
+      configService as never,
+      credentialsService as never,
+      wgIpPool as never,
+      queueService as never,
     );
 
     return { service, prisma, routerApiService, auditService };

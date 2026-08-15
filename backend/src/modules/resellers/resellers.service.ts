@@ -76,9 +76,17 @@ export class ResellersService {
     });
   }
 
-  async findAll(parentId?: string, page = 1, limit = 25) {
+  async findAll(
+    requestingUserId: string,
+    requestingUserRole: UserRole,
+    page = 1,
+    limit = 25,
+  ) {
     const skip = (Math.max(1, page) - 1) * Math.min(limit, 100);
-    const where = { ...(parentId ? { parentId } : {}), isActive: true };
+    const where = {
+      ...scopeResellerConfigToOwner(requestingUserId, requestingUserRole),
+      isActive: true,
+    };
 
     const [items, total] = await Promise.all([
       this.prisma.resellerConfig.findMany({
@@ -340,8 +348,8 @@ export class ResellersService {
     ).join("");
   }
 
-  async getStats(parentId?: string) {
-    const where = { ...(parentId ? { parentId } : {}) };
+  async getStats(requestingUserId: string, requestingUserRole: UserRole) {
+    const where = scopeResellerConfigToOwner(requestingUserId, requestingUserRole);
     const [total, active, aggregates] = await Promise.all([
       this.prisma.resellerConfig.count({ where }),
       this.prisma.resellerConfig.count({ where: { ...where, isActive: true } }),
@@ -504,7 +512,7 @@ export class ResellersService {
         data: {
           status: PayoutStatus.COMPLETED,
           processedAt: new Date(),
-          waveReference: paymentReference ?? null,
+          paymentReference: paymentReference ?? null,
           notes: notes ?? null,
         },
       });

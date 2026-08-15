@@ -1,6 +1,8 @@
 import {
   IsEmail,
   IsString,
+  IsOptional,
+  IsBoolean,
   MinLength,
   MaxLength,
   Matches,
@@ -35,7 +37,7 @@ export class TwoFactorCodeDto {
 }
 
 export class LoginDto {
-  @ApiProperty({ example: "admin@mikroserver.com" })
+  @ApiProperty({ example: "admin@mikrolan.net" })
   @Transform(({ value }) =>
     typeof value === "string" ? value.trim().toLowerCase() : value,
   )
@@ -70,7 +72,7 @@ export class ChangePasswordDto {
 }
 
 export class RequestPasswordResetDto {
-  @ApiProperty({ example: "admin@mikroserver.com" })
+  @ApiProperty({ example: "admin@mikrolan.net" })
   @Transform(({ value }) =>
     typeof value === "string" ? value.trim().toLowerCase() : value,
   )
@@ -79,14 +81,12 @@ export class RequestPasswordResetDto {
 }
 
 export class ConfirmPasswordResetDto {
-  @ApiProperty({
-    description: "Token de reset recu par lien email",
-    minLength: 32,
-  })
-  @IsString()
-  @MinLength(32)
-  @MaxLength(255)
-  token!: string;
+  @ApiProperty({ example: "admin@mikrolan.net" })
+  @Transform(({ value }) =>
+    typeof value === "string" ? value.trim().toLowerCase() : value,
+  )
+  @IsEmail()
+  email!: string;
 
   @ApiProperty({
     description: "Code OTP a 6 chiffres recu par email",
@@ -109,4 +109,84 @@ export class UpdateProfileDto {
   @MaxLength(255)
   @Transform(({ value }: { value: string }) => value?.trim().toLowerCase())
   email!: string;
+}
+
+export class SignupDto {
+  @ApiProperty({ example: "Wifi Abidjan" })
+  @IsString()
+  @MinLength(2)
+  @MaxLength(255)
+  tenantName!: string;
+
+  @ApiProperty({ example: "user@example.com" })
+  @Transform(({ value }) =>
+    typeof value === "string" ? value.trim().toLowerCase() : value,
+  )
+  @IsEmail()
+  email!: string;
+
+  @ApiProperty({ minLength: 8 })
+  @IsString()
+  @MinLength(8)
+  @MaxLength(128)
+  password!: string;
+}
+
+export class GoogleLoginDto {
+  @ApiProperty()
+  @IsString()
+  @MinLength(10)
+  idToken!: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  nonce?: string;
+}
+
+export class UpdateMeDto {
+  @ApiProperty({ required: false, nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  name?: string | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  country?: string | null;
+}
+
+export class UpdateNotificationsDto {
+  @ApiProperty()
+  @IsBoolean()
+  enabled!: boolean;
+}
+
+export class SetPasswordDto {
+  @ApiProperty({ minLength: 8 })
+  @IsString()
+  @MinLength(8)
+  @MaxLength(128)
+  password!: string;
+}
+
+export class PushTokenDto {
+  @ApiProperty()
+  @IsString()
+  @MaxLength(255)
+  token!: string;
+}
+
+export class DeleteAccountDto {
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  password?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  googleIdToken?: string;
 }

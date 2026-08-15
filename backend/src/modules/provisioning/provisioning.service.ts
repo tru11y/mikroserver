@@ -17,6 +17,10 @@ import {
   getVpsPublicKey,
   isPeerConnected,
 } from "./wireguard.utils";
+import {
+  deriveRouterApiKey,
+  encryptRouterApiPassword,
+} from "../routers/router-access.crypto";
 
 import type {
   MikroTikConnection,
@@ -53,12 +57,25 @@ type StepLogEntry = {
 @Injectable()
 export class ProvisioningService {
   private readonly logger = new Logger(ProvisioningService.name);
+  private routerApiKey: Buffer | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
     private readonly notificationsService: NotificationsService,
   ) {}
+
+  private getRouterApiKey(): Buffer {
+    if (this.routerApiKey) {
+      return this.routerApiKey;
+    }
+    const raw = this.configService.get<string>("ENCRYPTION_KEY");
+    if (!raw) {
+      throw new Error("ENCRYPTION_KEY env var is not set");
+    }
+    this.routerApiKey = deriveRouterApiKey(raw);
+    return this.routerApiKey;
+  }
 
   async start(userId: string, dto: StartProvisioningDto) {
     const existing = await this.prisma.router.findUnique({
@@ -411,7 +428,10 @@ add name="ms-wg-watchdog" interval=5m start-time=startup comment="MikroServer Wi
           wireguardIp: session.assignedWgIp!,
           apiPort: session.apiPort,
           apiUsername: session.apiUsername,
-          apiPasswordHash: session.apiPassword!,
+          apiPasswordHash: encryptRouterApiPassword(
+            session.apiPassword!,
+            this.getRouterApiKey(),
+          ),
           ownerId: session.userId,
           hotspotServer: hotspotName,
           metadata: {
@@ -540,7 +560,10 @@ add name="ms-wg-watchdog" interval=5m start-time=startup comment="MikroServer Wi
           wireguardIp: session.assignedWgIp!,
           apiPort: session.apiPort,
           apiUsername: session.apiUsername,
-          apiPasswordHash: session.apiPassword!,
+          apiPasswordHash: encryptRouterApiPassword(
+            session.apiPassword!,
+            this.getRouterApiKey(),
+          ),
           ownerId: session.userId,
           hotspotServer: hotspotName,
           metadata: {
@@ -732,7 +755,10 @@ add name="ms-wg-watchdog" interval=5m start-time=startup comment="MikroServer Wi
           wireguardIp: session.assignedWgIp!,
           apiPort: 8728,
           apiUsername: session.apiUsername,
-          apiPasswordHash: session.apiPassword!,
+          apiPasswordHash: encryptRouterApiPassword(
+            session.apiPassword!,
+            this.getRouterApiKey(),
+          ),
           ownerId: session.userId,
           hotspotServer: hotspotName,
           metadata: {

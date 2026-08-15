@@ -17,12 +17,13 @@ describe("RouterApiService - hotspot user enrichment", () => {
 
     const configService = {
       get: jest.fn((key: string, defaultValue?: number) => {
-        const values: Record<string, number> = {
+        const values: Record<string, number | string> = {
           MIKROTIK_API_TIMEOUT_MS: 10000,
           MIKROTIK_API_HEALTH_TIMEOUT_MS: 10000,
           MIKROTIK_API_LIVE_TIMEOUT_MS: 20000,
           MIKROTIK_API_HEAVY_READ_TIMEOUT_MS: 30000,
           MIKROTIK_API_WRITE_TIMEOUT_MS: 15000,
+          ENCRYPTION_KEY: "a".repeat(64),
         };
 
         return values[key] ?? defaultValue;

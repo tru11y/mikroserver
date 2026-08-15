@@ -11,6 +11,7 @@ import {
   TransactionStatus,
   PayoutStatus,
 } from "@prisma/client";
+import { scopeResellerConfigToOwner } from "../../common/helpers/tenant-scope.helper";
 import argon2 from "argon2";
 import {
   subDays,
@@ -104,9 +105,9 @@ export class ResellersService {
     return { items, total, page, limit };
   }
 
-  async findOne(id: string) {
-    const config = await this.prisma.resellerConfig.findUniqueOrThrow({
-      where: { id },
+  async findOne(id: string, requestingUserId: string, requestingUserRole: UserRole) {
+    const config = await this.prisma.resellerConfig.findFirstOrThrow({
+      where: { id, ...scopeResellerConfigToOwner(requestingUserId, requestingUserRole) },
       include: {
         user: {
           select: {
@@ -135,7 +136,12 @@ export class ResellersService {
       maxVouchersDay?: number;
       isActive?: boolean;
     },
+    requestingUserId: string,
+    requestingUserRole: UserRole,
   ) {
+    await this.prisma.resellerConfig.findFirstOrThrow({
+      where: { id, ...scopeResellerConfigToOwner(requestingUserId, requestingUserRole) },
+    });
     return this.prisma.resellerConfig.update({
       where: { id },
       data: {
@@ -158,9 +164,17 @@ export class ResellersService {
     });
   }
 
-  async addCredit(id: string, amountXof: number) {
+  async addCredit(
+    id: string,
+    amountXof: number,
+    requestingUserId: string,
+    requestingUserRole: UserRole,
+  ) {
     if (amountXof <= 0)
       throw new BadRequestException("Le montant doit être positif.");
+    await this.prisma.resellerConfig.findFirstOrThrow({
+      where: { id, ...scopeResellerConfigToOwner(requestingUserId, requestingUserRole) },
+    });
     return this.prisma.resellerConfig.update({
       where: { id },
       data: { creditBalance: { increment: amountXof } },

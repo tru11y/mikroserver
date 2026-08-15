@@ -56,6 +56,10 @@ import {
 } from "./router-hotspot-writes.operations";
 import { checkRouterHealthStatus } from "./router-health.operations";
 import {
+  decryptRouterApiPasswordCompat,
+  deriveRouterApiKey,
+} from "./router-access.crypto";
+import {
   addHotspotUser,
   findLegacyActiveClients,
   findLegacyHotspotUsers,
@@ -120,6 +124,7 @@ export class RouterApiService {
   private readonly cbResetMs: number;
   private readonly cbThreshold: number;
   private readonly routerTimeouts: RouterOperationTimeouts;
+  private routerApiKey: Buffer | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -154,6 +159,7 @@ export class RouterApiService {
       prisma: this.prisma,
       getOrCreateBreaker: (targetRouterId) =>
         this.getOrCreateBreaker(targetRouterId),
+      decryptApiPassword: (hash) => this.decryptApiPassword(hash),
       logger: this.logger,
     });
   }
@@ -731,7 +737,10 @@ export class RouterApiService {
     const previousStatus = router.status;
 
     const result = await checkRouterHealthStatus(
-      router as typeof router & { wireguardIp: string },
+      {
+        ...router,
+        apiPasswordHash: this.decryptApiPassword(router.apiPasswordHash),
+      } as typeof router & { wireguardIp: string },
       {
         prisma: this.prisma,
         mikroNode: MikroNode,
@@ -915,7 +924,7 @@ export class RouterApiService {
       wireguardIp: router.wireguardIp,
       apiPort: router.apiPort,
       username: router.apiUsername,
-      password: router.apiPasswordHash,
+      password: this.decryptApiPassword(router.apiPasswordHash),
       hotspotServer: router.hotspotServer,
       timeoutMs,
     });
@@ -964,6 +973,26 @@ export class RouterApiService {
     return getRouterOperationTimeoutMs(this.routerTimeouts, profile);
   }
 
+  private getRouterApiKey(): Buffer {
+    if (this.routerApiKey) {
+      return this.routerApiKey;
+    }
+    const raw = this.configService.get<string>("ENCRYPTION_KEY");
+    if (!raw) {
+      throw new Error("ENCRYPTION_KEY env var is not set");
+    }
+    this.routerApiKey = deriveRouterApiKey(raw);
+    return this.routerApiKey;
+  }
+
+  /** Decrypts a router's stored `apiPasswordHash`, transparently handling legacy plaintext rows. */
+  private decryptApiPassword(storedApiPasswordHash: string): string {
+    return decryptRouterApiPasswordCompat(
+      storedApiPasswordHash,
+      this.getRouterApiKey(),
+    ).password;
+  }
+
   private async getRouterConnectionTarget(
     routerId: string,
   ): Promise<RouterConnectionTarget> {
@@ -980,6 +1009,9 @@ export class RouterApiService {
     if (!router.wireguardIp) {
       throw new Error(`Router ${routerId} has no WireGuard IP configured`);
     }
-    return router as RouterConnectionTarget;
+    return {
+      ...router,
+      apiPasswordHash: this.decryptApiPassword(router.apiPasswordHash),
+    } as RouterConnectionTarget;
   }
 }

@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Patch,
+  Delete,
   Body,
   HttpCode,
   HttpStatus,
@@ -13,15 +14,23 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
 import { FastifyRequest } from "fastify";
 import { AuthService } from "./auth.service";
+import { AuthTokens } from "./auth.types";
 import { TwoFactorService } from "./two-factor.service";
 import {
   ChangePasswordDto,
   ConfirmPasswordResetDto,
+  DeleteAccountDto,
+  GoogleLoginDto,
   LoginDto,
+  PushTokenDto,
   RefreshTokenDto,
   RequestPasswordResetDto,
+  SetPasswordDto,
+  SignupDto,
   TwoFactorCodeDto,
   TwoFactorVerifyDto,
+  UpdateMeDto,
+  UpdateNotificationsDto,
   UpdateProfileDto,
 } from "./dto/login.dto";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
@@ -42,7 +51,7 @@ export class AuthController {
   @Post("login")
   @HttpCode(HttpStatus.OK)
   @Throttle({ global: { ttl: 60000, limit: 10 } }) // 10 attempts/min per IP
-  @ApiOperation({ summary: "Admin login" })
+  @ApiOperation({ summary: "Login" })
   async login(@Body() dto: LoginDto, @Req() req: FastifyRequest) {
     const ipAddress =
       (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ??
@@ -50,7 +59,43 @@ export class AuthController {
       "unknown";
     const userAgent = req.headers["user-agent"] ?? "unknown";
 
-    return this.authService.login(dto, ipAddress, userAgent);
+    const result = await this.authService.login(dto, ipAddress, userAgent);
+    if (result.requiresTwoFactor) return result;
+    return toMobileTokens(result.tokens);
+  }
+
+  @Public()
+  @Post("signup")
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ global: { ttl: 60000, limit: 5 } })
+  @ApiOperation({ summary: "Signup — creates a Tenant + OWNER account" })
+  async signup(@Body() dto: SignupDto, @Req() req: FastifyRequest) {
+    const ipAddress =
+      (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ??
+      req.ip ??
+      "unknown";
+    const userAgent = req.headers["user-agent"] ?? "unknown";
+    const tokens = await this.authService.signup(dto, ipAddress, userAgent);
+    return toMobileTokens(tokens);
+  }
+
+  @Public()
+  @Post("google")
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ global: { ttl: 60000, limit: 10 } })
+  @ApiOperation({ summary: "Google OAuth login/signup" })
+  async google(@Body() dto: GoogleLoginDto, @Req() req: FastifyRequest) {
+    const ipAddress =
+      (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ??
+      req.ip ??
+      "unknown";
+    const userAgent = req.headers["user-agent"] ?? "unknown";
+    const tokens = await this.authService.googleLogin(
+      dto,
+      ipAddress,
+      userAgent,
+    );
+    return toMobileTokens(tokens);
   }
 
   @Public()
@@ -64,7 +109,12 @@ export class AuthController {
       "unknown";
     const userAgent = req.headers["user-agent"] ?? "unknown";
 
-    return this.authService.refreshTokens(dto, ipAddress, userAgent);
+    const tokens = await this.authService.refreshTokens(
+      dto,
+      ipAddress,
+      userAgent,
+    );
+    return toMobileTokens(tokens);
   }
 
   @Post("logout")
@@ -130,9 +180,61 @@ export class AuthController {
 
   @Get("me")
   @ApiBearerAuth()
-  @ApiOperation({ summary: "Get current user profile" })
+  @ApiOperation({ summary: "Get current user + tenant + subscription" })
   getMe(@CurrentUser() user: JwtPayload) {
-    return this.authService.getProfile(user.sub);
+    return this.authService.getMe(user.sub);
+  }
+
+  @Patch("me")
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Update current user profile" })
+  updateMe(@CurrentUser() user: JwtPayload, @Body() body: UpdateMeDto) {
+    return this.authService.updateMe(user.sub, body);
+  }
+
+  @Delete("me")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Delete own account (soft delete)" })
+  deleteMe(@CurrentUser() user: JwtPayload, @Body() body: DeleteAccountDto) {
+    return this.authService.deleteAccount(user.sub, body);
+  }
+
+  @Patch("me/notifications")
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Toggle push notifications" })
+  updateNotifications(
+    @CurrentUser() user: JwtPayload,
+    @Body() body: UpdateNotificationsDto,
+  ) {
+    return this.authService.updateNotifications(user.sub, body.enabled);
+  }
+
+  @Post("set-password")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Set a password (Google-only accounts)" })
+  setPassword(@CurrentUser() user: JwtPayload, @Body() body: SetPasswordDto) {
+    return this.authService.setPassword(user.sub, body.password);
+  }
+
+  @Post("push-token")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Register a push notification token" })
+  registerPushToken(
+    @CurrentUser() user: JwtPayload,
+    @Body() body: PushTokenDto,
+  ) {
+    return this.authService.registerPushToken(user.sub, body.token);
+  }
+
+  @Post("logout-all")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Revoke all sessions" })
+  logoutAll(@CurrentUser() user: JwtPayload) {
+    return this.authService.logoutAllSessions(user.sub);
   }
 
   @Patch("profile")
@@ -204,6 +306,7 @@ export class AuthController {
       req.ip ??
       "unknown";
     const userAgent = req.headers["user-agent"] ?? "unknown";
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return this.twoFactorService.verifyLogin(
       dto.tempToken,
       dto.code,
@@ -211,4 +314,12 @@ export class AuthController {
       userAgent,
     );
   }
+}
+
+function toMobileTokens(tokens: AuthTokens) {
+  return {
+    accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken,
+    expiresIn: tokens.accessExpiresIn,
+  };
 }

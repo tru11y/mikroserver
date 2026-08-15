@@ -8,6 +8,7 @@ import {
 import { FastifyReply, FastifyRequest } from "fastify";
 import { PinoLogger } from "nestjs-pino";
 import { Prisma } from "@prisma/client";
+import { captureException } from "../observability/sentry";
 
 interface ErrorResponse {
   statusCode: number;
@@ -73,6 +74,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
         { requestId, path, exception },
         `Unhandled exception: ${String(exception)}`,
       );
+      captureException(exception);
     } else {
       this.logger.warn(
         { requestId, path, statusCode },

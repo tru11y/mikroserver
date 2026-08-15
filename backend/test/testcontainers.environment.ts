@@ -1,6 +1,34 @@
 import { execSync } from "child_process";
 import { resolve } from "path";
+import { createConnection } from "net";
 import { GenericContainer, StartedTestContainer, Wait } from "testcontainers";
+
+/**
+ * The postgres log line testcontainers waits on fires slightly before Docker
+ * Desktop's host port-forward is actually accepting connections (seen on
+ * Windows). Poll the raw TCP port before handing off to `prisma migrate
+ * deploy`, instead of racing it.
+ */
+function waitForPort(host: string, port: number, timeoutMs = 15_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  return new Promise((resolvePromise, reject) => {
+    const attempt = () => {
+      const socket = createConnection({ host, port }, () => {
+        socket.end();
+        resolvePromise();
+      });
+      socket.on("error", () => {
+        socket.destroy();
+        if (Date.now() > deadline) {
+          reject(new Error(`Timed out waiting for ${host}:${port}`));
+        } else {
+          setTimeout(attempt, 300);
+        }
+      });
+    };
+    attempt();
+  });
+}
 
 type ContainerState = {
   postgres: StartedTestContainer;
@@ -37,7 +65,11 @@ export async function setupE2EEnvironment(): Promise<E2EEnvironment> {
     })
     .withExposedPorts(5432)
     .withWaitStrategy(
-      Wait.forLogMessage("database system is ready to accept connections"),
+      // The postgres image logs this message twice: once after the initdb
+      // bootstrap pass (which then shuts the server back down), and once for
+      // the real startup. Waiting for only the first occurrence races with
+      // that restart and intermittently fails with P1001.
+      Wait.forLogMessage("database system is ready to accept connections", 2),
     )
     .start();
 
@@ -47,8 +79,19 @@ export async function setupE2EEnvironment(): Promise<E2EEnvironment> {
     .withWaitStrategy(Wait.forLogMessage("Ready to accept connections"))
     .start();
 
-  const postgresUrl = `postgresql://${pgUser}:${pgPassword}@${postgres.getHost()}:${postgres.getMappedPort(5432)}/${pgDb}`;
-  const redisHost = redis.getHost();
+  // Force IPv4: Node's "localhost" resolution prefers IPv6 (::1) on Windows,
+  // but Docker Desktop's port publish only listens on the IPv4 loopback,
+  // which silently connection-refuses Prisma even after the TCP wait below
+  // succeeds via a different address family.
+  const postgresHost =
+    postgres.getHost() === "localhost" ? "127.0.0.1" : postgres.getHost();
+  const redisHostRaw =
+    redis.getHost() === "localhost" ? "127.0.0.1" : redis.getHost();
+
+  await waitForPort(postgresHost, postgres.getMappedPort(5432));
+
+  const postgresUrl = `postgresql://${pgUser}:${pgPassword}@${postgresHost}:${postgres.getMappedPort(5432)}/${pgDb}`;
+  const redisHost = redisHostRaw;
   const redisPort = redis.getMappedPort(6379);
 
   setDefaultEnv("NODE_ENV", "test");

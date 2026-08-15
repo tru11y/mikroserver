@@ -170,6 +170,10 @@ const envSchema = z
     OTEL_EXPORTER_OTLP_ENDPOINT: optionalUrl,
     OTEL_SAMPLE_RATIO: z.string().default("1").transform(Number),
 
+    // --- Error tracking ---
+    SENTRY_DSN: optionalUrl,
+    SENTRY_TRACES_SAMPLE_RATE: z.string().default("0.1").transform(Number),
+
     // --- Transaction ---
     TRANSACTION_EXPIRY_MINUTES: z.string().default("30").transform(Number),
   })

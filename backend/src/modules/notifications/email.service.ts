@@ -44,7 +44,7 @@ export class EmailService {
 
     const from = this.configService.get<string>(
       "SMTP_FROM",
-      "MikroServer <noreply@mikroserver.app>",
+      "MikroLan <noreply@mikrolan.net>",
     );
 
     try {
@@ -66,7 +66,7 @@ export class EmailService {
   async sendWelcome(email: string, name: string): Promise<void> {
     const loginUrl = this.configService.get<string>(
       "APP_URL",
-      "https://app.mikroserver.app",
+      "https://app.mikrolan.net",
     );
 
     await this.send({
@@ -104,7 +104,7 @@ export class EmailService {
   ): Promise<void> {
     const renewUrl = this.configService.get<string>(
       "APP_URL",
-      "https://app.mikroserver.app",
+      "https://app.mikrolan.net",
     );
 
     await this.send({
@@ -185,10 +185,10 @@ export class EmailService {
     toEmail: string,
     otpCode: string,
     expiresMinutes = 15,
-  ): Promise<void> {
-    await this.send({
+  ): Promise<boolean> {
+    return this.send({
       to: toEmail,
-      subject: "Code de réinitialisation MikroServer",
+      subject: "Code de réinitialisation MikroLan",
       html: Tpl.passwordReset(otpCode, expiresMinutes),
     });
   }

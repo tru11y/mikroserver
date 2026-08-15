@@ -53,8 +53,11 @@ import {
 import { WgIpPoolService } from "./wg-ip-pool.service";
 import { QueueService } from "../queue/queue.service";
 import {
+  decryptRouterApiPasswordCompat,
   deriveRouterAccessKey,
+  deriveRouterApiKey,
   encryptRouterAccessPassword,
+  encryptRouterApiPassword,
 } from "./router-access.crypto";
 import { executeRouterOperationResult } from "./router-routeros.transport";
 import { runCommand, runParsedCommand } from "./router-api.commands";
@@ -84,6 +87,7 @@ type BulkActionErrorItem = {
 export class RoutersService {
   private readonly logger = new Logger(RoutersService.name);
   private routerAccessKey: Buffer | null = null;
+  private routerApiKey: Buffer | null = null;
   private isRecoveringProvisionJobs = false;
 
   constructor(
@@ -108,6 +112,20 @@ export class RoutersService {
 
     this.routerAccessKey = deriveRouterAccessKey(raw);
     return this.routerAccessKey;
+  }
+
+  private getRouterApiKey(): Buffer {
+    if (this.routerApiKey) {
+      return this.routerApiKey;
+    }
+
+    const raw = this.configService.get<string>("ENCRYPTION_KEY");
+    if (!raw) {
+      throw new Error("ENCRYPTION_KEY env var is not set");
+    }
+
+    this.routerApiKey = deriveRouterApiKey(raw);
+    return this.routerApiKey;
   }
 
   // ---------------------------------------------------------------------------
@@ -315,7 +333,10 @@ export class RoutersService {
           wireguardIp: null, // will be set by WG provisioning
           apiPort: dto.apiPort ?? 8728,
           apiUsername: dto.apiUsername ?? "admin",
-          apiPasswordHash: dto.apiPassword ?? "",
+          apiPasswordHash: encryptRouterApiPassword(
+            dto.apiPassword ?? "",
+            this.getRouterApiKey(),
+          ),
           hotspotProfile: dto.hotspotProfile ?? "default",
           hotspotServer: dto.hotspotServer ?? "hotspot1",
           site: dto.site?.trim() || null,
@@ -354,7 +375,10 @@ export class RoutersService {
         wireguardIp: null, // will be set once WireGuard tunnel establishes
         apiPort: dto.apiPort ?? 8728,
         apiUsername: dto.apiUsername ?? "admin",
-        apiPasswordHash: dto.apiPassword ?? "",
+        apiPasswordHash: encryptRouterApiPassword(
+          dto.apiPassword ?? "",
+          this.getRouterApiKey(),
+        ),
         hotspotProfile: dto.hotspotProfile ?? "default",
         hotspotServer: dto.hotspotServer ?? "hotspot1",
         site: dto.site?.trim() || null,
@@ -413,7 +437,7 @@ export class RoutersService {
         wireguardIp: null,
         apiPort: 8728, // binary API port (unused in direct mode, kept for schema)
         apiUsername: username,
-        apiPasswordHash: password, // stored plain (same as legacy mode, used for RouterOS API)
+        apiPasswordHash: encryptRouterApiPassword(password, this.getRouterApiKey()),
         accessUsername: username,
         accessPassword: encryptedAccessPassword,
         webfigPort: port,
@@ -666,7 +690,12 @@ export class RoutersService {
     const { apiPassword, site, tags, ownerId, ...rest } =
       dto as UpdateRouterDto & { apiPassword?: string };
     const updateData: Record<string, unknown> = { ...rest };
-    if (apiPassword) updateData["apiPasswordHash"] = apiPassword;
+    if (apiPassword) {
+      updateData["apiPasswordHash"] = encryptRouterApiPassword(
+        apiPassword,
+        this.getRouterApiKey(),
+      );
+    }
     if (ownerId !== undefined) updateData["ownerId"] = ownerId;
     if (Object.prototype.hasOwnProperty.call(dto, "site")) {
       updateData["site"] = site?.trim() || null;
@@ -900,6 +929,11 @@ export class RoutersService {
     });
     if (!router?.wireguardIp) return;
 
+    const { password: apiPassword } = decryptRouterApiPasswordCompat(
+      router.apiPasswordHash,
+      this.getRouterApiKey(),
+    );
+
     const maxAttempts = 2;
     let lastErr: unknown;
 
@@ -910,7 +944,7 @@ export class RoutersService {
           wireguardIp: router.wireguardIp,
           apiPort: router.apiPort,
           username: router.apiUsername,
-          password: router.apiPasswordHash,
+          password: apiPassword,
           timeoutMs: 12000,
           operation: async (conn) => {
             // Auto-detect WireGuard interface name (prefer wg-mks, fallback to first)

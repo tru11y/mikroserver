@@ -74,7 +74,6 @@ export class SshGateway implements OnGatewayConnection, OnGatewayDisconnect {
         id: true,
         wireguardIp: true,
         apiUsername: true,
-        apiPasswordHash: true,
         accessUsername: true,
         accessPassword: true,
         ownerId: true,

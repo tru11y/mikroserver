@@ -5,24 +5,22 @@ import {
   scryptSync,
 } from "crypto";
 
-const ROUTER_ACCESS_ALGO = "aes-256-gcm";
+const SECRET_ALGO = "aes-256-gcm";
 const ROUTER_ACCESS_KEY_SALT = "mikroserver-router-access-salt";
+const ROUTER_API_KEY_SALT = "mikroserver-router-api-salt";
 const ENCRYPTED_PARTS_COUNT = 3;
 
-export function deriveRouterAccessKey(rawKey: string): Buffer {
-  return scryptSync(rawKey, ROUTER_ACCESS_KEY_SALT, 32);
+function deriveKey(rawKey: string, salt: string): Buffer {
+  return scryptSync(rawKey, salt, 32);
 }
 
-export function isRouterAccessPasswordEncrypted(value: string): boolean {
+function isEncrypted(value: string): boolean {
   return value.split(":").length === ENCRYPTED_PARTS_COUNT;
 }
 
-export function encryptRouterAccessPassword(
-  plaintext: string,
-  key: Buffer,
-): string {
+function encryptSecret(plaintext: string, key: Buffer): string {
   const iv = randomBytes(12);
-  const cipher = createCipheriv(ROUTER_ACCESS_ALGO, key, iv);
+  const cipher = createCipheriv(SECRET_ALGO, key, iv);
   const ciphertext = Buffer.concat([
     cipher.update(plaintext, "utf8"),
     cipher.final(),
@@ -34,13 +32,10 @@ export function encryptRouterAccessPassword(
     .join(":");
 }
 
-export function decryptRouterAccessPassword(
-  encryptedValue: string,
-  key: Buffer,
-): string {
+function decryptSecret(encryptedValue: string, key: Buffer): string {
   const parts = encryptedValue.split(":");
   if (parts.length !== ENCRYPTED_PARTS_COUNT) {
-    throw new Error("Invalid encrypted router access password format");
+    throw new Error("Invalid encrypted secret format");
   }
 
   const [ivBase64, authTagBase64, ciphertextBase64] = parts;
@@ -48,7 +43,7 @@ export function decryptRouterAccessPassword(
   const authTag = Buffer.from(authTagBase64, "base64");
   const ciphertext = Buffer.from(ciphertextBase64, "base64");
 
-  const decipher = createDecipheriv(ROUTER_ACCESS_ALGO, key, iv);
+  const decipher = createDecipheriv(SECRET_ALGO, key, iv);
   decipher.setAuthTag(authTag);
   return Buffer.concat([
     decipher.update(ciphertext),
@@ -56,11 +51,11 @@ export function decryptRouterAccessPassword(
   ]).toString("utf8");
 }
 
-export function decryptRouterAccessPasswordCompat(
+function decryptSecretCompat(
   storedValue: string,
   key: Buffer,
 ): { password: string; wasLegacyPlaintext: boolean } {
-  if (!isRouterAccessPasswordEncrypted(storedValue)) {
+  if (!isEncrypted(storedValue)) {
     return {
       password: storedValue,
       wasLegacyPlaintext: true,
@@ -68,7 +63,66 @@ export function decryptRouterAccessPasswordCompat(
   }
 
   return {
-    password: decryptRouterAccessPassword(storedValue, key),
+    password: decryptSecret(storedValue, key),
     wasLegacyPlaintext: false,
   };
+}
+
+// ── Router access password (Winbox/Webfig/SSH) ─────────────────────────────
+
+export function deriveRouterAccessKey(rawKey: string): Buffer {
+  return deriveKey(rawKey, ROUTER_ACCESS_KEY_SALT);
+}
+
+export function isRouterAccessPasswordEncrypted(value: string): boolean {
+  return isEncrypted(value);
+}
+
+export function encryptRouterAccessPassword(
+  plaintext: string,
+  key: Buffer,
+): string {
+  return encryptSecret(plaintext, key);
+}
+
+export function decryptRouterAccessPassword(
+  encryptedValue: string,
+  key: Buffer,
+): string {
+  return decryptSecret(encryptedValue, key);
+}
+
+export function decryptRouterAccessPasswordCompat(
+  storedValue: string,
+  key: Buffer,
+): { password: string; wasLegacyPlaintext: boolean } {
+  return decryptSecretCompat(storedValue, key);
+}
+
+// ── Router RouterOS API password (apiPasswordHash) ─────────────────────────
+
+export function deriveRouterApiKey(rawKey: string): Buffer {
+  return deriveKey(rawKey, ROUTER_API_KEY_SALT);
+}
+
+export function isRouterApiPasswordEncrypted(value: string): boolean {
+  return isEncrypted(value);
+}
+
+export function encryptRouterApiPassword(plaintext: string, key: Buffer): string {
+  return encryptSecret(plaintext, key);
+}
+
+export function decryptRouterApiPassword(
+  encryptedValue: string,
+  key: Buffer,
+): string {
+  return decryptSecret(encryptedValue, key);
+}
+
+export function decryptRouterApiPasswordCompat(
+  storedValue: string,
+  key: Buffer,
+): { password: string; wasLegacyPlaintext: boolean } {
+  return decryptSecretCompat(storedValue, key);
 }

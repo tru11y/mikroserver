@@ -41,6 +41,7 @@ import { ApiKeysModule } from "./modules/api-keys/api-keys.module";
 import { SpeedBoostsModule } from "./modules/speed-boosts/speed-boosts.module";
 import { InsightsModule } from "./modules/insights/insights.module";
 import { AdminModule } from "./modules/admin/admin.module";
+import { SubscriptionsModule } from "./modules/subscriptions/subscriptions.module";
 import { SshModule } from "./modules/ssh/ssh.module";
 import { TunnelsModule } from "./modules/tunnels/tunnels.module";
 import { BeaconModule } from "./modules/beacon/beacon.module";
@@ -159,6 +160,7 @@ import { HotspotSetupModule } from "./modules/hotspot-setup/hotspot-setup.module
     SpeedBoostsModule,
     InsightsModule,
     AdminModule,
+    SubscriptionsModule,
     SshModule,
     TunnelsModule,
     BeaconModule,

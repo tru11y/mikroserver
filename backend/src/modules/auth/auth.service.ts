@@ -11,13 +11,19 @@ import { v4 as uuidv4 } from "uuid";
 import { addMinutes } from "date-fns";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
+import { SaasService } from "../saas/saas.service";
+import { EmailService } from "../notifications/email.service";
 import { normalizeAuthEmail } from "./auth.utils";
 import {
   ChangePasswordDto,
   ConfirmPasswordResetDto,
+  DeleteAccountDto,
+  GoogleLoginDto,
   LoginDto,
   RefreshTokenDto,
   RequestPasswordResetDto,
+  SignupDto,
+  UpdateMeDto,
 } from "./dto/login.dto";
 import { User, UserRole, UserStatus, AuditAction } from "@prisma/client";
 import { resolveUserPermissions } from "./permissions/permissions.constants";
@@ -50,6 +56,8 @@ export class AuthService {
     private readonly passwordService: AuthPasswordService,
     private readonly tokenService: AuthTokenService,
     private readonly twoFactorService: TwoFactorService,
+    private readonly saasService: SaasService,
+    private readonly emailService: EmailService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -87,7 +95,7 @@ export class AuthService {
     const { valid: isPasswordValid, shouldUpgradeToBcrypt } =
       await this.passwordService.verifyPassword(
         dto.password,
-        user.passwordHash,
+        user.passwordHash ?? "",
       );
 
     if (!isPasswordValid) {
@@ -250,7 +258,7 @@ export class AuthService {
 
     const { valid: isCurrentValid } = await this.passwordService.verifyPassword(
       dto.currentPassword,
-      user.passwordHash,
+      user.passwordHash ?? "",
     );
 
     if (!isCurrentValid) {
@@ -336,7 +344,6 @@ export class AuthService {
     await this.sendPasswordResetEmail({
       email: user.email,
       firstName: user.firstName,
-      token: rawToken,
       otpCode: rawOtpCode,
       expiresAt,
     });
@@ -359,20 +366,19 @@ export class AuthService {
     ipAddress: string,
     userAgent: string,
   ): Promise<{ success: boolean }> {
-    const tokenHash = this.tokenService.hashToken(dto.token.trim());
+    const normalizedEmail = normalizeAuthEmail(dto.email);
     const codeHash = this.tokenService.hashToken(dto.code.trim());
 
-    const resetToken = await this.prisma.passwordResetToken.findUnique({
-      where: { tokenHash },
+    const resetToken = await this.prisma.passwordResetToken.findFirst({
+      where: { user: { email: normalizedEmail }, usedAt: null },
+      orderBy: { createdAt: "desc" },
       include: { user: true },
     });
 
     if (!resetToken)
-      throw new UnauthorizedException("Token de reinitialisation invalide");
-    if (resetToken.usedAt)
-      throw new UnauthorizedException("Token de reinitialisation deja utilise");
+      throw new UnauthorizedException("Code de reinitialisation invalide");
     if (resetToken.expiresAt <= new Date())
-      throw new UnauthorizedException("Token de reinitialisation expire");
+      throw new UnauthorizedException("Code de reinitialisation expire");
     if (resetToken.codeHash !== codeHash)
       throw new UnauthorizedException("Code OTP invalide");
     if (resetToken.user.status !== UserStatus.ACTIVE)
@@ -479,6 +485,375 @@ export class AuthService {
   }
 
   // ---------------------------------------------------------------------------
+  // Signup (creates Tenant + OWNER user)
+  // ---------------------------------------------------------------------------
+
+  async signup(
+    dto: SignupDto,
+    ipAddress: string,
+    userAgent: string,
+  ): Promise<AuthTokens> {
+    const normalizedEmail = normalizeAuthEmail(dto.email);
+    const existing = await this.prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+    if (existing) {
+      throw new ConflictException("Cette adresse email est déjà utilisée.");
+    }
+
+    const passwordHash = await this.passwordService.hashPassword(
+      dto.password,
+    );
+    const slug = await this.generateUniqueTenantSlug(dto.tenantName);
+
+    const user = await this.prisma.$transaction(async (tx) => {
+      const tenant = await tx.tenant.create({
+        data: { name: dto.tenantName.trim(), slug },
+      });
+      return tx.user.create({
+        data: {
+          email: normalizedEmail,
+          passwordHash,
+          firstName: dto.tenantName.trim().slice(0, 100) || "Owner",
+          lastName: "",
+          role: UserRole.OWNER,
+          status: UserStatus.ACTIVE,
+          emailVerifiedAt: new Date(),
+          passwordChangedAt: new Date(),
+          tenantId: tenant.id,
+        },
+      });
+    });
+
+    await this.saasService.startTrial(user.id).catch((error: Error) => {
+      this.logger.error(
+        `Failed to start trial subscription for ${user.email}: ${error.message}`,
+      );
+    });
+
+    const tokens = await this.tokenService.generateTokenPair(
+      user,
+      ipAddress,
+      userAgent,
+      uuidv4(),
+    );
+
+    await this.auditService.log({
+      userId: user.id,
+      action: AuditAction.CREATE,
+      entityType: "Tenant",
+      entityId: user.tenantId ?? undefined,
+      ipAddress,
+      userAgent,
+      description: `Tenant signup for ${user.email}`,
+    });
+
+    return tokens;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Google OAuth
+  // ---------------------------------------------------------------------------
+
+  async googleLogin(
+    dto: GoogleLoginDto,
+    ipAddress: string,
+    userAgent: string,
+  ): Promise<AuthTokens> {
+    const payload = await this.verifyGoogleIdToken(dto.idToken);
+
+    let user = await this.prisma.user.findFirst({
+      where: {
+        OR: [{ googleId: payload.sub }, { email: payload.email }],
+        deletedAt: null,
+      },
+    });
+
+    if (user && !user.googleId) {
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: { googleId: payload.sub },
+      });
+    }
+
+    if (!user) {
+      const slug = await this.generateUniqueTenantSlug(
+        payload.name ?? payload.email,
+      );
+      user = await this.prisma.$transaction(async (tx) => {
+        const tenant = await tx.tenant.create({
+          data: { name: payload.name ?? payload.email, slug },
+        });
+        return tx.user.create({
+          data: {
+            email: payload.email,
+            googleId: payload.sub,
+            firstName: (payload.name ?? "Owner").slice(0, 100),
+            lastName: "",
+            role: UserRole.OWNER,
+            status: UserStatus.ACTIVE,
+            emailVerifiedAt: new Date(),
+            tenantId: tenant.id,
+          },
+        });
+      });
+    }
+
+    if (user.status !== UserStatus.ACTIVE) {
+      throw new ForbiddenException("Account not active");
+    }
+
+    const tokens = await this.tokenService.generateTokenPair(
+      user,
+      ipAddress,
+      userAgent,
+      uuidv4(),
+    );
+
+    await this.auditService.log({
+      userId: user.id,
+      action: AuditAction.LOGIN,
+      entityType: "User",
+      entityId: user.id,
+      ipAddress,
+      userAgent,
+      description: `Google login for ${user.email}`,
+    });
+
+    return tokens;
+  }
+
+  private async verifyGoogleIdToken(
+    idToken: string,
+  ): Promise<{ sub: string; email: string; name?: string }> {
+    const response = await fetch(
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`,
+    );
+    if (!response.ok) {
+      throw new UnauthorizedException("Jeton Google invalide");
+    }
+    const data = (await response.json()) as {
+      sub: string;
+      email: string;
+      email_verified: string;
+      name?: string;
+      aud?: string;
+    };
+    const expectedAudience = this.configService.get<string>(
+      "GOOGLE_OAUTH_CLIENT_ID",
+    );
+    if (expectedAudience && data.aud !== expectedAudience) {
+      throw new UnauthorizedException("Jeton Google invalide");
+    }
+    if (data.email_verified !== "true" || !data.email) {
+      throw new UnauthorizedException("Email Google non vérifié");
+    }
+    return {
+      sub: data.sub,
+      email: normalizeAuthEmail(data.email),
+      name: data.name,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Enriched /auth/me (user + tenant + subscription + entitlement)
+  // ---------------------------------------------------------------------------
+
+  async getMe(userId: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId, deletedAt: null },
+      include: {
+        tenant: true,
+        operatorSubscription: { include: { tier: true } },
+      },
+    });
+
+    const entitlement = this.buildEntitlement(user);
+
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        name:
+          [user.firstName, user.lastName].filter(Boolean).join(" ").trim() ||
+          null,
+        country: user.country,
+        role: user.role,
+        status: user.status,
+        notificationsEnabled: user.notificationsEnabled,
+        hasPassword: !!user.passwordHash,
+        googleId: user.googleId,
+      },
+      tenant: user.tenant
+        ? {
+            id: user.tenant.id,
+            name: user.tenant.name,
+            slug: user.tenant.slug,
+            status: user.tenant.status,
+          }
+        : null,
+      subscription: user.operatorSubscription
+        ? {
+            plan: user.operatorSubscription.tier.isFree ? "FREE" : "PRO",
+            status: user.operatorSubscription.status,
+            currentPeriodEnd: user.operatorSubscription.endDate.toISOString(),
+          }
+        : null,
+      entitlement,
+    };
+  }
+
+  private buildEntitlement(user: {
+    role: UserRole;
+    operatorSubscription:
+      | ({ tier: { slug: string; maxRouters: number | null } } & {
+          status: string;
+          endDate: Date;
+          trialEndsAt: Date | null;
+        })
+      | null;
+  }) {
+    const now = new Date();
+    const sub = user.operatorSubscription;
+
+    if (user.role === UserRole.SUPER_ADMIN) {
+      return {
+        tier: "PRO" as const,
+        localAllowed: true,
+        remoteAllowed: true,
+        endsAt: null,
+        daysLeft: 9999,
+        tierKey: null,
+        routerLimit: null,
+      };
+    }
+
+    if (!sub || sub.status !== "ACTIVE" || sub.endDate < now) {
+      return {
+        tier: "LOCKED" as const,
+        localAllowed: false,
+        remoteAllowed: false,
+        endsAt: sub?.endDate.toISOString() ?? null,
+        daysLeft: 0,
+        tierKey: null,
+        routerLimit: null,
+      };
+    }
+
+    const isTrial = !!sub.trialEndsAt && sub.trialEndsAt > now;
+    const daysLeft = Math.max(
+      0,
+      Math.ceil((sub.endDate.getTime() - now.getTime()) / 86400000),
+    );
+
+    return {
+      tier: (isTrial ? "TRIAL" : "PRO") as "TRIAL" | "PRO",
+      localAllowed: true,
+      remoteAllowed: true,
+      endsAt: sub.endDate.toISOString(),
+      daysLeft,
+      tierKey: sub.tier.slug,
+      routerLimit: sub.tier.maxRouters,
+    };
+  }
+
+  async updateMe(userId: string, dto: UpdateMeDto) {
+    const [firstName, ...rest] = (dto.name ?? "").trim().split(/\s+/);
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(dto.name !== undefined
+          ? { firstName: firstName || "", lastName: rest.join(" ") }
+          : {}),
+        ...(dto.country !== undefined ? { country: dto.country } : {}),
+      },
+    });
+    const me = await this.getMe(user.id);
+    return me.user;
+  }
+
+  async updateNotifications(userId: string, enabled: boolean): Promise<void> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { notificationsEnabled: enabled },
+    });
+  }
+
+  async setPassword(userId: string, password: string): Promise<void> {
+    const passwordHash = await this.passwordService.hashPassword(password);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash, passwordChangedAt: new Date() },
+    });
+  }
+
+  async registerPushToken(userId: string, token: string): Promise<void> {
+    await this.prisma.pushSubscription.upsert({
+      where: { endpoint: token },
+      update: { userId },
+      create: { userId, endpoint: token, p256dh: "", auth: "" },
+    });
+  }
+
+  async logoutAllSessions(userId: string): Promise<void> {
+    await this.prisma.refreshToken.updateMany({
+      where: { userId, isRevoked: false },
+      data: { isRevoked: true, revokedAt: new Date() },
+    });
+  }
+
+  async deleteAccount(userId: string, dto: DeleteAccountDto): Promise<void> {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId, deletedAt: null },
+    });
+
+    if (user.passwordHash && dto.password) {
+      const { valid } = await this.passwordService.verifyPassword(
+        dto.password,
+        user.passwordHash,
+      );
+      if (!valid) throw new UnauthorizedException("Mot de passe incorrect");
+    } else if (user.googleId && dto.googleIdToken) {
+      const payload = await this.verifyGoogleIdToken(dto.googleIdToken);
+      if (payload.sub !== user.googleId) {
+        throw new UnauthorizedException("Jeton Google invalide");
+      }
+    } else {
+      throw new UnauthorizedException("Confirmation requise");
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { deletedAt: new Date(), status: UserStatus.SUSPENDED },
+      }),
+      this.prisma.refreshToken.updateMany({
+        where: { userId, isRevoked: false },
+        data: { isRevoked: true, revokedAt: new Date() },
+      }),
+    ]);
+  }
+
+  private async generateUniqueTenantSlug(name: string): Promise<string> {
+    const base =
+      name
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/\p{Diacritic}/gu, "")
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 60) || "tenant";
+
+    let slug = base;
+    let suffix = 0;
+    while (await this.prisma.tenant.findUnique({ where: { slug } })) {
+      suffix += 1;
+      slug = `${base}-${suffix}`;
+    }
+    return slug;
+  }
+
+  // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------
 
@@ -540,63 +915,20 @@ export class AuthService {
   private async sendPasswordResetEmail(params: {
     email: string;
     firstName: string;
-    token: string;
     otpCode: string;
     expiresAt: Date;
   }): Promise<void> {
-    const resendApiKey = this.configService.get<string>("RESEND_API_KEY");
-    const resendFromEmail = this.configService.get<string>("RESEND_FROM_EMAIL");
-    const appBaseUrl =
-      this.configService.get<string>("PASSWORD_RESET_APP_URL") ??
-      this.configService.get<string>("CORS_ORIGINS")?.split(",")[0]?.trim() ??
-      "http://localhost:3001";
-
-    const resetUrl = `${appBaseUrl.replace(/\/$/, "")}/reset-password?token=${encodeURIComponent(params.token)}`;
-
-    if (!resendApiKey || !resendFromEmail) {
+    const expiresMinutes = Math.round(
+      (params.expiresAt.getTime() - Date.now()) / 60000,
+    );
+    const sent = await this.emailService.sendPasswordReset(
+      params.email,
+      params.otpCode,
+      expiresMinutes,
+    );
+    if (!sent) {
       this.logger.warn(
         `Password reset email provider not configured for ${this.maskEmail(params.email)}. OTP generated but not sent.`,
-      );
-      return;
-    }
-
-    const html = `
-      <div style="font-family: Arial, sans-serif; line-height: 1.5;">
-        <h2>Reinitialisation du mot de passe</h2>
-        <p>Bonjour ${params.firstName || "utilisateur"},</p>
-        <p>Utilise ce code OTP pour confirmer la reinitialisation :</p>
-        <p style="font-size: 24px; letter-spacing: 4px; font-weight: bold;">${params.otpCode}</p>
-        <p>Ce code expire le ${params.expiresAt.toISOString()}.</p>
-        <p>Ensuite, ouvre ce lien :</p>
-        <p><a href="${resetUrl}">${resetUrl}</a></p>
-        <p>Si tu n es pas a l origine de cette demande, ignore cet email.</p>
-      </div>
-    `.trim();
-
-    try {
-      const response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${resendApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: resendFromEmail,
-          to: [params.email],
-          subject: "MikroServer - Reinitialisation mot de passe",
-          html,
-        }),
-      });
-
-      if (!response.ok) {
-        const responseText = await response.text();
-        this.logger.error(
-          `Resend API error during password reset email: ${response.status} ${responseText}`,
-        );
-      }
-    } catch (error) {
-      this.logger.error(
-        `Unable to send password reset email: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }

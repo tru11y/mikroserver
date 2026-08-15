@@ -59,8 +59,8 @@ export class CustomersController {
   @Get(":id")
   @Roles(UserRole.VIEWER)
   @ApiOperation({ summary: "Get customer profile" })
-  findOne(@Param("id", ParseUUIDPipe) id: string) {
-    return this.customersService.findOne(id);
+  findOne(@Param("id", ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload) {
+    return this.customersService.findOne(id, user.sub, user.role);
   }
 
   @Patch(":id")
@@ -69,8 +69,9 @@ export class CustomersController {
   update(
     @Param("id", ParseUUIDPipe) id: string,
     @Body() body: UpdateCustomerProfileDto,
+    @CurrentUser() user: JwtPayload,
   ) {
-    return this.customersService.update(id, body);
+    return this.customersService.update(id, body, user.sub, user.role);
   }
 
   @Patch(":id/block")
@@ -79,15 +80,16 @@ export class CustomersController {
   block(
     @Param("id", ParseUUIDPipe) id: string,
     @Body() body: SetCustomerBlockedDto,
+    @CurrentUser() user: JwtPayload,
   ) {
-    return this.customersService.block(id, body.isBlocked);
+    return this.customersService.block(id, body.isBlocked, user.sub, user.role);
   }
 
   @Delete(":id")
   @Roles(UserRole.ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: "Delete customer profile" })
-  remove(@Param("id", ParseUUIDPipe) id: string) {
-    return this.customersService.remove(id);
+  remove(@Param("id", ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload) {
+    return this.customersService.remove(id, user.sub, user.role);
   }
 }

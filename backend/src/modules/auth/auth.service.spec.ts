@@ -24,6 +24,7 @@ describe("AuthService - password reset flow", () => {
       },
       passwordResetToken: {
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
         updateMany: jest.fn(),
@@ -56,6 +57,14 @@ describe("AuthService - password reset flow", () => {
       createBackupCodes: jest.fn(),
     };
 
+    const saasService = {
+      startTrial: jest.fn().mockResolvedValue(null),
+    };
+
+    const emailService = {
+      sendPasswordReset: jest.fn().mockResolvedValue(true),
+    };
+
     const service = new AuthService(
       prisma as never,
       configService as never,
@@ -63,6 +72,8 @@ describe("AuthService - password reset flow", () => {
       passwordService as never,
       tokenService as never,
       twoFactorService as never,
+      saasService as never,
+      emailService as never,
     );
 
     return {
@@ -94,7 +105,7 @@ describe("AuthService - password reset flow", () => {
     const { service, prisma, auditService } = createService();
     prisma.user.findUnique.mockResolvedValue({
       id: "user-1",
-      email: "admin@mikroserver.com",
+      email: "admin@mikrolan.net",
       firstName: "Admin",
       status: UserStatus.ACTIVE,
     });
@@ -108,7 +119,7 @@ describe("AuthService - password reset flow", () => {
       .mockResolvedValue(undefined);
 
     const result = await service.requestPasswordReset(
-      { email: "admin@mikroserver.com" },
+      { email: "admin@mikrolan.net" },
       "127.0.0.1",
       "jest",
     );
@@ -117,7 +128,7 @@ describe("AuthService - password reset flow", () => {
     expect(prisma.passwordResetToken.create).toHaveBeenCalledTimes(1);
     expect(sendSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        email: "admin@mikroserver.com",
+        email: "admin@mikrolan.net",
       }),
     );
     expect(auditService.log).toHaveBeenCalledWith(
@@ -131,13 +142,11 @@ describe("AuthService - password reset flow", () => {
 
   it("rejects reset confirmation when otp code is invalid", async () => {
     const { service, prisma, tokenService } = createService();
-    const token = "a".repeat(64);
     const validCode = "123456";
 
-    prisma.passwordResetToken.findUnique.mockResolvedValue({
+    prisma.passwordResetToken.findFirst.mockResolvedValue({
       id: "reset-1",
       userId: "user-1",
-      tokenHash: tokenService.hashToken(token),
       codeHash: tokenService.hashToken(validCode),
       expiresAt: new Date(Date.now() + 10 * 60 * 1000),
       usedAt: null,
@@ -150,7 +159,7 @@ describe("AuthService - password reset flow", () => {
     await expect(
       service.confirmPasswordReset(
         {
-          token,
+          email: "admin@mikrolan.net",
           code: "654321",
           newPassword: "NouveauMotDePasse2026!",
         },
@@ -163,20 +172,18 @@ describe("AuthService - password reset flow", () => {
   it("updates password and revokes active sessions on valid reset confirmation", async () => {
     const { service, prisma, auditService, passwordService, tokenService } =
       createService();
-    const token = "b".repeat(64);
     const otpCode = "246810";
     const nowPlus30Min = new Date(Date.now() + 30 * 60 * 1000);
 
-    prisma.passwordResetToken.findUnique.mockResolvedValue({
+    prisma.passwordResetToken.findFirst.mockResolvedValue({
       id: "reset-1",
       userId: "user-1",
-      tokenHash: tokenService.hashToken(token),
       codeHash: tokenService.hashToken(otpCode),
       expiresAt: nowPlus30Min,
       usedAt: null,
       user: {
         id: "user-1",
-        email: "admin@mikroserver.com",
+        email: "admin@mikrolan.net",
         role: UserRole.ADMIN,
         status: UserStatus.ACTIVE,
       },
@@ -190,7 +197,7 @@ describe("AuthService - password reset flow", () => {
 
     const result = await service.confirmPasswordReset(
       {
-        token,
+        email: "admin@mikrolan.net",
         code: otpCode,
         newPassword: "NouveauMotDePasse2026!",
       },

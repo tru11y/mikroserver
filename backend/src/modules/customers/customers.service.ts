@@ -1,5 +1,7 @@
 import { Injectable } from "@nestjs/common";
+import { UserRole } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { scopeCustomerProfileToOwner } from "../../common/helpers/tenant-scope.helper";
 
 @Injectable()
 export class CustomersService {
@@ -39,8 +41,11 @@ export class CustomersService {
   ) {
     const skip = (Math.max(1, page) - 1) * Math.min(limit, 100);
     const ownerFilter =
-      requestingUserRole === "ADMIN" && requestingUserId
-        ? { router: { ownerId: requestingUserId } }
+      requestingUserId && requestingUserRole
+        ? scopeCustomerProfileToOwner(
+            requestingUserId,
+            requestingUserRole as UserRole,
+          )
         : {};
 
     const where = {
@@ -95,9 +100,9 @@ export class CustomersService {
     return { items, total, page, limit };
   }
 
-  async findOne(id: string) {
-    return this.prisma.customerProfile.findUniqueOrThrow({
-      where: { id },
+  async findOne(id: string, requestingUserId: string, requestingUserRole: UserRole) {
+    return this.prisma.customerProfile.findFirstOrThrow({
+      where: { id, ...scopeCustomerProfileToOwner(requestingUserId, requestingUserRole) },
       include: { router: { select: { id: true, name: true } } },
     });
   }
@@ -110,18 +115,29 @@ export class CustomersService {
       phone?: string;
       notes?: string;
     },
+    requestingUserId: string,
+    requestingUserRole: UserRole,
   ) {
+    await this.prisma.customerProfile.findFirstOrThrow({
+      where: { id, ...scopeCustomerProfileToOwner(requestingUserId, requestingUserRole) },
+    });
     return this.prisma.customerProfile.update({ where: { id }, data });
   }
 
-  async block(id: string, isBlocked: boolean) {
+  async block(id: string, isBlocked: boolean, requestingUserId: string, requestingUserRole: UserRole) {
+    await this.prisma.customerProfile.findFirstOrThrow({
+      where: { id, ...scopeCustomerProfileToOwner(requestingUserId, requestingUserRole) },
+    });
     return this.prisma.customerProfile.update({
       where: { id },
       data: { isBlocked },
     });
   }
 
-  async remove(id: string) {
+  async remove(id: string, requestingUserId: string, requestingUserRole: UserRole) {
+    await this.prisma.customerProfile.findFirstOrThrow({
+      where: { id, ...scopeCustomerProfileToOwner(requestingUserId, requestingUserRole) },
+    });
     await this.prisma.customerProfile.delete({ where: { id } });
   }
 
@@ -131,8 +147,11 @@ export class CustomersService {
     requestingUserRole?: string,
   ) {
     const ownerFilter =
-      requestingUserRole === "ADMIN" && requestingUserId
-        ? { router: { ownerId: requestingUserId } }
+      requestingUserId && requestingUserRole
+        ? scopeCustomerProfileToOwner(
+            requestingUserId,
+            requestingUserRole as UserRole,
+          )
         : {};
 
     const where = {

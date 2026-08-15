@@ -394,6 +394,7 @@ export function resolveUserPermissions(
   }
 
   switch (role) {
+    case UserRole.OWNER:
     case UserRole.ADMIN:
       return expandPermissions([
         ...PERMISSION_PROFILES.ADMIN_STANDARD.permissions,
@@ -401,6 +402,10 @@ export function resolveUserPermissions(
     case UserRole.RESELLER:
       return expandPermissions([
         ...PERMISSION_PROFILES.RESELLER_STANDARD.permissions,
+      ]);
+    case UserRole.MEMBER:
+      return expandPermissions([
+        ...PERMISSION_PROFILES.SUPERVISOR.permissions,
       ]);
     case UserRole.VIEWER:
     default:

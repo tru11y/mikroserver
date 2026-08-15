@@ -94,7 +94,7 @@ Avant de finir une tâche :
   - frontend : `cd frontend && npm run build`
   Ne pas conclure si ça échoue.
 - **NGINX = interdit.** Ne jamais éditer `infrastructure/nginx/**` ni aucun `*nginx*.conf` (bloqué par settings deny). Si une modif nginx semble nécessaire → le signaler, ne pas la faire.
-- **CI/CD = ne pas déclencher.** Le billing GitHub Actions est coupé : `gh workflow run` est bloqué, les triggers push/workflow_run sont désactivés dans `.github/workflows/`. Ne pas les réactiver sans demande explicite.
+- **CI/CD = actif sur push main.** Les workflows CI (lint, test, Docker scan) tournent automatiquement sur push. Ne pas lancer `gh workflow run` manuellement sans demande explicite.
 - **Deploy VPS = action confirmée + build vert.** Un déploiement (plink/ssh vers 139.84.241.27) exige : (1) build/typecheck local vert, (2) confirmation explicite. Ne jamais `git reset --hard` ni recréer des conteneurs/identifiants sans le dire. Ne pas toucher aux `.env.prod`, secrets, ou credentials existants.
 - **Commit + push en fin de tâche.** Après une tâche validée, proposer commit + push (branche dédiée si sur `main`). Ne pas laisser de modifs non commitées.
 - **Consigner les solutions.** Après avoir résolu un bug/config non trivial, écrire la cause racine + le chemin de résolution dans la mémoire projet (`skills.md` / fichier mémoire dédié) pour ne pas refaire la recherche la fois suivante.

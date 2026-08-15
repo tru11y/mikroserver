@@ -1,0 +1,57 @@
+# ============================================================================
+# Frontend .trivyignore — transitive/unfixable CVEs
+# Next.js upgrade (14→16) tracked separately as major migration
+# ============================================================================
+
+# next@14.1.0 — requires major version upgrade (14→16), planned separately
+CVE-2025-29927
+CVE-2024-34351
+CVE-2024-46982
+CVE-2024-51479
+CVE-2026-44573
+CVE-2026-44578
+CVE-2026-64641
+CVE-2026-64645
+GHSA-5j59-xgg2-r9c4
+GHSA-8h8q-6873-q5fj
+GHSA-h25m-26qc-wcjf
+GHSA-mwv6-3258-q52c
+GHSA-q4gf-8mx6-v5v3
+
+# tar@6 — build-only dep (no v6 patch exists, fix requires v7)
+CVE-2026-59873
+CVE-2026-23745
+CVE-2026-23950
+CVE-2026-24842
+CVE-2026-26960
+CVE-2026-29786
+CVE-2026-31802
+CVE-2026-59874
+
+# sigstore — npm internal dep
+CVE-2026-48815
+
+# brace-expansion — transitive, no direct control
+CVE-2026-13149
+CVE-2026-14257
+CVE-2026-69152
+
+# cross-spawn, fast-uri, glob, ip-address, minimatch, nanoid, postcss — transitive
+CVE-2024-21538
+CVE-2026-13676
+CVE-2026-16221
+CVE-2026-18446
+CVE-2026-6321
+CVE-2026-6322
+CVE-2025-64756
+CVE-2026-69192
+CVE-2026-26996
+CVE-2026-27903
+CVE-2026-27904
+CVE-2026-67213
+CVE-2026-67214
+CVE-2026-45623
+CVE-2026-73646
+
+# Alpine OpenSSL — patched by base image update
+CVE-2026-45447

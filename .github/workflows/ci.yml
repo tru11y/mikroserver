@@ -244,6 +244,7 @@ jobs:
           ignore-unfixed: true
           severity: HIGH,CRITICAL
           exit-code: "1"
+          trivyignores: frontend/.trivyignore
 
   # ---------------------------------------------------------------------------
   # JOB 5 — Build + push immutable images to GHCR

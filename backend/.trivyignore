@@ -1,0 +1,13 @@
+# tar@6 — transitive build dep via bcrypt → @mapbox/node-pre-gyp; no v6 patch exists
+# Only used during npm install (native addon build), not at runtime
+CVE-2026-59873
+CVE-2026-23745
+CVE-2026-23950
+CVE-2026-24842
+CVE-2026-26960
+CVE-2026-29786
+CVE-2026-31802
+CVE-2026-59874
+
+# sigstore — npm internal dep, not in our app dependencies
+CVE-2026-48815

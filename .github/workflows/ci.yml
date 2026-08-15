@@ -217,6 +217,7 @@ jobs:
           ignore-unfixed: true
           severity: HIGH,CRITICAL
           exit-code: "1"
+          trivyignores: backend/.trivyignore
 
       - name: Build frontend image (local only)
         uses: docker/build-push-action@v6

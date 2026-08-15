@@ -3,6 +3,12 @@
   "version": "1.0.0",
   "description": "MikroLan - WiFi Monetization Platform API",
   "private": true,
+  "overrides": {
+    "brace-expansion@2": "2.1.4",
+    "ip-address": "10.3.1",
+    "js-yaml@>=5 <5.2.2": "5.2.2",
+    "picomatch@>=4 <4.0.4": "4.0.4"
+  },
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
